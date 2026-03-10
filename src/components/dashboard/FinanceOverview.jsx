@@ -100,7 +100,7 @@ const FinanceOverview = ({ data, onUpdateRevenue }) => {
                  />
 
                 <div
-                  className={`w-full max-w-[16px] rounded-[3px] transition-all duration-300 cursor-pointer ${bgColor} hover:bg-[#FF9406]`}
+                  className={`w-full max-w-[12px] md:max-w-[16px] rounded-[3px] transition-all duration-300 cursor-pointer ${bgColor} hover:bg-[#FF9406]`}
                   style={{
                       height: val > 0 ? `${Math.max((val / maxVal) * 100, 15)}%` : '4px',
                       opacity: opacity
@@ -142,9 +142,9 @@ const FinanceOverview = ({ data, onUpdateRevenue }) => {
       {/* Value & Badge Row */}
       <div className="flex items-end justify-between mb-1">
          {/* Value */}
-         <div className="flex items-baseline gap-1">
-           <span className="text-[24px] font-bold text-[#FF9406]">R$</span>
-           <span className="text-[24px] font-bold text-[#E1E1E1]">{displayValue}</span>
+         <div className="flex items-baseline gap-1 min-w-0">
+           <span className="text-[18px] md:text-[24px] font-bold text-[#FF9406]">R$</span>
+           <span className="text-[18px] md:text-[24px] font-bold text-[#E1E1E1] truncate">{displayValue}</span>
          </div>
 
          {/* Badge & Status */}

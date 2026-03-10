@@ -29,8 +29,8 @@ const MoneyOnTable = ({ data }) => {
 
       {/* Main Value */}
       <div className="flex items-baseline gap-1.5 mb-3">
-        <span className="font-semibold text-[16px] text-[#FF9406]">R$</span>
-        <span className="font-semibold text-[24px] text-white tracking-tight">{data.total}</span>
+        <span className="font-semibold text-[14px] md:text-[16px] text-[#FF9406]">R$</span>
+        <span className="font-semibold text-[20px] md:text-[24px] text-white tracking-tight">{data.total}</span>
         {data.percentage && data.percentage !== "0%" && (
           <div className="ml-auto shrink-0 flex items-center justify-center bg-[#FD8989]/15 rounded-md px-2.5 h-[24px]">
              <span className="text-[#FD8989] text-[10px] font-bold">{data.percentage}</span>

@@ -73,7 +73,7 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
 
         {/* Modal */}
         <div 
-          className="relative w-full max-w-md bg-[#161616] border border-[#2A2A2C] rounded-[24px] p-6 lg:p-8 shadow-2xl overflow-hidden font-jakarta"
+          className="relative w-full max-w-md bg-[#161616] border border-[#2A2A2C] rounded-[24px] p-4 sm:p-6 lg:p-8 shadow-2xl overflow-hidden font-jakarta"
         >
           {/* Top Header */}
           <div className="flex justify-between items-center mb-6">

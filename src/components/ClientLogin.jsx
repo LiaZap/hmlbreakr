@@ -67,7 +67,7 @@ const ClientLogin = ({ onLogin, onAdminLogin }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-[420px] p-10 flex flex-col items-center"
+        className="relative z-10 w-full max-w-[420px] px-6 py-8 sm:p-10 flex flex-col items-center"
       >
         
         {/* Logo */}

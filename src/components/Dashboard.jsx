@@ -91,9 +91,9 @@ const Dashboard = () => {
 
             {/* 3. Main Title */}
             <div className="mb-4 pr-4">
-              <h1 className="text-[28px] leading-[1.15] tracking-tight mb-3">
+              <h1 className="text-[22px] md:text-[28px] leading-[1.15] tracking-tight mb-3">
                 <span className="font-bold text-[#FF9406]">{dashboardData.restaurant.name}</span>
-                <span className="font-medium text-[#E1E1E1]">, como <br/>você nunca viu antes</span>
+                <span className="font-medium text-[#E1E1E1]">, como <br className="hidden md:inline"/>você nunca viu antes</span>
               </h1>
               <p className="font-normal text-[12px] text-[#888] leading-snug w-full max-w-[280px]">
                 {dashboardData.overview.subtitle}

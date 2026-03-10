@@ -17,7 +17,7 @@ const TechnicalSheets = ({ data }) => {
       </div>
 
       {/* Data Columns with Icons */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-2 md:gap-3 mb-6">
         {data.map((item, idx) => (
           <div key={idx} className="flex flex-col items-center gap-2">
             {/* Column Icon - Nota/Ficha */}

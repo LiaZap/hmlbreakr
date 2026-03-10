@@ -82,7 +82,7 @@ const Equipe = () => {
   if (loading) return <div className="p-8 text-white font-jakarta">Carregando equipe...</div>;
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#101010] p-6 lg:p-10 font-jakarta text-white overflow-y-auto">
+    <div className="flex flex-col min-h-screen bg-[#101010] p-4 md:p-6 lg:p-10 font-jakarta text-white overflow-y-auto">
       <div className="max-w-4xl w-full mx-auto">
         
         {/* Header */}
