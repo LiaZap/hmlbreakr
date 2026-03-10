@@ -850,8 +850,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-        className="fixed right-0 top-0 bottom-0 w-[70%] bg-[#1D1D1D] flex flex-col z-50"
-        style={{ borderRadius: '15px' }}
+        className="fixed right-0 top-0 bottom-0 w-full md:w-[70%] bg-[#1D1D1D] flex flex-col z-50 rounded-none md:rounded-[15px]"
       >
         {/* CLT HELP MODAL OVERLAY */}
          {showCLTHelp && (
