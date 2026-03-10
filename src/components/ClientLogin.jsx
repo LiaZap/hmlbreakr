@@ -45,11 +45,18 @@ const ClientLogin = ({ onLogin }) => {
   return (
     <div className="relative min-h-screen bg-black flex items-center justify-center font-jakarta text-white overflow-hidden">
 
-      {/* Video Background — temporarily disabled, will be re-enabled after recording */}
-      {/* <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover" src="/login-bg.mp4" /> */}
+      {/* Video Background */}
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover"
+        src="/login-bg.mp4"
+      />
 
       {/* Dark Overlay */}
-      <div className="absolute inset-0 bg-black/90" />
+      <div className="absolute inset-0 bg-black/60" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
