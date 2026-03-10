@@ -1375,21 +1375,21 @@ const FichaTecnica = () => {
                 <span className="text-[#555]">{activeTab === 'insumos' ? 'Insumos' : 'Ficha Técnica'}</span>
               </div>
               
-              <div className="flex items-end justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                   <div>
-                      <h2 className="text-[22px] font-bold text-white mb-1">
+                      <h2 className="text-[20px] sm:text-[22px] font-bold text-white mb-1">
                         {activeTab === 'insumos' ? 'Insumos' : 'Fichas Técnicas'}
                       </h2>
                       <p className="text-[12px] text-[#868686]">
-                        {activeTab === 'insumos' 
+                        {activeTab === 'insumos'
                           ? 'Adicione insumos para compor ficha técnica'
                           : 'Configure as fichas técnicas para precificar o produto'
                         }
                       </p>
                   </div>
-                  
+
                   {activeTab === 'insumos' ? (
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                           <button
                             onClick={() => setShowCategoriesModal(true)}
                             className="bg-[#2A2A2C] hover:bg-[#333] text-white text-[11px] font-medium px-3 py-1.5 rounded-[8px] flex items-center gap-1.5 transition-colors"
@@ -1400,33 +1400,33 @@ const FichaTecnica = () => {
                             Categorias
                           </button>
 
-                          <button 
+                          <button
                               onClick={handleDownloadTemplate}
+                              className="text-[11px] font-medium text-[#F5A623] hover:text-[#E5961E] transition-colors flex items-center gap-1.5"
+                          >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                              Baixar
+                          </button>
+
+                          <label className="bg-[#252527] hover:bg-[#333] border border-[#2A2A2C] text-white text-[11px] font-medium px-3 py-1.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-1.5">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                              Importar
+                              <input type="file" accept=".csv" onChange={handleImportInsumos} hidden />
+                          </label>
+                      </div>
+                  ) : (
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                          <button
+                              onClick={handleDownloadFichasTemplate}
                               className="text-[11px] font-medium text-[#F5A623] hover:text-[#E5961E] transition-colors flex items-center gap-1.5"
                           >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                               Baixar Modelo
                           </button>
-                          
+
                           <label className="bg-[#252527] hover:bg-[#333] border border-[#2A2A2C] text-white text-[11px] font-medium px-3 py-1.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-1.5">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                              Importar CSV
-                              <input type="file" accept=".csv" onChange={handleImportInsumos} hidden />
-                          </label>
-                      </div>
-                  ) : (
-                      <div className="flex items-center gap-3">
-                          <button 
-                              onClick={handleDownloadFichasTemplate}
-                              className="text-[11px] font-medium text-[#F5A623] hover:text-[#E5961E] transition-colors flex items-center gap-1.5"
-                          >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                              Baixar Modelo FT
-                          </button>
-                          
-                          <label className="bg-[#252527] hover:bg-[#333] border border-[#2A2A2C] text-white text-[11px] font-medium px-3 py-1.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-1.5">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                              Importar Tabela
+                              Importar
                               <input type="file" accept=".csv" onChange={handleImportFichas} hidden />
                           </label>
                       </div>
@@ -1453,7 +1453,7 @@ const FichaTecnica = () => {
           </div>
 
           {/* FAB Button */}
-          <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-40" style={{ marginLeft: '150px' }}>
+          <div className="fixed bottom-20 md:bottom-8 right-6 md:right-auto md:left-[60%] z-40">
             <button
               onClick={() => {
                 if (activeTab === 'insumos') {

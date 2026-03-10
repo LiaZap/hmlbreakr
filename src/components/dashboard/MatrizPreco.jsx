@@ -144,10 +144,10 @@ const MatrizPreco = () => {
   const getY = (val) => 100 - ((val / chartConfig.maxY) * 100); // Inverted Y for SVG
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-140px)] gap-6 p-2 md:p-6 overflow-hidden bg-[#101010] text-white font-jakarta">
-      
+    <div className="flex flex-col md:flex-row md:h-[calc(100vh-140px)] gap-4 md:gap-6 p-4 md:p-6 overflow-y-auto md:overflow-hidden bg-[#101010] text-white font-jakarta">
+
       {/* LEFT PANEL: LIST */}
-      <div className="w-full md:w-[320px] shrink-0 flex flex-col gap-6 overflow-hidden">
+      <div className="w-full md:w-[320px] shrink-0 flex flex-col gap-4 md:gap-6 md:overflow-hidden">
         <div>
           <div className="text-[12px] text-[#868686] mb-1">Breakr &gt; Precificação</div>
           <h1 className="text-[24px] font-bold leading-tight">Engenharia de<br/>Menu</h1>
@@ -155,7 +155,7 @@ const MatrizPreco = () => {
         </div>
 
         {/* Categories List */}
-        <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+        <div className="flex-1 md:overflow-y-auto pr-2 space-y-4">
           {Object.entries(CATEGORIES).map(([key, config]) => {
             const categoryItems = filteredItemsForDisplay.filter(i => i.type === key);
             if (categoryItems.length === 0) return null;
@@ -195,25 +195,59 @@ const MatrizPreco = () => {
         </div>
       </div>
 
-      {/* RIGHT PANEL: CHART */}
-      <div className="flex-1 bg-[#1B1B1D] rounded-[24px] border border-[#2A2A2C] p-6 flex flex-col relative overflow-hidden">
-        
+      {/* MOBILE: Category filter + chips */}
+      <div className="md:hidden">
+        <div className="bg-[#1B1B1D] rounded-[16px] border border-[#2A2A2C] p-4">
+          <h2 className="text-[16px] font-bold text-white mb-2">Matriz de Cardápio</h2>
+          <div className="mb-3">
+            <label className="block text-[10px] text-[#868686] mb-1">Filtrar Categoria</label>
+            <select
+               className="w-full bg-[#151515] text-[12px] text-white border border-[#2A2A2C] rounded-[8px] px-3 py-2 outline-none hover:border-[#444]"
+               value={selectedMenuCategory || ''}
+               onChange={(e) => setSelectedMenuCategory(e.target.value || null)}
+            >
+                <option value="">Todas as categorias</option>
+                {uniqueMenuCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                ))}
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(CATEGORIES).map(([key, config]) => (
+              <div
+                key={key}
+                className="px-2.5 py-1 rounded-full border border-[#2A2A2C] bg-[#151515] flex items-center gap-1.5 cursor-pointer transition-all"
+                onClick={() => setActiveCategory(activeCategory === key ? null : key)}
+                style={{ opacity: activeCategory && activeCategory !== key ? 0.3 : 1 }}
+              >
+                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }} />
+                 <span className="text-[9px] text-white font-medium">{config.label}</span>
+                 <span className="text-[9px] text-[#595959]">{counts[key]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT PANEL: CHART (hidden on mobile — scatter plot not touch-friendly) */}
+      <div className="hidden md:flex flex-1 bg-[#1B1B1D] rounded-[24px] border border-[#2A2A2C] p-6 flex-col relative overflow-hidden">
+
         {/* Header / Filter Chips */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6 z-10 relative">
           <div className="flex gap-4 items-center">
              <div>
                  <h2 className="text-[18px] font-bold text-white">Matriz de Cardápio</h2>
                  <p className="text-[12px] text-[#868686]">
-                   {!selectedMenuCategory 
-                     ? "Comparativo de pratos contra a média geral do cardápio." 
+                   {!selectedMenuCategory
+                     ? "Comparativo de pratos contra a média geral do cardápio."
                      : "Comparativo de pratos contra a média da categoria selecionada."}
                  </p>
              </div>
-             
+
              {/* MENU CATEGORY DROPDOWN */}
              <div className="ml-4 pl-4 border-l border-[#2A2A2C]">
                 <label className="block text-[10px] text-[#868686] mb-1">Filtrar Categoria</label>
-                <select 
+                <select
                    className="bg-[#151515] text-[12px] text-white border border-[#2A2A2C] rounded-[8px] px-3 py-1.5 outline-none hover:border-[#444] min-w-[120px]"
                    value={selectedMenuCategory || ''}
                    onChange={(e) => setSelectedMenuCategory(e.target.value || null)}
@@ -227,8 +261,8 @@ const MatrizPreco = () => {
           </div>
           <div className="flex items-center gap-2">
             {Object.entries(CATEGORIES).map(([key, config]) => (
-              <div 
-                key={key} 
+              <div
+                key={key}
                 className={`px-3 py-1.5 rounded-full border border-[#2A2A2C] bg-[#151515] flex items-center gap-2 cursor-pointer transition-all hover:bg-[#252527]`}
                 onClick={() => setActiveCategory(activeCategory === key ? null : key)}
                 style={{ opacity: activeCategory && activeCategory !== key ? 0.3 : 1 }}

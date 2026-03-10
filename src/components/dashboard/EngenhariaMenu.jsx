@@ -101,15 +101,15 @@ const EngenhariaMenu = () => {
     <div className="flex flex-col w-full h-full min-h-screen bg-[#101010] font-jakarta text-white">
       
       {/* Header */}
-      <div className="p-8 border-b border-[#1E1E1E]">
-        <h1 className="text-[22px] font-bold text-white leading-tight">Engenharia de Menu</h1>
+      <div className="p-4 md:p-8 border-b border-[#1E1E1E]">
+        <h1 className="text-[20px] md:text-[22px] font-bold text-white leading-tight">Engenharia de Menu</h1>
         <p className="text-[12px] text-[#868686] mt-2">Gerencie seus pratos e lucratividade via Excel</p>
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-8 flex flex-col items-center justify-center gap-8">
-        
-        <div className="w-full max-w-[600px] bg-[#1B1B1D] border border-[#2A2A2C] rounded-[20px] p-8 flex flex-col items-center text-center">
+      <div className="flex-1 p-4 md:p-8 flex flex-col items-center justify-center gap-8">
+
+        <div className="w-full max-w-[600px] bg-[#1B1B1D] border border-[#2A2A2C] rounded-[20px] p-5 md:p-8 flex flex-col items-center text-center">
           <div className="w-[64px] h-[64px] bg-[#252527] rounded-full flex items-center justify-center mb-6">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
               <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -125,8 +125,8 @@ const EngenhariaMenu = () => {
             Baixe a planilha modelo, preencha com os dados do seu cardápio e suba novamente para atualizar o sistema.
           </p>
 
-          <div className="flex gap-4 w-full">
-            <button 
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
+            <button
               onClick={handleDownload}
               className="flex-1 bg-[#252527] text-white font-medium py-3.5 rounded-[12px] hover:bg-[#333] transition-colors border border-[#333] flex items-center justify-center gap-2"
             >
