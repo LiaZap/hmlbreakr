@@ -139,11 +139,9 @@ const LandingPage = ({ onComplete }) => {
             </div>
           </div>
 
-          {/* CENTER - Video Card */}
-          <div 
-            className="shrink-0 w-[346px] h-[529px] bg-black rounded-[14px] relative overflow-hidden"
-          >
-            {/* Play Button */}
+          {/* CENTER - Video Card — temporarily hidden until client records new video */}
+          {/*
+          <div className="shrink-0 w-[346px] h-[529px] bg-black rounded-[14px] relative overflow-hidden">
             <div className="absolute inset-0 flex items-center justify-center">
               <button className="w-[60px] h-[60px] rounded-full border-2 border-white/30 flex items-center justify-center hover:border-white/50 transition-colors bg-transparent">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -151,18 +149,13 @@ const LandingPage = ({ onComplete }) => {
                 </svg>
               </button>
             </div>
-
-            {/* Time */}
-            <div className="absolute top-8 right-6 font-semibold text-[12px] text-white">
-              0:40
-            </div>
-
-            {/* Bottom Text */}
+            <div className="absolute top-8 right-6 font-semibold text-[12px] text-white">0:40</div>
             <div className="absolute bottom-8 left-8">
               <div className="font-semibold text-[12px] text-white mb-[3px]">Gustavo Aqui!</div>
               <div className="font-normal text-[12px] text-white">Antes de começar, um papinho</div>
             </div>
           </div>
+          */}
 
           {/* RIGHT - Cards Container */}
           <div className="relative shrink-0">
