@@ -16,6 +16,7 @@ import RankingGeralIcon from './dashboard/RankingGeralIcon';
 import MatrizPreco from './dashboard/MatrizPreco';
 import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
+import MobileNav from './dashboard/MobileNav';
 import OnboardingForm from './OnboardingForm';
 
 const Dashboard = () => {
@@ -38,19 +39,19 @@ const Dashboard = () => {
       <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
 
       {activePage === 'fichaTecnica' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0">
+        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
           <FichaTecnica />
         </div>
       ) : activePage === 'matrizPreco' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0">
+        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
           <MatrizPreco />
         </div>
       ) : activePage === 'engenhariaMenu' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0">
+        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
           <EngenhariaMenu />
         </div>
       ) : activePage === 'equipe' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0">
+        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
           <Equipe />
         </div>
       ) : (
@@ -99,26 +100,14 @@ const Dashboard = () => {
               </p>
             </div>
 
-            {/* 4. Pills Grid (Fixed Layout 3-2) */}
-            <div className="flex flex-col gap-3 mb-auto mt-4">
-               {/* Row 1 */}
-               <div className="flex gap-2">
-                  {dashboardData.overview.tags.slice(0, 3).map((tag, idx) => (
-                    <div key={idx} className="bg-[#151515] border border-[#222] rounded-full px-3 py-1.5 flex items-center gap-2">
-                       <span className="text-[10px] text-[#999] whitespace-nowrap">{tag.label}</span>
-                       <div className={`w-2.5 h-1 rounded-full ${tag.color ? 'bg-[#E2FD89]' : 'bg-[#FDD789]'}`} style={{ backgroundColor: tag.color || '#FDD789' }} />
-                    </div>
-                  ))}
-               </div>
-               {/* Row 2 */}
-               <div className="flex gap-2">
-                  {dashboardData.overview.tags.slice(3, 5).map((tag, idx) => (
-                    <div key={idx + 3} className="bg-[#151515] border border-[#222] rounded-full px-3 py-1.5 flex items-center gap-2">
-                       <span className="text-[10px] text-[#999] whitespace-nowrap">{tag.label}</span>
-                       <div className={`w-2.5 h-1 rounded-full ${tag.color ? 'bg-[#E2FD89]' : 'bg-[#FDD789]'}`} style={{ backgroundColor: tag.color || '#FDD789' }} />
-                    </div>
-                  ))}
-               </div>
+            {/* 4. Pills Grid (Responsive) */}
+            <div className="flex flex-wrap gap-2 mb-auto mt-4">
+               {dashboardData.overview.tags.map((tag, idx) => (
+                 <div key={idx} className="bg-[#151515] border border-[#222] rounded-full px-3 py-1.5 flex items-center gap-2">
+                    <span className="text-[10px] text-[#999] whitespace-nowrap">{tag.label}</span>
+                    <div className="w-2.5 h-1 rounded-full" style={{ backgroundColor: tag.color || '#FDD789' }} />
+                 </div>
+               ))}
             </div>
 
             {/* Bottom Link Removed */}
@@ -217,6 +206,12 @@ const Dashboard = () => {
       </div>
       </>
       )}
+
+      {/* Mobile Bottom Navigation */}
+      <MobileNav activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
+
+      {/* Bottom spacing for mobile nav */}
+      <div className="h-[70px] md:hidden" />
 
       {/* Onboarding Edit Modal */}
       {showOnboarding && (
