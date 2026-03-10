@@ -8,13 +8,13 @@ const prisma = new PrismaClient();
 // ADMIN ROUTES
 // ========================
 
-// Login (Mock - in prod use JWT)
+// Admin Login
 router.post('/admin/login', (req, res) => {
-  const { password } = req.body;
-  if (password === 'admin' || password === 'admin123') {
-    return res.json({ success: true, token: 'mock-admin-token' });
+  const { email, password } = req.body;
+  if (email === 'contato@breakr.com.br' && password === '$ADMIN-Brkr26@') {
+    return res.json({ success: true, token: 'mock-admin-token', name: 'Gustavo Costa' });
   }
-  return res.status(401).json({ error: 'Senha incorreta' });
+  return res.status(401).json({ error: 'Credenciais incorretas' });
 });
 
 // Create Client
@@ -111,6 +111,11 @@ router.post('/client/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
+    // Check if it's the admin
+    if (email === 'contato@breakr.com.br' && password === '$ADMIN-Brkr26@') {
+      return res.json({ success: true, role: 'admin', name: 'Gustavo Costa' });
+    }
+
     // Checking if the user is a Client (Owner)
     let user = await prisma.client.findUnique({ where: { email } });
     let isOwner = true;
@@ -130,7 +135,7 @@ router.post('/client/login', async (req, res) => {
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
-    res.json({ success: true, hash: user.hash, name: user.name, isOwner });
+    res.json({ success: true, role: 'client', hash: user.hash, name: user.name, isOwner });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erro ao fazer login' });

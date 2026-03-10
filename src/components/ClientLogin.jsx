@@ -5,7 +5,7 @@ import boltIcon from '../assets/bolt.svg';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
-const ClientLogin = ({ onLogin }) => {
+const ClientLogin = ({ onLogin, onAdminLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,6 +35,10 @@ const ClientLogin = ({ onLogin }) => {
         return;
       }
 
+      if (data.role === 'admin' && onAdminLogin) {
+        onAdminLogin();
+        return;
+      }
       onLogin(data.hash);
     } catch {
       setError('Erro de conexão. Tente novamente.');

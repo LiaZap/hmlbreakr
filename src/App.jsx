@@ -4,7 +4,6 @@ import SplashScreen from './components/SplashScreen';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import ClientLogin from './components/ClientLogin';
-import AdminLogin from './components/admin/AdminLogin';
 import AdminPanel from './components/admin/AdminPanel';
 import { useDashboard } from './context/DashboardContext';
 
@@ -15,11 +14,8 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hash = params.get('hash');
-    const path = window.location.pathname;
 
-    if (path === '/admin') {
-      setCurrentPage('admin-login');
-    } else if (hash) {
+    if (hash) {
       setCurrentPage('splash');
     } else {
       setCurrentPage('client-login');
@@ -57,15 +53,12 @@ function App() {
 
   return (
     <>
-      {/* CLIENT LOGIN */}
+      {/* UNIFIED LOGIN */}
       {currentPage === 'client-login' && (
-        <ClientLogin onLogin={handleClientLogin} />
+        <ClientLogin onLogin={handleClientLogin} onAdminLogin={handleAdminLogin} />
       )}
 
-      {/* ADMIN FLOW */}
-      {currentPage === 'admin-login' && (
-        <AdminLogin onLogin={handleAdminLogin} />
-      )}
+      {/* ADMIN PANEL */}
       {currentPage === 'admin-panel' && (
         <AdminPanel />
       )}
