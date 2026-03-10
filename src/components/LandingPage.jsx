@@ -30,9 +30,9 @@ const LandingPage = ({ onComplete }) => {
       </AnimatePresence>
 
       {/* HEADER */}
-      <div className="absolute top-0 left-0 right-0 h-[113px] border-b border-white/10">
+      <div className="absolute top-0 left-0 right-0 h-[80px] md:h-[113px] border-b border-white/10">
         {/* Left - Logo + Restaurant */}
-        <div className="absolute left-10 top-[14px] flex items-center gap-5">
+        <div className="absolute left-4 md:left-10 top-[14px] flex items-center gap-3 md:gap-5">
           {/* Breakr Logo */}
           <div className="w-[47px] h-[47px] bg-black rounded-[15px] flex items-center justify-center">
             <img src={boltIcon} alt="Breakr" className="w-[21px]" />
@@ -70,7 +70,7 @@ const LandingPage = ({ onComplete }) => {
             OR, strict interpretation: "aparecer so quando preencher" -> Hide if it is the default value.
         */}
         {(user.name && user.name !== "Usuário") && (
-            <div className="absolute right-[55px] top-[28px] flex items-center gap-[11px]">
+            <div className="absolute right-4 md:right-[55px] top-[16px] md:top-[28px] flex items-center gap-2 md:gap-[11px]">
             <div className="w-[46px] h-[46px] rounded-full bg-[#FDD688] flex items-center justify-center">
                 <span className="font-semibold text-[14px] text-black">{user.initials}</span>
             </div>
@@ -86,11 +86,11 @@ const LandingPage = ({ onComplete }) => {
       </div>
 
       {/* MAIN CONTENT - Responsive Grid */}
-      <div className="pt-[140px] px-10 h-full">
-        <div className="flex items-start gap-8 max-w-[1400px] mx-auto">
-          
-          {/* LEFT COLUMN - Fixed width */}
-          <div className="shrink-0 w-[320px]">
+      <div className="pt-[100px] md:pt-[140px] px-4 md:px-10 h-full">
+        <div className="flex flex-col md:flex-row items-start gap-6 md:gap-8 max-w-[1400px] mx-auto">
+
+          {/* LEFT COLUMN */}
+          <div className="shrink-0 w-full md:w-[320px]">
             {/* Circles Row */}
             <div className="flex items-center gap-[22px] mb-[25px]">
               {/* Yellow Circle */}
@@ -113,8 +113,8 @@ const LandingPage = ({ onComplete }) => {
             </div>
 
             {/* Welcome Text */}
-            <div className="mb-[80px]">
-              <p className="font-semibold text-[29px] leading-[38px] text-white">
+            <div className="mb-8 md:mb-[80px]">
+              <p className="font-semibold text-[22px] md:text-[29px] leading-[30px] md:leading-[38px] text-white">
                 Bem-vindo à Revolução Breakr. Em até 40 dias, seu restaurante <span className="font-bold">lucrando mais</span>, usando melhor o faturamento que você já tem hoje.
               </p>
             </div>
@@ -157,8 +157,8 @@ const LandingPage = ({ onComplete }) => {
           </div>
           */}
 
-          {/* RIGHT - Cards Container */}
-          <div className="relative shrink-0">
+          {/* RIGHT - Cards Container (hidden on mobile) */}
+          <div className="relative shrink-0 hidden md:block">
             {/* Main Card */}
             <div 
               className="w-[349px] h-[506px] bg-[#1D1D1D] rounded-[10px] relative cursor-pointer hover:bg-[#252525] transition-colors"

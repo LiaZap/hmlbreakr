@@ -890,7 +890,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
 
 
         {/* Progress Bar - Segmented */}
-        <div className="absolute top-[100px] left-0 right-0 flex gap-1 px-[10%]">
+        <div className="absolute top-[60px] md:top-[100px] left-0 right-0 flex gap-1 px-[5%] md:px-[10%]">
           {[...Array(totalWithReg)].map((_, i) => (
             <div 
               key={i}
@@ -906,7 +906,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
 
         {/* User Profile - Top Right (Only shows when typed) */}
         {formData?.user_info?.user_name && (
-          <div className="absolute right-[55px] top-[28px] flex items-center gap-[11px]">
+          <div className="absolute right-4 md:right-[55px] top-[16px] md:top-[28px] flex items-center gap-2 md:gap-[11px]">
             {formData?.user_info?.user_photo ? (
               <img src={formData.user_info.user_photo} alt="" className="w-[46px] h-[46px] rounded-full object-cover" />
             ) : (
@@ -928,8 +928,8 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
         )}
 
         {/* Header - Top Left */}
-        <div className="absolute left-[66px] top-[79px]">
-          <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[14px] leading-[18px] text-white mb-2">
+        <div className="absolute left-4 md:left-[66px] top-[38px] md:top-[79px]">
+          <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[12px] md:text-[14px] leading-[18px] text-white mb-1 md:mb-2">
             {showRegistration ? `Passo ${totalWithReg} de ${totalWithReg}` : `Passo ${currentStepIndex + 1} de ${totalWithReg}`}
           </div>
           <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-white/20">
@@ -939,8 +939,8 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
 
         {showRegistration ? (
         /* REGISTRATION STEP */
-        <div className="flex flex-1 mt-[160px] px-[66px] gap-20">
-            <div className="w-1/3 pt-10">
+        <div className="flex flex-col md:flex-row flex-1 mt-[80px] md:mt-[160px] px-4 md:px-[66px] gap-6 md:gap-20 overflow-y-auto">
+            <div className="hidden md:block md:w-1/3 pt-10">
                 <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[12px] text-white/80 uppercase tracking-wider mb-4">
                     Último Passo
                 </div>
@@ -952,7 +952,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                 </p>
             </div>
 
-            <div className="flex-1 pt-12 max-w-[500px]">
+            <div className="flex-1 pt-4 md:pt-12 max-w-full md:max-w-[500px]">
                 <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[12px] text-white mb-6">
                     Seus Dados de Acesso
                 </div>
@@ -1025,9 +1025,9 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
         </div>
         ) : (
         /* ONBOARDING QUESTIONS */
-        <div className="flex flex-1 mt-[160px] px-[66px] gap-20">
-            {/* Left Column - Context */}
-            <div className="w-1/3 pt-10">
+        <div className="flex flex-col md:flex-row flex-1 mt-[80px] md:mt-[160px] px-4 md:px-[66px] gap-4 md:gap-20 overflow-y-auto">
+            {/* Left Column - Context (hidden on mobile) */}
+            <div className="hidden md:block md:w-1/3 pt-10">
                 <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[12px] text-white/80 uppercase tracking-wider mb-4">
                     Contexto
                 </div>
@@ -1040,7 +1040,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
             </div>
 
             {/* Right Column - Question Input */}
-            <div className="flex-1 pt-12 max-w-[500px]">
+            <div className="flex-1 pt-2 md:pt-12 max-w-full md:max-w-[500px]">
                 <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[12px] text-white mb-6">
                     Sua Resposta
                 </div>
@@ -1097,7 +1097,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
         {/* Close/Back - Bottom Left */}
         <button
           onClick={onClose}
-          className="absolute left-[75px] bottom-[50px] font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-white hover:opacity-80 transition-opacity"
+          className="absolute left-4 md:left-[75px] bottom-4 md:bottom-[50px] font-['Plus_Jakarta_Sans'] font-semibold text-[12px] md:text-[14px] text-white hover:opacity-80 transition-opacity"
         >
           Cancelar Onboarding
         </button>
