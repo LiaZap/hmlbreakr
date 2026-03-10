@@ -78,15 +78,23 @@ const AdminPanel = () => {
             </div>
           </div>
           
-          <button 
-            onClick={() => setShowModal(true)}
-            className="bg-[#F5A623] text-black font-semibold text-[14px] px-6 py-3 rounded-[12px] hover:bg-[#E5961E] transition-colors flex items-center gap-2"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M12 5V19M5 12H19" stroke="black" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Novo Cliente
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowModal(true)}
+              className="bg-[#F5A623] text-black font-semibold text-[14px] px-6 py-3 rounded-[12px] hover:bg-[#E5961E] transition-colors flex items-center gap-2"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5V19M5 12H19" stroke="black" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              Novo Cliente
+            </button>
+            <button
+              onClick={() => { sessionStorage.removeItem('breaker-admin'); window.location.href = '/'; }}
+              className="text-[#868686] hover:text-white text-[12px] font-medium transition-colors px-3 py-3"
+            >
+              Sair
+            </button>
+          </div>
         </div>
 
         {/* Clients List */}

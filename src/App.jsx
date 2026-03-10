@@ -14,9 +14,12 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hash = params.get('hash');
+    const adminSession = sessionStorage.getItem('breaker-admin');
 
     if (hash) {
       setCurrentPage('splash');
+    } else if (adminSession) {
+      setCurrentPage('admin-panel');
     } else {
       setCurrentPage('client-login');
     }
@@ -46,6 +49,7 @@ function App() {
   };
 
   const handleAdminLogin = () => {
+    sessionStorage.setItem('breaker-admin', 'true');
     setCurrentPage('admin-panel');
   };
 
