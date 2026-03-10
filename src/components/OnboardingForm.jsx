@@ -1004,7 +1004,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                     </div>
                 </motion.div>
 
-                <div className="flex items-center gap-4 mt-12">
+                <div className="flex flex-wrap items-center gap-4 mt-8 md:mt-12 pb-20 md:pb-4">
                     <button
                         onClick={handleRegistrationSubmit}
                         disabled={regLoading}
@@ -1067,7 +1067,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                 </AnimatePresence>
 
                 {/* Navigation Buttons */}
-                <div className="flex items-center gap-4 mt-12">
+                <div className="flex flex-wrap items-center gap-4 mt-8 md:mt-12 pb-20 md:pb-4">
                     <button
                         onClick={handleContinue}
                         disabled={isSubmitting}
@@ -1080,7 +1080,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                             <path d="M6.75 3.75L12 9L6.75 14.25" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                     </button>
-                    
+
                     {currentStepIndex > 0 && (
                          <button
                             onClick={handleBack}
@@ -1089,15 +1089,23 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                             Voltar
                         </button>
                     )}
+
+                    {/* Cancelar - inline on mobile */}
+                    <button
+                      onClick={onClose}
+                      className="md:hidden font-['Plus_Jakarta_Sans'] font-semibold text-[12px] text-white/40 hover:text-white transition-colors ml-auto"
+                    >
+                      Cancelar
+                    </button>
                 </div>
             </div>
         </div>
         )}
 
-        {/* Close/Back - Bottom Left */}
+        {/* Close/Back - Bottom Left (desktop only) */}
         <button
           onClick={onClose}
-          className="absolute left-4 md:left-[75px] bottom-4 md:bottom-[50px] font-['Plus_Jakarta_Sans'] font-semibold text-[12px] md:text-[14px] text-white hover:opacity-80 transition-opacity"
+          className="hidden md:block absolute left-[75px] bottom-[50px] font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-white hover:opacity-80 transition-opacity"
         >
           Cancelar Onboarding
         </button>
