@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const FinanceOverview = ({ data, onUpdateRevenue }) => {
+const FinanceOverview = ({ data, onUpdateRevenue, onSelectMonth }) => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [hoveredMonth, setHoveredMonth] = useState(null);
   const [editingMonth, setEditingMonth] = useState(null);
@@ -87,6 +87,7 @@ const FinanceOverview = ({ data, onUpdateRevenue }) => {
                 onMouseLeave={() => setHoveredMonth(null)}
                 onClick={() => {
                   setSelectedMonth(i);
+                  if (onSelectMonth) onSelectMonth(i);
                   if (onUpdateRevenue) {
                     setEditingMonth(i);
                     setEditValue(val > 0 ? val.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');

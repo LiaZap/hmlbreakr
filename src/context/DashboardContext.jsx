@@ -40,6 +40,7 @@ export const DashboardProvider = ({ children }) => {
   const [dashboardData, setDashboardData] = useState(initialData);
   const [clientDataLoaded, setClientDataLoaded] = useState(false);
   const [clientDataError, setClientDataError] = useState(false);
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState(null);
   const recalcPendingRef = useRef(false);
 
   // Load Client Data if Hash exists
@@ -115,7 +116,7 @@ export const DashboardProvider = ({ children }) => {
     return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const updateDashboardData = (newData) => {
+  const updateDashboardData = (newData, { skipSync = false } = {}) => {
 
     // Determines if it is Form Data (flat object) or Partial Update (nested object)
     // If it has 'operational', assume it's a direct state update
@@ -239,6 +240,13 @@ export const DashboardProvider = ({ children }) => {
              currentMonthStr = new Date(currentYear, firstNonZeroIdx, 1).toLocaleString('pt-BR', { month: 'long' });
              currentMonthStr = currentMonthStr.charAt(0).toUpperCase() + currentMonthStr.slice(1);
         }
+    }
+
+    // Override with selected month if user clicked a bar
+    if (selectedMonthIndex !== null && revenueHistory[selectedMonthIndex] > 0) {
+        currentRevenue = revenueHistory[selectedMonthIndex];
+        currentMonthStr = new Date(currentYear, selectedMonthIndex, 1).toLocaleString('pt-BR', { month: 'long' });
+        currentMonthStr = currentMonthStr.charAt(0).toUpperCase() + currentMonthStr.slice(1);
     }
 
     // Fixed Costs
@@ -754,15 +762,17 @@ export const DashboardProvider = ({ children }) => {
 
     setDashboardData(newDashboardData);
     
-    // Persist full Update to Backend
-    const params = new URLSearchParams(window.location.search);
-    const hash = params.get('hash');
-    if (hash) {
-        fetch(`/api/client/${hash}/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newDashboardData)
-        }).catch(e => console.error("Sync failed", e));
+    // Persist full Update to Backend (skip for view-only changes like month selection)
+    if (!skipSync) {
+        const params = new URLSearchParams(window.location.search);
+        const hash = params.get('hash');
+        if (hash) {
+            fetch(`/api/client/${hash}/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newDashboardData)
+            }).catch(e => console.error("Sync failed", e));
+        }
     }
   };
 
@@ -774,8 +784,16 @@ export const DashboardProvider = ({ children }) => {
     }
   });
 
+  // Recalculate when selected month changes (view-only, no sync)
+  useEffect(() => {
+    if (dashboardData.formData && Object.keys(dashboardData.formData).length > 0) {
+      updateDashboardData(dashboardData.formData, { skipSync: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonthIndex]);
+
   return (
-    <DashboardContext.Provider value={{ dashboardData, updateDashboardData, clientDataLoaded, clientDataError }}>
+    <DashboardContext.Provider value={{ dashboardData, updateDashboardData, clientDataLoaded, clientDataError, selectedMonthIndex, setSelectedMonthIndex }}>
       {children}
     </DashboardContext.Provider>
   );

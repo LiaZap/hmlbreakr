@@ -22,7 +22,7 @@ import OnboardingForm from './OnboardingForm';
 
 const Dashboard = () => {
   /* MOVED TO CONTEXT */
-  const { dashboardData, updateDashboardData } = useDashboard();
+  const { dashboardData, updateDashboardData, setSelectedMonthIndex } = useDashboard();
   const [activePage, setActivePage] = useState('home');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showDailyRevenue, setShowDailyRevenue] = useState(false);
@@ -117,7 +117,7 @@ const Dashboard = () => {
 
           {/* COL 2 - Faturamento */}
           <div>
-            <FinanceOverview data={dashboardData.revenue} onUpdateRevenue={(monthIdx, value) => {
+            <FinanceOverview data={dashboardData.revenue} onSelectMonth={(idx) => setSelectedMonthIndex(idx)} onUpdateRevenue={(monthIdx, value) => {
               const formData = dashboardData.formData || {};
               const revenueHistory = [...(formData.revenue_history || [])];
               const mm = String(monthIdx + 1).padStart(2, '0');
