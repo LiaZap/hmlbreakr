@@ -52,20 +52,20 @@ const BreakEvenGraphic = ({
     <div className="w-full flex flex-col items-center">
       <svg width="100%" viewBox="0 0 200 110" className="max-w-[240px]">
         {/* Track */}
-        <path 
-          d={describeArc(-180, 0)} 
-          fill="none" 
-          stroke="#333" 
-          strokeWidth="12" 
+        <path
+          d={describeArc(-180, 0)}
+          fill="none"
+          stroke="#333"
+          strokeWidth="8"
           strokeLinecap="round"
         />
-        
+
         {/* Progress */}
-        <path 
-          d={describeArc(-180, progressAngle)} 
-          fill="none" 
-          stroke="#FF9406" 
-          strokeWidth="12" 
+        <path
+          d={describeArc(-180, progressAngle)}
+          fill="none"
+          stroke="#FF9406"
+          strokeWidth="8"
           strokeLinecap="round"
         />
 
@@ -85,11 +85,11 @@ const BreakEvenGraphic = ({
       {/* Legend below graph */}
       <div className="flex items-center gap-4 mt-[-10px]">
          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-1 rounded-full bg-[#FF9406]" />
+            <div className="w-3 h-[2px] bg-[#FF9406]" />
             <span className="text-[10px] text-[#888]">Faturado</span>
          </div>
          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-1 rounded-full bg-[#333]" />
+            <div className="w-3 h-[2px] bg-[#555]" />
             <span className="text-[10px] text-[#888]">Meta</span>
          </div>
       </div>

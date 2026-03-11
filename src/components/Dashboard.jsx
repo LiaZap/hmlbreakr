@@ -184,15 +184,19 @@ const Dashboard = () => {
             </div>
 
             {/* Dynamic day prediction message */}
-            <div className="p-2.5 bg-[#1B1B1D] border border-[#2F2F31] rounded-[8px] mb-3 flex items-start gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF9406" strokeWidth="1.5" className="flex-shrink-0 mt-0.5">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2" strokeLinecap="round"/>
-              </svg>
-              <p className="font-normal text-[8px] text-[#7E7E7E] leading-[1.4]">
+            <div className="p-2.5 bg-[#1B1B1D] border border-[#2F2F31] rounded-[10px] mb-3 flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-[#252527] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                  <path d="M4 22h16"/>
+                  <path d="M10 22V14a2 2 0 0 0-2-2H6V4h12v8h-2a2 2 0 0 0-2 2v8"/>
+                </svg>
+              </div>
+              <p className="font-normal text-[9px] text-[#7E7E7E] leading-[1.5] pt-1">
                 {dashboardData.breakEven.estimatedDay > 0 ? (
                   <>
-                    A partir do dia <span className="text-[#FF9406] font-semibold">{dashboardData.breakEven.estimatedDay}</span>, cada venda tende a virar sobra real. Seu objetivo é baixar esse dia sem comprometer qualidade.
+                    A partir do dia <span className="text-white font-bold">{dashboardData.breakEven.estimatedDay}</span>, cada venda tende a virar sobra real. Seu objetivo é baixar esse dia sem comprometer qualidade.
                   </>
                 ) : (
                   'Preencha seus dados para calcular a previsão do ponto de equilíbrio.'
@@ -201,13 +205,24 @@ const Dashboard = () => {
             </div>
 
             {/* Base Info Box */}
-            <div className="p-3 bg-[#FF9406] rounded-[10px] flex flex-col items-center justify-center text-center">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-semibold text-[10px] text-black">Base %</span>
-                <span className="px-2 py-0.5 bg-black/20 rounded text-[8px] text-black">{dashboardData.breakEven.base.status}</span>
+            <div className="p-4 bg-[#FF9406] rounded-[14px] flex flex-col items-center justify-center text-center">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-[11px] text-black">Base</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4M12 8h.01"/>
+                  </svg>
+                </div>
+                <span className="px-2.5 py-0.5 bg-black/15 rounded-full text-[9px] font-medium text-black flex items-center gap-1">
+                  {dashboardData.breakEven.base.status}
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l1.5 5.5H19l-4.5 3.5L16 17.5 12 14l-4 3.5L9.5 12 5 8.5h5.5z"/>
+                  </svg>
+                </span>
               </div>
-              <span className="font-semibold text-[18px] text-black">{dashboardData.breakEven.base.value}</span>
-              <p className="font-normal text-[9px] text-black/70">Faixa saudável: {dashboardData.breakEven.base.range}</p>
+              <span className="font-bold text-[28px] text-black leading-none mb-1">{dashboardData.breakEven.base.value}</span>
+              <p className="font-medium text-[10px] text-black/60">Faixa saudável: 40 a 45</p>
             </div>
           </div>
 
