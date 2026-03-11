@@ -276,11 +276,12 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleContinue = () => {
+    // Auto-save on every step advance so user doesn't lose progress
+    updateDashboardData(formData);
     if (currentStepIndex < totalSteps - 1) {
       setDirection(1);
       setCurrentStepIndex(prev => prev + 1);
     } else {
-      updateDashboardData(formData);
       if (isEditing) {
         if (onComplete) onComplete(formData);
       } else {
