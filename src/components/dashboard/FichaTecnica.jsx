@@ -1350,10 +1350,12 @@ const FichaTecnica = () => {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <div className={`font-medium text-[12px] ${activeTab === 'insumos' ? 'text-white' : 'text-[#868686]'}`}>Insumos</div>
+              <div className={`flex items-center gap-2 font-medium text-[12px] ${activeTab === 'insumos' ? 'text-white' : 'text-[#868686]'}`}>
+                Insumos
+                <span className="bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full">{String(insumos.length).padStart(2, '0')}</span>
+              </div>
               <div className="text-[10px] text-[#555] hidden lg:block">Gestão de insumos</div>
             </div>
-            <div className="shrink-0 bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[24px] text-center">{String(insumos.length).padStart(2, '0')}</div>
           </button>
 
           {/* Ficha Técnica Tab */}
@@ -1371,10 +1373,12 @@ const FichaTecnica = () => {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <div className={`font-medium text-[12px] ${activeTab === 'fichas' ? 'text-white' : 'text-[#868686]'}`}>Fichas</div>
+              <div className={`flex items-center gap-2 font-medium text-[12px] ${activeTab === 'fichas' ? 'text-white' : 'text-[#868686]'}`}>
+                Fichas
+                <span className="bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full">{String(fichas.length).padStart(2, '0')}</span>
+              </div>
               <div className="text-[10px] text-[#555] hidden lg:block">Gestão de ficha técnica</div>
             </div>
-            <div className="shrink-0 bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[24px] text-center">{String(fichas.length).padStart(2, '0')}</div>
           </button>
         </div>
 
