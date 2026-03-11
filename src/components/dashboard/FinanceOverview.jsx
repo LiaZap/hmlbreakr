@@ -69,15 +69,18 @@ const FinanceOverview = ({ data, onUpdateRevenue, onSelectMonth }) => {
               const isSelected = selectedMonth === i;
               const hasData = val > 0;
 
+              const hasSelection = selectedMonth !== null;
               let bgColor = 'bg-[#333]';
               if (isSelected && hasData) bgColor = 'bg-[#FF9406]';
-              else if (isCurrent && hasData) bgColor = 'bg-[#FF9406]';
+              else if (!hasSelection && isCurrent && hasData) bgColor = 'bg-[#FF9406]';
               else if (hasData) bgColor = 'bg-[#E1E1E1]';
 
               let opacity = 0.3;
               if (!hasData) opacity = 0.2;
-              else if (isSelected || (isCurrent && hasData) || hoveredMonth === i) opacity = 1;
-              else opacity = 0.6;
+              else if (isSelected) opacity = 1;
+              else if (!hasSelection && isCurrent) opacity = 1;
+              else if (hoveredMonth === i) opacity = 1;
+              else opacity = 0.4;
 
               return (
               <div

@@ -590,26 +590,34 @@ export const DashboardProvider = ({ children }) => {
         },
         breakEven: (() => {
             const now = new Date();
-            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-
-            // Check for daily revenue data
-            const dailyRevenue = formData.daily_revenue || {};
-            const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-            const currentMonthEntries = Object.entries(dailyRevenue)
-                .filter(([dateStr]) => dateStr.startsWith(currentMonthPrefix))
-                .map(([, amount]) => (typeof amount === 'number' ? amount : parseCurrency(amount)));
-            const hasDailyData = currentMonthEntries.length > 0;
+            const activeMonthIdx = selectedMonthIndex !== null ? selectedMonthIndex : now.getMonth();
+            const isCurrentMonth = activeMonthIdx === now.getMonth() && selectedMonthIndex === null;
+            const daysInMonth = new Date(now.getFullYear(), activeMonthIdx + 1, 0).getDate();
 
             let revenueForCalc, dailyAvg;
-            const today = now.getDate(); // dia atual do mês (1-31)
-            if (hasDailyData) {
-                // Usa dados diários reais
-                revenueForCalc = currentMonthEntries.reduce((sum, v) => sum + v, 0);
-                dailyAvg = revenueForCalc / currentMonthEntries.length;
+            let hasDailyData = false;
+
+            if (isCurrentMonth) {
+                // Current month: use daily entries if available, else prorate
+                const dailyRevenue = formData.daily_revenue || {};
+                const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                const currentMonthEntries = Object.entries(dailyRevenue)
+                    .filter(([dateStr]) => dateStr.startsWith(currentMonthPrefix))
+                    .map(([, amount]) => (typeof amount === 'number' ? amount : parseCurrency(amount)));
+                hasDailyData = currentMonthEntries.length > 0;
+
+                const today = now.getDate();
+                if (hasDailyData) {
+                    revenueForCalc = currentMonthEntries.reduce((sum, v) => sum + v, 0);
+                    dailyAvg = revenueForCalc / currentMonthEntries.length;
+                } else {
+                    dailyAvg = currentRevenue > 0 ? currentRevenue / daysInMonth : 0;
+                    revenueForCalc = dailyAvg * today;
+                }
             } else {
-                // Prorrateia faturamento mensal até o dia de hoje
+                // Selected/past month: use the full month revenue
+                revenueForCalc = currentRevenue;
                 dailyAvg = currentRevenue > 0 ? currentRevenue / daysInMonth : 0;
-                revenueForCalc = dailyAvg * today;
             }
 
             const rawEstimatedDay = dailyAvg > 0 ? Math.ceil(breakEvenValue / dailyAvg) : 0;
@@ -617,7 +625,7 @@ export const DashboardProvider = ({ children }) => {
             let estimatedDay = rawEstimatedDay > daysInMonth ? daysInMonth : rawEstimatedDay;
             const exceedsMonth = rawEstimatedDay > daysInMonth;
             const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-            const estimatedDateStr = estimatedDay > 0 ? `${estimatedDay} ${monthNames[now.getMonth()]}` : '--';
+            const estimatedDateStr = estimatedDay > 0 ? `${estimatedDay} ${monthNames[activeMonthIdx]}` : '--';
 
             // Format max label for gauge — meta is the break-even value
             const maxRaw = breakEvenValue > 0 ? breakEvenValue : Math.max(revenueForCalc, 1);
