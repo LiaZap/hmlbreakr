@@ -184,16 +184,19 @@ const Dashboard = () => {
             </div>
 
             {/* Dynamic day prediction message */}
-            <div className="p-2.5 bg-[#1B1B1D] border border-[#2F2F31] rounded-[10px] mb-3 flex items-start gap-2.5">
-              <div className="w-7 h-7 rounded-full bg-[#252527] flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-                  <path d="M4 22h16"/>
-                  <path d="M10 22V14a2 2 0 0 0-2-2H6V4h12v8h-2a2 2 0 0 0-2 2v8"/>
+            <div className="flex items-start gap-[7px] mb-3">
+              <div className="w-10 h-10 rounded-[16px] bg-[#1B1B1D] flex items-center justify-center flex-shrink-0">
+                {/* solar:cup-first-outline */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6.5 4h11v6a5.5 5.5 0 0 1-11 0V4z"/>
+                  <path d="M17.5 7H19a2 2 0 0 1 0 4h-1.5"/>
+                  <path d="M6.5 7H5a2 2 0 0 0 0 4h1.5"/>
+                  <path d="M9 16h6"/>
+                  <path d="M12 16v4"/>
+                  <path d="M8 20h8"/>
                 </svg>
               </div>
-              <p className="font-normal text-[9px] text-[#7E7E7E] leading-[1.5] pt-1">
+              <p className="font-semibold text-[10px] leading-[13px] text-[#CBCBCB] pt-1" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
                 {dashboardData.breakEven.estimatedDay > 0 ? (
                   <>
                     A partir do dia <span className="text-white font-bold">{dashboardData.breakEven.estimatedDay}</span>, cada venda tende a virar sobra real. Seu objetivo é baixar esse dia sem comprometer qualidade.
