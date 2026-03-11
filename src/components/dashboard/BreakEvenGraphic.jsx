@@ -3,6 +3,7 @@ import React from 'react';
 const BreakEvenGraphic = ({
   percentage = 0,
   value = "R$ 0,00",
+  revenueAccumulated = null,
   minLabel = "0k",
   maxLabel = "100%"
 }) => {
@@ -64,13 +65,20 @@ const BreakEvenGraphic = ({
         <text x="192" y="112" textAnchor="middle" fill="#646464" fontSize="10" fontWeight="500" fontFamily="Plus Jakarta Sans, sans-serif">{maxLabel}</text>
 
         {/* Percentage — 14px weight 500 #ABABAB */}
-        <text x="100" y="74" textAnchor="middle" fill="#ABABAB" fontSize="14" fontWeight="500" fontFamily="Plus Jakarta Sans, sans-serif">
+        <text x="100" y="70" textAnchor="middle" fill="#ABABAB" fontSize="14" fontWeight="500" fontFamily="Plus Jakarta Sans, sans-serif">
           {percentage}%
         </text>
 
-        {/* Value — 9.4px weight 400 #595959 */}
-        <text x="100" y="90" textAnchor="middle" fill="#595959" fontSize="9.4" fontWeight="400" fontFamily="Plus Jakarta Sans, sans-serif">
-          {value}
+        {/* Revenue accumulated — main value */}
+        {revenueAccumulated && (
+          <text x="100" y="85" textAnchor="middle" fill="#FF9406" fontSize="9" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">
+            R$ {revenueAccumulated}
+          </text>
+        )}
+
+        {/* Break-even target — secondary */}
+        <text x="100" y={revenueAccumulated ? "97" : "90"} textAnchor="middle" fill="#595959" fontSize="8" fontWeight="400" fontFamily="Plus Jakarta Sans, sans-serif">
+          Meta: {value}
         </text>
       </svg>
 

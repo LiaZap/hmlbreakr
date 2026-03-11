@@ -166,6 +166,7 @@ const Dashboard = () => {
                 <BreakEvenGraphic
                   percentage={dashboardData.breakEven.percentage}
                   value={`R$ ${dashboardData.breakEven.current}`}
+                  revenueAccumulated={dashboardData.breakEven.revenueAccumulated}
                   minLabel={dashboardData.breakEven.minLabel || "0k"}
                   maxLabel={dashboardData.breakEven.maxLabel || "100%"}
                 />

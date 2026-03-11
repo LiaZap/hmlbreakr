@@ -590,6 +590,7 @@ export const DashboardProvider = ({ children }) => {
                 hasCmvData: hasCmvData,
                 percentage: !hasCmvData ? 0 : (breakEvenValue === 0 && revenueForCalc > 0 ? 100 : (breakEvenValue > 0 ? Math.min(Math.round((revenueForCalc / breakEvenValue) * 100), 100) : 0)),
                 current: hasCmvData ? formatMoney(breakEvenValue) : "0,00",
+                revenueAccumulated: formatMoney(revenueForCalc),
                 min: "0",
                 max: formatMoney(maxRaw),
                 minLabel: "0k",
