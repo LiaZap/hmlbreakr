@@ -181,7 +181,31 @@ export const DashboardProvider = ({ children }) => {
         });
     }
     
+    // Overlay daily revenue entries onto current month bar (visual only)
+    const dailyRevenueData = formData.daily_revenue || {};
+    const nowForRevenue = new Date();
+    const currentMonthDailyPrefix = `${nowForRevenue.getFullYear()}-${String(nowForRevenue.getMonth() + 1).padStart(2, '0')}`;
+    const dailyMonthTotal = Object.entries(dailyRevenueData)
+        .filter(([d]) => d.startsWith(currentMonthDailyPrefix))
+        .reduce((sum, [, v]) => sum + (typeof v === 'number' ? v : parseCurrency(v)), 0);
+    if (dailyMonthTotal > 0) {
+        revenueHistory[nowForRevenue.getMonth()] = dailyMonthTotal;
+    }
+
     const totalAnnualRevenue = revenueHistory.reduce((acc, val) => acc + val, 0);
+
+    // Keep a copy of history without daily overlay for financial calculations
+    // so partial month data doesn't distort cost percentages
+    const revenueHistoryForCalc = [...revenueHistory];
+    if (dailyMonthTotal > 0) {
+        // Restore original onboarding value for current month (used for currentRevenue in calcs)
+        const origVal = formData.revenue_history?.find(e => {
+            if (!e?.month) return false;
+            const parts = e.month.split('/');
+            return parts.length === 2 && parseInt(parts[0], 10) - 1 === nowForRevenue.getMonth();
+        });
+        revenueHistoryForCalc[nowForRevenue.getMonth()] = origVal ? parseCurrency(origVal.amount) : 0;
+    }
 
     // 2. Find "Current" Revenue (Prioritize current month -> past months -> wrap around to end of year)
     const currentYear = new Date().getFullYear();
@@ -190,20 +214,21 @@ export const DashboardProvider = ({ children }) => {
         ...Array.from({ length: 11 - currentMonthIndex }, (_, i) => 11 - i) // 11 down to Current+1
     ];
 
+    // Use revenueHistoryForCalc for currentRevenue so partial daily data doesn't distort financial calcs
     for (let idx of searchOrder) {
-        if (revenueHistory[idx] > 0) {
-            currentRevenue = revenueHistory[idx];
+        if (revenueHistoryForCalc[idx] > 0) {
+            currentRevenue = revenueHistoryForCalc[idx];
             currentMonthStr = new Date(currentYear, idx, 1).toLocaleString('pt-BR', { month: 'long' });
             currentMonthStr = currentMonthStr.charAt(0).toUpperCase() + currentMonthStr.slice(1);
             break;
         }
     }
-    
+
     // If still 0, default to first non-zero found, or 0
     if (currentRevenue === 0 && totalAnnualRevenue > 0) {
-        const firstNonZeroIdx = revenueHistory.findIndex(v => v > 0);
+        const firstNonZeroIdx = revenueHistoryForCalc.findIndex(v => v > 0);
         if (firstNonZeroIdx !== -1) {
-             currentRevenue = revenueHistory[firstNonZeroIdx];
+             currentRevenue = revenueHistoryForCalc[firstNonZeroIdx];
              currentMonthStr = new Date(currentYear, firstNonZeroIdx, 1).toLocaleString('pt-BR', { month: 'long' });
              currentMonthStr = currentMonthStr.charAt(0).toUpperCase() + currentMonthStr.slice(1);
         }
