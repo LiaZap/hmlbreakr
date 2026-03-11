@@ -223,9 +223,15 @@ const Dashboard = () => {
               </div>
               <p className="font-semibold text-[10px] leading-[13px] text-[#CBCBCB] pt-1" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
                 {dashboardData.breakEven.estimatedDay > 0 ? (
-                  <>
-                    A partir do dia <span className="text-white font-bold">{dashboardData.breakEven.estimatedDay}</span>, cada venda tende a virar sobra real. Seu objetivo é baixar esse dia sem comprometer qualidade.
-                  </>
+                  dashboardData.breakEven.exceedsMonth ? (
+                    <>
+                      Com a média atual, o equilíbrio <span className="text-[#FD8989] font-bold">não será atingido</span> neste mês. Aumente o faturamento diário para alcançar a meta.
+                    </>
+                  ) : (
+                    <>
+                      A partir do dia <span className="text-white font-bold">{dashboardData.breakEven.estimatedDay}</span>, cada venda tende a virar sobra real. Seu objetivo é baixar esse dia sem comprometer qualidade.
+                    </>
+                  )
                 ) : (
                   'Preencha seus dados para calcular a previsão do ponto de equilíbrio.'
                 )}

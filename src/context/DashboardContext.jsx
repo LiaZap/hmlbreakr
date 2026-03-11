@@ -572,9 +572,10 @@ export const DashboardProvider = ({ children }) => {
                 revenueForCalc = dailyAvg * today;
             }
 
-            let estimatedDay = dailyAvg > 0 ? Math.ceil(breakEvenValue / dailyAvg) : 0;
-            const reachedBreakEven = estimatedDay > 0 && estimatedDay <= daysInMonth;
-            if (estimatedDay > daysInMonth) estimatedDay = daysInMonth;
+            const rawEstimatedDay = dailyAvg > 0 ? Math.ceil(breakEvenValue / dailyAvg) : 0;
+            const reachedBreakEven = rawEstimatedDay > 0 && rawEstimatedDay <= daysInMonth;
+            let estimatedDay = rawEstimatedDay > daysInMonth ? daysInMonth : rawEstimatedDay;
+            const exceedsMonth = rawEstimatedDay > daysInMonth;
             const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const estimatedDateStr = estimatedDay > 0 ? `${estimatedDay} ${monthNames[now.getMonth()]}` : '--';
 
@@ -598,6 +599,8 @@ export const DashboardProvider = ({ children }) => {
                 estimatedDate: estimatedDateStr,
                 estimatedDay: estimatedDay,
                 reachedBreakEven: reachedBreakEven,
+                exceedsMonth: exceedsMonth,
+                daysInMonth: daysInMonth,
                 hasDailyData: hasDailyData,
                 base: {
                     value: basePercentage.toFixed(0),
