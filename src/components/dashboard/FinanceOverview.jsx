@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 
-const FinanceOverview = ({ data, onUpdateRevenue, onSelectMonth }) => {
+const FinanceOverview = ({ data, onSelectMonth }) => {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [hoveredMonth, setHoveredMonth] = useState(null);
-  const [editingMonth, setEditingMonth] = useState(null);
-  const [editValue, setEditValue] = useState('');
 
   const history = data.history || [];
   
@@ -91,10 +89,6 @@ const FinanceOverview = ({ data, onUpdateRevenue, onSelectMonth }) => {
                 onClick={() => {
                   setSelectedMonth(i);
                   if (onSelectMonth) onSelectMonth(i);
-                  if (onUpdateRevenue) {
-                    setEditingMonth(i);
-                    setEditValue(val > 0 ? val.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
-                  }
                 }}
               >
                  <AnimateTooltip
@@ -115,33 +109,6 @@ const FinanceOverview = ({ data, onUpdateRevenue, onSelectMonth }) => {
             )});
         })()}
       </div>
-
-      {/* Retroactive Editing */}
-      {editingMonth !== null && onUpdateRevenue && (
-        <div className="flex items-center gap-2 mb-2 p-2 bg-[#1A1A1A] rounded-lg border border-[#333]">
-          <span className="text-[10px] text-[#868686]">{monthNames[editingMonth]}:</span>
-          <div className="flex items-center bg-[#252527] rounded px-2 py-1 flex-1">
-            <span className="text-[10px] text-[#868686]">R$</span>
-            <input
-              type="text"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              className="bg-transparent text-white text-[12px] outline-none ml-1 w-full"
-              placeholder="0,00"
-              autoFocus
-            />
-          </div>
-          <button
-            onClick={() => {
-              const parsed = parseFloat(editValue.replace(/\./g, '').replace(',', '.')) || 0;
-              onUpdateRevenue(editingMonth, parsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
-              setEditingMonth(null);
-            }}
-            className="text-[10px] text-[#00B37E] font-bold hover:underline"
-          >Salvar</button>
-          <button onClick={() => setEditingMonth(null)} className="text-[10px] text-[#868686] hover:underline">✕</button>
-        </div>
-      )}
 
       {/* Value & Badge Row */}
       <div className="flex items-end justify-between mb-1">
