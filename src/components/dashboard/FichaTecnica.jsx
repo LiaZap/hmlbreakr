@@ -807,7 +807,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                            {/* Quick Margin Calculation Preview */}
                            {parseSafeNumber(precoVenda) > 0 && (
                                <div className="mt-3 pt-3 border-t border-[#333] flex items-center justify-between">
-                                  <div className="text-[11px] text-[#868686]">Lucro Bruto Estimado</div>
+                                  <div className="text-[11px] text-[#868686]">Margem de Contribuição Bruta</div>
                                   <div className={`text-[12px] font-bold ${
                                      (parseSafeNumber(precoVenda) - (currentCustoTotalInsumos + parseSafeNumber(custoEmbalagem))) > 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'
                                   }`}>
@@ -1349,11 +1349,11 @@ const FichaTecnica = () => {
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill={activeTab === 'insumos' ? '#F5A623' : '#868686'}/>
               </svg>
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <div className={`font-medium text-[12px] ${activeTab === 'insumos' ? 'text-white' : 'text-[#868686]'}`}>Insumos</div>
               <div className="text-[10px] text-[#555] hidden lg:block">Gestão de insumos</div>
             </div>
-            <div className="ml-auto bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full">{String(insumos.length).padStart(2, '0')}</div>
+            <div className="shrink-0 bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[24px] text-center">{String(insumos.length).padStart(2, '0')}</div>
           </button>
 
           {/* Ficha Técnica Tab */}
@@ -1370,11 +1370,11 @@ const FichaTecnica = () => {
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill={activeTab === 'fichas' ? '#F5A623' : '#868686'}/>
               </svg>
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <div className={`font-medium text-[12px] ${activeTab === 'fichas' ? 'text-white' : 'text-[#868686]'}`}>Fichas</div>
               <div className="text-[10px] text-[#555] hidden lg:block">Gestão de ficha técnica</div>
             </div>
-            <div className="ml-auto bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full">{String(fichas.length).padStart(2, '0')}</div>
+            <div className="shrink-0 bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[24px] text-center">{String(fichas.length).padStart(2, '0')}</div>
           </button>
         </div>
 
