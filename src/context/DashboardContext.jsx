@@ -181,30 +181,37 @@ export const DashboardProvider = ({ children }) => {
         });
     }
     
-    // Overlay daily revenue entries onto current month bar (visual only)
+    // Overlay daily revenue entries onto revenue bars
+    // Any month with daily entries uses the daily total (current month = partial, past months = final)
     const dailyRevenueData = formData.daily_revenue || {};
     const nowForRevenue = new Date();
-    const currentMonthDailyPrefix = `${nowForRevenue.getFullYear()}-${String(nowForRevenue.getMonth() + 1).padStart(2, '0')}`;
-    const dailyMonthTotal = Object.entries(dailyRevenueData)
-        .filter(([d]) => d.startsWith(currentMonthDailyPrefix))
-        .reduce((sum, [, v]) => sum + (typeof v === 'number' ? v : parseCurrency(v)), 0);
-    if (dailyMonthTotal > 0) {
-        revenueHistory[nowForRevenue.getMonth()] = dailyMonthTotal;
-    }
+    const currentMonthIdx = nowForRevenue.getMonth();
+    const dailyByMonth = {};
+    Object.entries(dailyRevenueData).forEach(([dateStr, v]) => {
+        const parts = dateStr.split('-');
+        if (parts.length < 2) return;
+        const monthIdx = parseInt(parts[1], 10) - 1;
+        if (monthIdx < 0 || monthIdx > 11) return;
+        const amount = typeof v === 'number' ? v : parseCurrency(v);
+        dailyByMonth[monthIdx] = (dailyByMonth[monthIdx] || 0) + amount;
+    });
+    // Apply daily totals to revenueHistory bars
+    Object.entries(dailyByMonth).forEach(([idx, total]) => {
+        if (total > 0) revenueHistory[parseInt(idx)] = total;
+    });
 
     const totalAnnualRevenue = revenueHistory.reduce((acc, val) => acc + val, 0);
 
-    // Keep a copy of history without daily overlay for financial calculations
-    // so partial month data doesn't distort cost percentages
+    // For financial calcs: past months with daily data use the daily total (complete month).
+    // Current month with daily data is partial, so use onboarding value for calcs.
     const revenueHistoryForCalc = [...revenueHistory];
-    if (dailyMonthTotal > 0) {
-        // Restore original onboarding value for current month (used for currentRevenue in calcs)
+    if (dailyByMonth[currentMonthIdx] > 0) {
         const origVal = formData.revenue_history?.find(e => {
             if (!e?.month) return false;
             const parts = e.month.split('/');
-            return parts.length === 2 && parseInt(parts[0], 10) - 1 === nowForRevenue.getMonth();
+            return parts.length === 2 && parseInt(parts[0], 10) - 1 === currentMonthIdx;
         });
-        revenueHistoryForCalc[nowForRevenue.getMonth()] = origVal ? parseCurrency(origVal.amount) : 0;
+        revenueHistoryForCalc[currentMonthIdx] = origVal ? parseCurrency(origVal.amount) : 0;
     }
 
     // 2. Find "Current" Revenue (Prioritize current month -> past months -> wrap around to end of year)
