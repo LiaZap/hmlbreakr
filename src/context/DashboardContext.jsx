@@ -560,13 +560,17 @@ export const DashboardProvider = ({ children }) => {
             annualTotal: formatMoney(totalAnnualRevenue),
             status: profit >= 0 ? "Positivo" : "Alerta",
             change: (() => {
-                // Find current month index and previous month with data
-                const curIdx = searchOrder.find(idx => revenueHistory[idx] > 0);
-                if (curIdx === undefined) return "0%";
-                // Find previous month with data (skip current)
-                const prevIdx = searchOrder.find(idx => idx !== curIdx && revenueHistory[idx] > 0);
-                if (prevIdx === undefined || revenueHistory[prevIdx] === 0) return "0%";
-                const change = ((revenueHistory[curIdx] - revenueHistory[prevIdx]) / revenueHistory[prevIdx]) * 100;
+                // Use selected month or find the most recent month with data
+                const activeIdx = selectedMonthIndex !== null ? selectedMonthIndex : searchOrder.find(idx => revenueHistory[idx] > 0);
+                if (activeIdx === undefined || revenueHistory[activeIdx] === 0) return "0%";
+                // Find previous month with data (search backwards from active month)
+                let prevIdx = null;
+                for (let m = 1; m < 12; m++) {
+                    const idx = (activeIdx - m + 12) % 12;
+                    if (revenueHistory[idx] > 0) { prevIdx = idx; break; }
+                }
+                if (prevIdx === null || revenueHistory[prevIdx] === 0) return "0%";
+                const change = ((revenueHistory[activeIdx] - revenueHistory[prevIdx]) / revenueHistory[prevIdx]) * 100;
                 const sign = change >= 0 ? "+" : "";
                 return `${sign}${change.toFixed(1)}%`;
             })(),
