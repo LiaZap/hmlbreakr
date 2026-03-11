@@ -195,57 +195,23 @@ const MatrizPreco = () => {
         </div>
       </div>
 
-      {/* MOBILE: Category filter + chips */}
-      <div className="md:hidden">
-        <div className="bg-[#1B1B1D] rounded-[16px] border border-[#2A2A2C] p-4">
-          <h2 className="text-[16px] font-bold text-white mb-2">Matriz de Cardápio</h2>
-          <div className="mb-3">
-            <label className="block text-[10px] text-[#868686] mb-1">Filtrar Categoria</label>
-            <select
-               className="w-full bg-[#151515] text-[12px] text-white border border-[#2A2A2C] rounded-[8px] px-3 py-2 outline-none hover:border-[#444]"
-               value={selectedMenuCategory || ''}
-               onChange={(e) => setSelectedMenuCategory(e.target.value || null)}
-            >
-                <option value="">Todas as categorias</option>
-                {uniqueMenuCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(CATEGORIES).map(([key, config]) => (
-              <div
-                key={key}
-                className="px-2.5 py-1 rounded-full border border-[#2A2A2C] bg-[#151515] flex items-center gap-1.5 cursor-pointer transition-all"
-                onClick={() => setActiveCategory(activeCategory === key ? null : key)}
-                style={{ opacity: activeCategory && activeCategory !== key ? 0.3 : 1 }}
-              >
-                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }} />
-                 <span className="text-[9px] text-white font-medium">{config.label}</span>
-                 <span className="text-[9px] text-[#595959]">{counts[key]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* RIGHT PANEL: CHART (hidden on mobile — scatter plot not touch-friendly) */}
-      <div className="hidden md:flex flex-1 bg-[#1B1B1D] rounded-[24px] border border-[#2A2A2C] p-6 flex-col relative overflow-hidden">
+      {/* RIGHT PANEL: CHART (visible on all screens) */}
+      <div className="flex flex-1 bg-[#1B1B1D] rounded-[16px] md:rounded-[24px] border border-[#2A2A2C] p-4 md:p-6 flex-col relative overflow-hidden min-h-[400px] md:min-h-0">
 
         {/* Header / Filter Chips */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 z-10 relative">
-          <div className="flex gap-4 items-center">
+        <div className="flex flex-col gap-3 mb-4 md:mb-6 z-10 relative">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center justify-between">
              <div>
-                 <h2 className="text-[18px] font-bold text-white">Matriz de Cardápio</h2>
-                 <p className="text-[12px] text-[#868686]">
+                 <h2 className="text-[16px] md:text-[18px] font-bold text-white">Matriz de Cardápio</h2>
+                 <p className="text-[11px] md:text-[12px] text-[#868686]">
                    {!selectedMenuCategory
-                     ? "Comparativo de pratos contra a média geral do cardápio."
-                     : "Comparativo de pratos contra a média da categoria selecionada."}
+                     ? "Comparativo de pratos contra a média geral."
+                     : "Comparativo contra a média da categoria."}
                  </p>
              </div>
 
              {/* MENU CATEGORY DROPDOWN */}
-             <div className="ml-4 pl-4 border-l border-[#2A2A2C]">
+             <div className="sm:ml-4 sm:pl-4 sm:border-l border-[#2A2A2C]">
                 <label className="block text-[10px] text-[#868686] mb-1">Filtrar Categoria</label>
                 <select
                    className="bg-[#151515] text-[12px] text-white border border-[#2A2A2C] rounded-[8px] px-3 py-1.5 outline-none hover:border-[#444] min-w-[120px]"
@@ -259,17 +225,17 @@ const MatrizPreco = () => {
                 </select>
              </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
             {Object.entries(CATEGORIES).map(([key, config]) => (
               <div
                 key={key}
-                className={`px-3 py-1.5 rounded-full border border-[#2A2A2C] bg-[#151515] flex items-center gap-2 cursor-pointer transition-all hover:bg-[#252527]`}
+                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full border border-[#2A2A2C] bg-[#151515] flex items-center gap-1.5 md:gap-2 cursor-pointer transition-all hover:bg-[#252527]`}
                 onClick={() => setActiveCategory(activeCategory === key ? null : key)}
                 style={{ opacity: activeCategory && activeCategory !== key ? 0.3 : 1 }}
               >
                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }} />
-                 <span className="text-[10px] text-white font-medium">{config.label}</span>
-                 <span className="text-[10px] text-[#595959] bg-[#1E1E1E] px-1.5 rounded">{counts[key]}</span>
+                 <span className="text-[9px] md:text-[10px] text-white font-medium">{config.label}</span>
+                 <span className="text-[9px] md:text-[10px] text-[#595959] bg-[#1E1E1E] px-1 md:px-1.5 rounded">{counts[key]}</span>
               </div>
             ))}
           </div>

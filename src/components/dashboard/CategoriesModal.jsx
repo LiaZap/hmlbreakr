@@ -55,7 +55,7 @@ const CategoriesModal = ({ onClose }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-[90vw] max-w-[500px] bg-[#1B1B1D] rounded-[20px] p-8 shadow-2xl border border-[#2A2A2C]">
+      <div className="relative w-[95vw] sm:w-[90vw] max-w-[500px] max-h-[90vh] overflow-y-auto bg-[#1B1B1D] rounded-[20px] p-5 sm:p-8 shadow-2xl border border-[#2A2A2C]">
         
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
@@ -117,7 +117,7 @@ const CategoriesModal = ({ onClose }) => {
               <span className="text-[13px] text-white font-medium pl-1">{cat}</span>
               <button 
                 onClick={() => handleDeleteCategory(cat)}
-                className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center text-[#555] opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500 transition-all"
+                className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center text-[#555] sm:opacity-0 sm:group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500 transition-all"
                 title="Excluir"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">

@@ -164,9 +164,9 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-[90vw] max-w-[480px] bg-[#1B1B1D] rounded-[20px] p-8 shadow-2xl border border-[#2A2A2C]">
+      <div className="relative w-[95vw] sm:w-[90vw] max-w-[480px] max-h-[90vh] overflow-y-auto bg-[#1B1B1D] rounded-[20px] p-5 sm:p-8 shadow-2xl border border-[#2A2A2C]">
         {/* Header */}
-        <div className="flex items-start justify-between mb-8">
+        <div className="flex items-start justify-between mb-6 sm:mb-8">
           <div>
             <h2 className="text-[20px] font-bold text-white">{isEditing ? 'Editar Insumo' : 'Criar Insumo'}</h2>
             <p className="text-[12px] text-[#868686] mt-1">{isEditing ? 'Atualize os dados do insumo' : 'Cadastre um novo insumo'}</p>
@@ -289,11 +289,11 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between mt-8 pt-4">
-          <button onClick={onClose} className="text-[14px] text-[#F5A623] font-medium hover:text-[#E5961E] transition-colors">
+        <div className="flex items-center justify-between mt-6 sm:mt-8 pt-4">
+          <button onClick={onClose} className="text-[13px] sm:text-[14px] text-[#F5A623] font-medium hover:text-[#E5961E] transition-colors">
             Cancelar
           </button>
-          <button onClick={handleSave} className="bg-[#F5A623] text-black font-semibold text-[14px] px-8 py-3.5 rounded-[12px] hover:bg-[#E5961E] transition-colors">
+          <button onClick={handleSave} className="bg-[#F5A623] text-black font-semibold text-[13px] sm:text-[14px] px-6 sm:px-8 py-3 sm:py-3.5 rounded-[12px] hover:bg-[#E5961E] transition-colors">
             {isEditing ? 'Atualizar Insumo' : 'Salvar Insumo'}
           </button>
         </div>
@@ -487,6 +487,8 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
      };
   };
 
+  const [mobilePanel, setMobilePanel] = useState('form'); // 'form' or 'insumos' — mobile only
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Print Component (Hidden unless printing) */}
@@ -494,19 +496,33 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
 
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      
-      {/* ... (Modal Content) ... */}
-      <div className="relative w-[90vw] max-w-[1000px] h-[85vh] max-h-[750px] bg-[#1B1B1D] rounded-[20px] flex overflow-hidden shadow-2xl border border-[#2A2A2C]">
-            {/* ... (Left/Right panels same as before) ... */}
-            {/* Just ensuring I don't break existing structure, passing the return content back slightly modified to include FichaTecnicaPrint */}
-            
-        {/* LEFT PANEL - Changes based on Tab */}
-        <div className="w-[380px] shrink-0 bg-[#151515] flex flex-col border-r border-[#2A2A2C]">
+
+      {/* Modal Content — fullscreen on mobile, centered on desktop */}
+      <div className="relative w-full h-full md:w-[90vw] md:max-w-[1000px] md:h-[85vh] md:max-h-[750px] bg-[#1B1B1D] md:rounded-[20px] flex flex-col md:flex-row overflow-hidden shadow-2xl border-0 md:border border-[#2A2A2C]">
+
+        {/* MOBILE: Toggle between Form and Insumos panels */}
+        <div className="md:hidden flex items-center bg-[#151515] border-b border-[#2A2A2C] px-4 py-2 gap-2 shrink-0">
+          <button
+            onClick={() => setMobilePanel('form')}
+            className={`flex-1 py-2 rounded-[8px] text-[12px] font-semibold transition-all ${mobilePanel === 'form' ? 'bg-[#F5A623] text-black' : 'bg-[#252527] text-[#868686]'}`}
+          >
+            {isEditing ? 'Editar Ficha' : 'Nova Ficha'}
+          </button>
+          <button
+            onClick={() => setMobilePanel('insumos')}
+            className={`flex-1 py-2 rounded-[8px] text-[12px] font-semibold transition-all ${mobilePanel === 'insumos' ? 'bg-[#F5A623] text-black' : 'bg-[#252527] text-[#868686]'}`}
+          >
+            {activeTab === 'operacional' ? 'Foto & Finalização' : 'Insumos'}
+          </button>
+        </div>
+
+        {/* LEFT PANEL - Changes based on Tab (hidden on mobile unless insumos panel selected) */}
+        <div className={`${mobilePanel === 'insumos' ? 'flex' : 'hidden'} md:flex w-full md:w-[380px] shrink-0 bg-[#151515] flex-col border-r border-[#2A2A2C] flex-1 md:flex-initial overflow-hidden`}>
             {/* ... (rest of the component) ... */}
 
             {activeTab === 'operacional' ? (
                 // LEFT PANEL for OPERATIONAL (Photo & Finalization Preview?)
-                <div className="p-6 flex flex-col gap-6 h-full overflow-y-auto">
+                <div className="p-4 md:p-6 flex flex-col gap-4 md:gap-6 h-full overflow-y-auto">
                     {/* Foto do Prato */}
                     <div>
                         <label className="block text-[12px] text-[#868686] mb-2 font-medium">FOTO DO PRATO PRONTO</label>
@@ -562,8 +578,8 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
             ) : (
                 // LEFT PANEL for CUSTOS (Insumos List) - Keeping existing logic
                 <>
-                  <div className="p-5">
-                    <div className="flex items-center bg-[#1E1E1E] rounded-[12px] border border-[#2A2A2C] px-4 py-3">
+                  <div className="p-3 md:p-5">
+                    <div className="flex items-center bg-[#1E1E1E] rounded-[12px] border border-[#2A2A2C] px-3 md:px-4 py-2.5 md:py-3">
                       <input
                         type="text"
                         placeholder="Encontrar Insumos"
@@ -578,7 +594,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto px-5 flex flex-col gap-2">
+                  <div className="flex-1 overflow-y-auto px-3 md:px-5 flex flex-col gap-2">
                     {/* Added Insumos Section */}
                     {addedInsumos.length > 0 && (
                       <>
@@ -701,8 +717,8 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
             )}
         </div>
 
-        {/* RIGHT PANEL - Form */}
-        <div className="flex-1 flex flex-col bg-[#1B1B1D] p-8">
+        {/* RIGHT PANEL - Form (hidden on mobile when insumos panel selected) */}
+        <div className={`${mobilePanel === 'form' ? 'flex' : 'hidden'} md:flex flex-1 flex-col bg-[#1B1B1D] p-4 sm:p-6 md:p-8 overflow-hidden`}>
           {/* Header */}
           <div className="flex items-start justify-between mb-6">
             <div>
@@ -865,29 +881,29 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
           </div>
 
           {/* Footer Buttons */}
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-[#2A2A2C]">
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-between mt-4 sm:mt-6 pt-4 border-t border-[#2A2A2C] gap-3 shrink-0">
             <button
               onClick={onClose}
               className="text-[14px] text-[#F5A623] font-medium hover:text-[#E5961E] transition-colors"
             >
               Cancelar
             </button>
-            <div className="flex items-center gap-3">
-                {/* Print Button (Only visible if Editing and in Operational Tab?) Or always? */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-end">
+                {/* Print Button */}
                 {isEditing && (
                     <button
                         onClick={() => window.print()}
-                        className="px-4 py-3.5 rounded-[12px] bg-[#252527] text-white text-[14px] font-medium hover:bg-[#333] transition-colors flex items-center gap-2"
+                        className="hidden sm:flex px-4 py-3 rounded-[12px] bg-[#252527] text-white text-[13px] font-medium hover:bg-[#333] transition-colors items-center gap-2"
                     >
-                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg> 
+                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
                          Imprimir
                     </button>
                 )}
-                
+
                 {isEditing && onDelete && (
                   <button
                     onClick={() => { if (window.confirm('Tem certeza que deseja excluir esta ficha?')) onDelete(editingFicha.id); }}
-                    className="px-4 py-3.5 rounded-[12px] bg-[#FF4560]/10 text-[#FF4560] text-[14px] font-medium hover:bg-[#FF4560]/20 transition-colors"
+                    className="px-3 sm:px-4 py-3 rounded-[12px] bg-[#FF4560]/10 text-[#FF4560] text-[13px] font-medium hover:bg-[#FF4560]/20 transition-colors"
                   >
                     Excluir
                   </button>
@@ -895,7 +911,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
 
                 <button
                 onClick={handleSave}
-                className="bg-[#F5A623] text-black font-semibold text-[14px] px-8 py-3.5 rounded-[12px] hover:bg-[#E5961E] transition-colors"
+                className="bg-[#F5A623] text-black font-semibold text-[13px] sm:text-[14px] px-6 sm:px-8 py-3 sm:py-3.5 rounded-[12px] hover:bg-[#E5961E] transition-colors flex-1 sm:flex-initial"
                 >
                 {isEditing ? 'Atualizar Ficha' : 'Salvar Ficha'}
                 </button>
@@ -1241,8 +1257,8 @@ const FichaTecnica = () => {
       {/* TOP AREA: Left Panel + Right Content */}
       <div className="flex flex-col lg:flex-row flex-1">
 
-        {/* LEFT PANEL - Summary */}
-        <div className="w-full lg:w-[320px] xl:w-[380px] shrink-0 bg-[#101010] p-6 lg:p-8 flex flex-col gap-5 lg:border-r border-[#1E1E1E]">
+        {/* LEFT PANEL - Summary (hidden on mobile — stats shown in compact form) */}
+        <div className="hidden lg:flex w-full lg:w-[320px] xl:w-[380px] shrink-0 bg-[#101010] p-6 lg:p-8 flex-col gap-5 lg:border-r border-[#1E1E1E]">
           {/* Breadcrumb */}
           <div className="text-[11px] text-[#868686]">
             <span className="text-[#555]">Breakr</span>
@@ -1304,10 +1320,10 @@ const FichaTecnica = () => {
           </div>
         </div>
 
-        {/* MIDDLE PANEL - Submenu */}
-        <div className="w-full lg:w-[220px] shrink-0 bg-[#131313] p-4 lg:py-6 lg:px-4 flex flex-col gap-4 lg:border-r border-[#1E1E1E]">
-          {/* Operacional Header */}
-          <div className="flex items-center justify-between mb-2">
+        {/* MIDDLE PANEL - Submenu (horizontal on mobile, vertical on desktop) */}
+        <div className="w-full lg:w-[220px] shrink-0 bg-[#131313] p-3 lg:py-6 lg:px-4 flex flex-row lg:flex-col gap-2 lg:gap-4 lg:border-r border-[#1E1E1E] overflow-x-auto">
+          {/* Operacional Header — desktop only */}
+          <div className="hidden lg:flex items-center justify-between mb-2">
             <div>
               <div className="font-semibold text-[13px] text-white">Operacional</div>
               <div className="text-[10px] text-[#868686]">Gestão de Cardápio</div>
@@ -1322,20 +1338,20 @@ const FichaTecnica = () => {
           {/* Insumos Tab */}
           <button
             onClick={() => setActiveTab('insumos')}
-            className={`flex items-center gap-3 p-3 rounded-[12px] transition-colors w-full text-left ${
+            className={`flex items-center gap-2 lg:gap-3 p-2.5 lg:p-3 rounded-[12px] transition-colors w-auto lg:w-full text-left whitespace-nowrap ${
               activeTab === 'insumos' ? 'bg-[#1E1E1E]' : 'hover:bg-[#1A1A1A]'
             }`}
           >
-            <div className={`w-[36px] h-[36px] rounded-[10px] flex items-center justify-center ${
+            <div className={`w-[32px] h-[32px] lg:w-[36px] lg:h-[36px] rounded-[10px] flex items-center justify-center shrink-0 ${
               activeTab === 'insumos' ? 'bg-[#252527]' : 'bg-[#1A1A1A]'
             }`}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill={activeTab === 'insumos' ? '#F5A623' : '#868686'}/>
               </svg>
             </div>
             <div>
               <div className={`font-medium text-[12px] ${activeTab === 'insumos' ? 'text-white' : 'text-[#868686]'}`}>Insumos</div>
-              <div className="text-[10px] text-[#555]">Gestão de insumos</div>
+              <div className="text-[10px] text-[#555] hidden lg:block">Gestão de insumos</div>
             </div>
             <div className="ml-auto bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full">{String(insumos.length).padStart(2, '0')}</div>
           </button>
@@ -1343,20 +1359,20 @@ const FichaTecnica = () => {
           {/* Ficha Técnica Tab */}
           <button
             onClick={() => setActiveTab('fichas')}
-            className={`flex items-center gap-3 p-3 rounded-[12px] transition-colors w-full text-left ${
+            className={`flex items-center gap-2 lg:gap-3 p-2.5 lg:p-3 rounded-[12px] transition-colors w-auto lg:w-full text-left whitespace-nowrap ${
               activeTab === 'fichas' ? 'bg-[#1E1E1E]' : 'hover:bg-[#1A1A1A]'
             }`}
           >
-            <div className={`w-[36px] h-[36px] rounded-[10px] flex items-center justify-center ${
+            <div className={`w-[32px] h-[32px] lg:w-[36px] lg:h-[36px] rounded-[10px] flex items-center justify-center shrink-0 ${
               activeTab === 'fichas' ? 'bg-[#252527]' : 'bg-[#1A1A1A]'
             }`}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill={activeTab === 'fichas' ? '#F5A623' : '#868686'}/>
               </svg>
             </div>
             <div>
-              <div className={`font-medium text-[12px] ${activeTab === 'fichas' ? 'text-white' : 'text-[#868686]'}`}>Ficha Técnica</div>
-              <div className="text-[10px] text-[#555]">Gestão de ficha técnica</div>
+              <div className={`font-medium text-[12px] ${activeTab === 'fichas' ? 'text-white' : 'text-[#868686]'}`}>Fichas</div>
+              <div className="text-[10px] text-[#555] hidden lg:block">Gestão de ficha técnica</div>
             </div>
             <div className="ml-auto bg-[#2A2A2C] text-[#868686] text-[9px] font-bold px-1.5 py-0.5 rounded-full">{String(fichas.length).padStart(2, '0')}</div>
           </button>

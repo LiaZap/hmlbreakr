@@ -151,9 +151,9 @@ const EngenhariaMenu = () => {
 
       {/* Upload Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-[480px] bg-[#1B1B1D] rounded-[20px] p-8 border border-[#2A2A2C]">
-            <button onClick={closeModal} className="absolute right-6 top-6 text-[#868686] hover:text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-[480px] bg-[#1B1B1D] rounded-[20px] p-5 sm:p-8 border border-[#2A2A2C]">
+            <button onClick={closeModal} className="absolute right-4 sm:right-6 top-4 sm:top-6 text-[#868686] hover:text-white">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
