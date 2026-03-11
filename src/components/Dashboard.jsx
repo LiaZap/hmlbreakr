@@ -183,6 +183,55 @@ const Dashboard = () => {
               )}
             </div>
 
+            {/* Daily revenue entries table */}
+            {(() => {
+              const dailyRevenue = dashboardData.formData?.daily_revenue || {};
+              const now = new Date();
+              const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+              const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+              const entries = Object.entries(dailyRevenue)
+                .filter(([d]) => d.startsWith(prefix))
+                .map(([d, v]) => ({ date: d, amount: typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g,'').replace(',','.')) || 0 }))
+                .sort((a, b) => a.date.localeCompare(b.date));
+              const accumulated = entries.reduce((s, e) => s + e.amount, 0);
+              const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+              const formatDay = (d) => { const [,, day] = d.split('-'); return `${parseInt(day)} ${monthNames[now.getMonth()]}`; };
+              const fmtMoney = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+              if (entries.length === 0) return (
+                <div className="p-3 bg-[#1B1B1D] border border-[#2A2A2C] rounded-[10px] mb-3 text-center">
+                  <p className="text-[9px] text-[#555] mb-1.5">Nenhum lançamento diário neste mês</p>
+                  <button onClick={() => setShowDailyRevenue(true)} className="text-[9px] text-[#FF9406] font-semibold hover:underline">
+                    + Adicionar faturamento do dia
+                  </button>
+                </div>
+              );
+
+              return (
+                <div className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[10px] mb-3 overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-[#2A2A2C]">
+                    <span className="text-[9px] font-semibold text-[#888] uppercase tracking-wider">{monthNames[now.getMonth()]} {now.getFullYear()}</span>
+                    <span className="text-[9px] text-[#555]">{entries.length}/{daysInMonth} dias</span>
+                  </div>
+                  {/* Entries */}
+                  <div className="max-h-[120px] overflow-y-auto">
+                    {entries.map((e) => (
+                      <div key={e.date} className="flex items-center justify-between px-3 py-1.5 border-b border-[#2A2A2C]/50 last:border-b-0">
+                        <span className="text-[9px] text-[#777]">{formatDay(e.date)}</span>
+                        <span className="text-[9px] text-[#CACACA] font-medium">R$ {fmtMoney(e.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Footer - total */}
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-[#2A2A2C] bg-[#1F1F1F]">
+                    <span className="text-[9px] font-semibold text-[#888]">Acumulado</span>
+                    <span className="text-[10px] font-bold text-[#FF9406]">R$ {fmtMoney(accumulated)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Dynamic day prediction message */}
             <div className="flex items-start gap-[7px] mb-3">
               <div className="w-10 h-10 rounded-[16px] bg-[#1B1B1D] flex items-center justify-center flex-shrink-0">
