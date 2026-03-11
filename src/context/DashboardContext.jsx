@@ -549,23 +549,52 @@ export const DashboardProvider = ({ children }) => {
             ]
         },
         breakEven: (() => {
-            // Estimated day in the month when break-even is reached
             const now = new Date();
             const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-            const dailyAvg = currentRevenue > 0 ? currentRevenue / daysInMonth : 0;
+
+            // Check for daily revenue data
+            const dailyRevenue = formData.daily_revenue || {};
+            const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const currentMonthEntries = Object.entries(dailyRevenue)
+                .filter(([dateStr]) => dateStr.startsWith(currentMonthPrefix))
+                .map(([, amount]) => (typeof amount === 'number' ? amount : parseCurrency(amount)));
+            const hasDailyData = currentMonthEntries.length > 0;
+
+            let revenueForCalc, dailyAvg;
+            if (hasDailyData) {
+                revenueForCalc = currentMonthEntries.reduce((sum, v) => sum + v, 0);
+                dailyAvg = revenueForCalc / currentMonthEntries.length;
+            } else {
+                revenueForCalc = currentRevenue;
+                dailyAvg = currentRevenue > 0 ? currentRevenue / daysInMonth : 0;
+            }
+
             let estimatedDay = dailyAvg > 0 ? Math.ceil(breakEvenValue / dailyAvg) : 0;
             const reachedBreakEven = estimatedDay > 0 && estimatedDay <= daysInMonth;
             if (estimatedDay > daysInMonth) estimatedDay = daysInMonth;
             const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const estimatedDateStr = estimatedDay > 0 ? `${estimatedDay} ${monthNames[now.getMonth()]}` : '--';
+
+            // Format max label for gauge (e.g. "45k")
+            const maxRaw = Math.max(revenueForCalc, breakEvenValue) * 1.5;
+            const formatKLabel = (val) => {
+                if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+                if (val >= 1000) return `${Math.round(val / 1000)}k`;
+                return Math.round(val).toString();
+            };
+
             return {
                 hasCmvData: hasCmvData,
-                percentage: !hasCmvData ? 0 : (breakEvenValue === 0 && currentRevenue > 0 ? 100 : (breakEvenValue > 0 ? Math.min(Math.round((currentRevenue / breakEvenValue) * 100), 100) : 0)),
+                percentage: !hasCmvData ? 0 : (breakEvenValue === 0 && revenueForCalc > 0 ? 100 : (breakEvenValue > 0 ? Math.min(Math.round((revenueForCalc / breakEvenValue) * 100), 100) : 0)),
                 current: hasCmvData ? formatMoney(breakEvenValue) : "0,00",
                 min: "0",
-                max: formatMoney(Math.max(currentRevenue, breakEvenValue) * 1.5),
+                max: formatMoney(maxRaw),
+                minLabel: "0k",
+                maxLabel: formatKLabel(maxRaw),
                 estimatedDate: estimatedDateStr,
+                estimatedDay: estimatedDay,
                 reachedBreakEven: reachedBreakEven,
+                hasDailyData: hasDailyData,
                 base: {
                     value: basePercentage.toFixed(0),
                     status: basePercentage > 60 ? "Crítico" : (basePercentage > 55 ? "Alerta" : (basePercentage >= 45 ? "Saudável" : "Baixo")),

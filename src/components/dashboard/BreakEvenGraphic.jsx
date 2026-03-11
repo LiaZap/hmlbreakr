@@ -1,8 +1,10 @@
 import React from 'react';
 
-const BreakEvenGraphic = ({ 
-  percentage = 0, 
-  value = "R$ 0,00"
+const BreakEvenGraphic = ({
+  percentage = 0,
+  value = "R$ 0,00",
+  minLabel = "0k",
+  maxLabel = "100%"
 }) => {
   // Clamp percentage between 0 and 100 for the bar
   const safePercentage = Math.min(Math.max(percentage, 0), 100);
@@ -68,8 +70,8 @@ const BreakEvenGraphic = ({
         />
 
         {/* Labels on Ends */}
-        <text x="20" y="105" textAnchor="middle" fill="#777" fontSize="10" fontFamily="sans-serif">0%</text>
-        <text x="180" y="105" textAnchor="middle" fill="#777" fontSize="10" fontFamily="sans-serif">100%</text>
+        <text x="20" y="105" textAnchor="middle" fill="#777" fontSize="10" fontFamily="sans-serif">{minLabel}</text>
+        <text x="180" y="105" textAnchor="middle" fill="#777" fontSize="10" fontFamily="sans-serif">{maxLabel}</text>
 
         {/* Center Text */}
         <text x="100" y="65" textAnchor="middle" fill="#E1E1E1" fontSize="24" fontWeight="bold" fontFamily="Plus Jakarta Sans, sans-serif">
@@ -84,7 +86,7 @@ const BreakEvenGraphic = ({
       <div className="flex items-center gap-4 mt-[-10px]">
          <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-1 rounded-full bg-[#FF9406]" />
-            <span className="text-[10px] text-[#888]">Realizado</span>
+            <span className="text-[10px] text-[#888]">Faturado</span>
          </div>
          <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-1 rounded-full bg-[#333]" />

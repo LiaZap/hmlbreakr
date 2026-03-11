@@ -8,6 +8,7 @@ import TechnicalSheets from './dashboard/TechnicalSheets';
 import CostStructure from './dashboard/CostStructure';
 import DashboardTips from './dashboard/DashboardTips';
 import BreakEvenGraphic from './dashboard/BreakEvenGraphic';
+import DailyRevenueModal from './dashboard/DailyRevenueModal';
 import FichaTecnica from './dashboard/FichaTecnica';
 import FaturamentoAnualIcon from './dashboard/FaturamentoAnualIcon';
 import RankingCategoriaIcon from './dashboard/RankingCategoriaIcon';
@@ -24,6 +25,7 @@ const Dashboard = () => {
   const { dashboardData, updateDashboardData } = useDashboard();
   const [activePage, setActivePage] = useState('home');
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showDailyRevenue, setShowDailyRevenue] = useState(false);
 
   const handleNavigate = (page) => {
     if (page === 'editOnboarding') {
@@ -138,7 +140,17 @@ const Dashboard = () => {
                 <span className="font-semibold text-[11px] text-[#CACACA]">Ponto de Equilíbrio</span>
                 <span className="font-normal text-[10px] text-[#595959]">Quando o lucro aparece</span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
+                {/* Quick-add daily revenue */}
+                <button
+                  onClick={() => setShowDailyRevenue(true)}
+                  className="w-6 h-6 rounded-full bg-[#FF9406]/15 border border-[#FF9406]/30 flex items-center justify-center hover:bg-[#FF9406]/25 transition-colors"
+                  title="Adicionar faturamento diário"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF9406" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                </button>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C4C4C4" strokeWidth="1.5">
                   <rect x="3" y="4" width="18" height="18" rx="2" />
                   <path d="M16 2v4M8 2v4M3 10h18" />
@@ -151,9 +163,11 @@ const Dashboard = () => {
             {/* Gauge Chart */}
             <div className="w-full mb-2">
               {dashboardData.breakEven.hasCmvData ? (
-                <BreakEvenGraphic 
+                <BreakEvenGraphic
                   percentage={dashboardData.breakEven.percentage}
                   value={`R$ ${dashboardData.breakEven.current}`}
+                  minLabel={dashboardData.breakEven.minLabel || "0k"}
+                  maxLabel={dashboardData.breakEven.maxLabel || "100%"}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 px-4">
@@ -169,11 +183,20 @@ const Dashboard = () => {
               )}
             </div>
 
-
-            {/* Info tooltip */}
-            <div className="p-2.5 bg-[#1B1B1D] border border-[#2F2F31] rounded-[8px] mb-3">
+            {/* Dynamic day prediction message */}
+            <div className="p-2.5 bg-[#1B1B1D] border border-[#2F2F31] rounded-[8px] mb-3 flex items-start gap-2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF9406" strokeWidth="1.5" className="flex-shrink-0 mt-0.5">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2" strokeLinecap="round"/>
+              </svg>
               <p className="font-normal text-[8px] text-[#7E7E7E] leading-[1.4]">
-                A partir do ponto de equilíbrio, cada venda contribui diretamente para o lucro real do negócio. Mantenha os custos fixos controlados para atingir essa meta mais cedo.
+                {dashboardData.breakEven.estimatedDay > 0 ? (
+                  <>
+                    A partir do dia <span className="text-[#FF9406] font-semibold">{dashboardData.breakEven.estimatedDay}</span>, cada venda tende a virar sobra real. Seu objetivo é baixar esse dia sem comprometer qualidade.
+                  </>
+                ) : (
+                  'Preencha seus dados para calcular a previsão do ponto de equilíbrio.'
+                )}
               </p>
             </div>
 
@@ -212,6 +235,19 @@ const Dashboard = () => {
 
       {/* Bottom spacing for mobile nav */}
       <div className="h-[70px] md:hidden" />
+
+      {/* Daily Revenue Modal */}
+      <DailyRevenueModal
+        isOpen={showDailyRevenue}
+        onClose={() => setShowDailyRevenue(false)}
+        existingEntries={dashboardData.formData?.daily_revenue || {}}
+        onSave={(dateStr, amount) => {
+          const formData = dashboardData.formData || {};
+          const dailyRevenue = { ...(formData.daily_revenue || {}), [dateStr]: amount };
+          updateDashboardData({ ...formData, daily_revenue: dailyRevenue });
+          setShowDailyRevenue(false);
+        }}
+      />
 
       {/* Onboarding Edit Modal */}
       {showOnboarding && (
