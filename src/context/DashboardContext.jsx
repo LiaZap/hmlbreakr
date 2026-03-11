@@ -561,12 +561,15 @@ export const DashboardProvider = ({ children }) => {
             const hasDailyData = currentMonthEntries.length > 0;
 
             let revenueForCalc, dailyAvg;
+            const today = now.getDate(); // dia atual do mês (1-31)
             if (hasDailyData) {
+                // Usa dados diários reais
                 revenueForCalc = currentMonthEntries.reduce((sum, v) => sum + v, 0);
                 dailyAvg = revenueForCalc / currentMonthEntries.length;
             } else {
-                revenueForCalc = currentRevenue;
+                // Prorrateia faturamento mensal até o dia de hoje
                 dailyAvg = currentRevenue > 0 ? currentRevenue / daysInMonth : 0;
+                revenueForCalc = dailyAvg * today;
             }
 
             let estimatedDay = dailyAvg > 0 ? Math.ceil(breakEvenValue / dailyAvg) : 0;
@@ -575,8 +578,8 @@ export const DashboardProvider = ({ children }) => {
             const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const estimatedDateStr = estimatedDay > 0 ? `${estimatedDay} ${monthNames[now.getMonth()]}` : '--';
 
-            // Format max label for gauge (e.g. "45k")
-            const maxRaw = Math.max(revenueForCalc, breakEvenValue) * 1.5;
+            // Format max label for gauge — meta is the break-even value
+            const maxRaw = breakEvenValue > 0 ? breakEvenValue : Math.max(revenueForCalc, 1);
             const formatKLabel = (val) => {
                 if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
                 if (val >= 1000) return `${Math.round(val / 1000)}k`;
