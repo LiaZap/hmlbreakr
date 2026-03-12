@@ -46,20 +46,43 @@ const parseMenuExcel = (buffer, originalname = '') => {
   };
 
   const menuItems = data.map((row, index) => {
-    // Helper to find case-insensitive key
+    // Helper to find case-insensitive key with partial matching
+    // Tries exact match first, then checks if any column contains one of the keywords
     const findVal = (keys) => {
         const lowerKeys = keys.map(k => k.toLowerCase());
-        const foundKey = Object.keys(row).find(k => lowerKeys.includes(k.toLowerCase()));
-        return foundKey ? row[foundKey] : null;
+        // Exact match first
+        const exactKey = Object.keys(row).find(k => lowerKeys.includes(k.toLowerCase().trim()));
+        if (exactKey) return row[exactKey];
+        // Partial match: column header contains one of the keywords
+        const partialKey = Object.keys(row).find(colName => {
+            const col = colName.toLowerCase().trim();
+            return lowerKeys.some(k => col.includes(k));
+        });
+        return partialKey ? row[partialKey] : null;
+    };
+
+    // Helper that WON'T partial-match ambiguous short keywords
+    // Uses exact match for short keys, partial for longer ones (4+ chars)
+    const findValStrict = (keys) => {
+        const lowerKeys = keys.map(k => k.toLowerCase());
+        const exactKey = Object.keys(row).find(k => lowerKeys.includes(k.toLowerCase().trim()));
+        if (exactKey) return row[exactKey];
+        const longKeys = lowerKeys.filter(k => k.length >= 4);
+        if (longKeys.length === 0) return null;
+        const partialKey = Object.keys(row).find(colName => {
+            const col = colName.toLowerCase().trim();
+            return longKeys.some(k => col.includes(k));
+        });
+        return partialKey ? row[partialKey] : null;
     };
 
     return {
         id: Date.now() + index, // Generate temporary unique ID
-        name: findVal(['Nome', 'Prato', 'Item', 'Name']) || 'Sem Nome',
+        name: findVal(['Nome', 'Prato', 'Produto', 'Item', 'Name']) || 'Sem Nome',
         category: findVal(['Categoria', 'Grupo', 'Category']) || 'Geral',
-        sales: parseNumber(findVal(['Vendas', 'Volume', 'Qtd', 'Quantidade', 'Sales'])),
-        price: parseNumber(findVal(['Preço', 'Preco', 'Venda', 'Valor de Venda', 'R$', 'Price', 'Valor'])),
-        cost: parseNumber(findVal(['Custo', 'CMV', 'Cost']))
+        sales: parseNumber(findValStrict(['Vendas', 'Volume', 'Qtd', 'Quantidade', 'Sales'])),
+        price: parseNumber(findValStrict(['Preço de Venda', 'Preco de Venda', 'Preço', 'Preco', 'Valor de Venda', 'Price', 'Valor'])),
+        cost: parseNumber(findValStrict(['Custo', 'CMV', 'Cost']))
     };
   });
   
