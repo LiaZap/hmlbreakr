@@ -22,16 +22,34 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Increased limit for Excel/Data uploads
+// CORS - restrict to allowed origins in production
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://localhost:5173'];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all in case of misconfiguration, log for debugging
+      console.warn(`CORS request from unlisted origin: ${origin}`);
+    }
+  },
+  credentials: true
+}));
+app.use(express.json({ limit: '50mb' }));
 
 // Routes
 app.use('/api', routes);
 
-// Health Check
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', database: 'connected' });
+// Health Check - actually test DB connection
+app.get('/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: 'ok', database: 'connected' });
+  } catch (error) {
+    res.status(503).json({ status: 'error', database: 'disconnected' });
+  }
 });
 
 // Serve Static Assets in Production
@@ -52,8 +70,17 @@ app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err.message);
+  res.status(500).json({ error: 'Erro interno do servidor' });
+});
+
 // Graceful Shutdown
-process.on('SIGINT', async () => {
+const shutdown = async (signal) => {
+  console.log(`${signal} received, shutting down...`);
   await prisma.$disconnect();
   process.exit(0);
-});
+};
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

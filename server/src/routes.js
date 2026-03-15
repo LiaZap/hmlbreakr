@@ -11,8 +11,11 @@ const prisma = new PrismaClient();
 // Admin Login
 router.post('/admin/login', (req, res) => {
   const { email, password } = req.body;
-  if (email === 'contato@breakr.com.br' && password === '$ADMIN-Brkr26@') {
-    return res.json({ success: true, token: 'mock-admin-token', name: 'Gustavo Costa' });
+  const adminEmail = process.env.ADMIN_EMAIL || 'contato@breakr.com.br';
+  const adminPassword = process.env.ADMIN_PASSWORD || '$ADMIN-Brkr26@';
+  const adminName = process.env.ADMIN_NAME || 'Gustavo Costa';
+  if (email === adminEmail && password === adminPassword) {
+    return res.json({ success: true, token: 'mock-admin-token', name: adminName });
   }
   return res.status(401).json({ error: 'Credenciais incorretas' });
 });
@@ -112,8 +115,11 @@ router.post('/client/login', async (req, res) => {
     }
 
     // Check if it's the admin
-    if (email === 'contato@breakr.com.br' && password === '$ADMIN-Brkr26@') {
-      return res.json({ success: true, role: 'admin', name: 'Gustavo Costa' });
+    const adminEmail = process.env.ADMIN_EMAIL || 'contato@breakr.com.br';
+    const adminPassword = process.env.ADMIN_PASSWORD || '$ADMIN-Brkr26@';
+    const adminName = process.env.ADMIN_NAME || 'Gustavo Costa';
+    if (email === adminEmail && password === adminPassword) {
+      return res.json({ success: true, role: 'admin', name: adminName });
     }
 
     // Checking if the user is a Client (Owner)
