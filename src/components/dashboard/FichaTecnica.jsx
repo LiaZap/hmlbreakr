@@ -349,11 +349,11 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const availableInsumos = dashboardData.operational?.insumos || [];
 
   const [categoria, setCategoria] = useState(editingFicha ? editingFicha.type : fichaCategoryOptions[0]);
-  const [rendimento, setRendimento] = useState(editingFicha ? editingFicha.rendimento.replace(/[^0-9]/g, '') : '200');
-  const [custoEmbalagem, setCustoEmbalagem] = useState(editingFicha ? editingFicha.custoEmbalagem.replace('R$', '') : '');
+  const [rendimento, setRendimento] = useState(editingFicha ? String(editingFicha.rendimento || '0').replace(/[^0-9.,]/g, '') : '200');
+  const [custoEmbalagem, setCustoEmbalagem] = useState(editingFicha ? String(editingFicha.custoEmbalagem).replace(/R\$\s*/g, '').trim() : '');
   
   // Sales & Price Fields (Integration with Menu Engineering)
-  const [precoVenda, setPrecoVenda] = useState(editingFicha?.precoVenda || '');
+  const [precoVenda, setPrecoVenda] = useState(editingFicha?.precoVenda ? String(editingFicha.precoVenda).replace(/R\$\s*/g, '').trim() : '');
   const [vendasMes, setVendasMes] = useState(editingFicha?.vendasMes || '');
   
   // Operational Fields
