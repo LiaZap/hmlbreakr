@@ -12,6 +12,9 @@ const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
+// Trust proxy (required behind Easypanel/Traefik reverse proxy)
+app.set('trust proxy', 1);
+
 // Security Middleware
 app.use(helmet());
 
@@ -22,21 +25,8 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// CORS - restrict to allowed origins in production
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:3000', 'http://localhost:5173'];
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Allow all in case of misconfiguration, log for debugging
-      console.warn(`CORS request from unlisted origin: ${origin}`);
-    }
-  },
-  credentials: true
-}));
+// CORS
+app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // Routes
