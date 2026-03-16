@@ -4,142 +4,129 @@ const FichaTecnicaPrint = ({ data }) => {
   if (!data) return null;
 
   return (
-    <div className="hidden print:block fixed inset-0 z-9999 bg-white text-black p-8 overflow-y-auto">
-      {/* CSS to hide headers/footers in print and reset styles */}
+    <div className="hidden print:block fixed inset-0 z-9999 bg-white text-black overflow-hidden">
       <style>{`
         @media print {
-          @page { margin: 0; size: A4; }
-          body * {
-            visibility: hidden;
-          }
-          #printable-root, #printable-root * {
-            visibility: visible;
-          }
+          @page { margin: 8mm; size: A4; }
+          body * { visibility: hidden; }
+          #printable-root, #printable-root * { visibility: visible; }
           #printable-root {
             position: absolute;
             left: 0;
             top: 0;
-            width: 210mm;
-            min-height: 297mm;
+            width: 194mm;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             background: white;
             z-index: 9999;
+            font-size: 9pt;
           }
         }
       `}</style>
-      
-      {/* Printable Root ID */}
+
       <div id="printable-root">
-          {/* Container A4 style */}
-          <div className="max-w-[210mm] mx-auto border border-black h-full flex flex-col min-h-[290mm]">
-            
-            {/* Header */}
-            <div className="bg-[#D9D9D9] border-b border-black p-4 flex items-center justify-between">
-              <h1 className="text-xl font-bold uppercase">FICHA TÉCNICA OPERACIONAL - {data.name}</h1>
-            </div>
+        <div style={{ maxWidth: '194mm', margin: '0 auto', border: '1px solid black' }}>
 
-            {/* Info Gerais */}
-            <div className="border-b border-black">
-              <div className="bg-[#D9D9D9] p-1 text-center font-bold border-b border-black text-sm">INFORMAÇÕES GERAIS</div>
-              <div className="p-2 text-sm grid grid-cols-1 gap-1">
-                  <div className="border-b border-gray-300 pb-1"><strong>Categoria:</strong> {data.type}</div>
-                  <div className="border-b border-gray-300 py-1"><strong>Tempo de preparo:</strong> {data.tempoPreparo || '-'}</div>
-                  <div className="border-b border-gray-300 py-1"><strong>Rendimento:</strong> {data.rendimento}</div>
-                  <div className="pt-1"><strong>Utensílios necessários:</strong> {data.utensilios || '-'}</div>
-              </div>
-            </div>
-
-            {/* Middle Section: Photo & Ingredients */}
-            <div className="flex border-b border-black h-[350px]">
-              {/* Photo */}
-              <div className="w-1/2 border-r border-black p-2 flex items-center justify-center relative overflow-hidden">
-                  {data.fotoPrato ? (
-                      <img src={data.fotoPrato} alt="Prato" className="w-full h-full object-cover" />
-                  ) : (
-                      <div className="text-gray-400 font-bold text-xl text-center">FOTO DO PRATO PRONTO</div>
-                  )}
-              </div>
-
-              {/* Ingredients Table */}
-              <div className="w-1/2 flex flex-col">
-                  <div className="bg-[#D9D9D9] p-1 text-center font-bold border-b border-black text-sm">INGREDIENTES E PORCIONAMENTO</div>
-                  <div className="flex bg-[#D9D9D9] border-b border-black text-xs font-bold">
-                    <div className="w-[40%] p-1 border-r border-black">Ingrediente</div>
-                    <div className="w-[20%] p-1 border-r border-black text-center">Qtd Líq (PL)</div>
-                    <div className="w-[20%] p-1 border-r border-black text-center">FC</div>
-                    <div className="w-[20%] p-1 text-center">Qtd Bruta (PB)</div>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    {data.ingredients && data.ingredients.map((ing, i) => (
-                        <div key={i} className="flex border-b border-gray-300 text-xs">
-                          <div className="w-[40%] p-1 border-r border-gray-300 truncate">{ing.name}</div>
-                          <div className="w-[20%] p-1 border-r border-gray-300 text-center">{ing.netQty || ing.qty}{ing.unit}</div>
-                          <div className="w-[20%] p-1 border-r border-gray-300 text-center">{ing.fc || '1.00'}</div>
-                          <div className="w-[20%] p-1 text-center">{ing.grossQty || ing.qty}{ing.unit}</div>
-                        </div>
-                    ))}
-                  </div>
-              </div>
-            </div>
-
-            {/* Modo de Preparo */}
-            <div className="border-b border-black flex-1">
-              <div className="bg-[#D9D9D9] p-1 text-center font-bold border-b border-black text-sm">MODO DE PREPARO E MONTAGEM (PASSO A PASSO)</div>
-              <div className="p-2 text-sm flex flex-col gap-2">
-                  {data.modoPreparo && data.modoPreparo.length > 0 ? (
-                      data.modoPreparo.map((step, i) => (
-                          <div key={i} className="border-b border-gray-200 pb-1">
-                              <strong>{i + 1}.</strong> {step}
-                          </div>
-                      ))
-                  ) : (
-                      <div className="text-gray-400 italic">Sem modo de preparo cadastrado.</div>
-                  )}
-              </div>
-            </div>
-
-            {/* Finalização */}
-            <div className="h-[100px] border-t border-black">
-              <div className="bg-[#D9D9D9] p-1 text-center font-bold border-b border-black text-sm">PADRÃO DE FINALIZAÇÃO E SAÍDA</div>
-              <div className="p-2 text-sm">
-                  {data.finalizacao || <span className="text-gray-400 italic">Sem instruções de finalização.</span>}
-              </div>
-            </div>
-
-            {/* Onboarding Checklist - Footer */}
-            <div className="mt-auto border-t border-black">
-                <div className="bg-[#D9D9D9] p-1 text-center font-bold border-b border-black text-sm">ETAPAS DO ONBOARDING (TREINAMENTO)</div>
-                <div className="p-2 grid grid-cols-5 gap-2 text-[10px] text-center">
-                    <div className="border border-black p-2 flex flex-col items-center gap-1 rounded">
-                        <div className="font-bold">1. TEÓRICA</div>
-                        <div>Leitura e Entendimento</div>
-                        <div className="w-4 h-4 border border-black mt-1"></div>
-                    </div>
-                    <div className="border border-black p-2 flex flex-col items-center gap-1 rounded">
-                        <div className="font-bold">2. SHADOWING</div>
-                        <div>Observação da Execução</div>
-                        <div className="w-4 h-4 border border-black mt-1"></div>
-                    </div>
-                     <div className="border border-black p-2 flex flex-col items-center gap-1 rounded">
-                        <div className="font-bold">3. PRÁTICA</div>
-                        <div>Execução Assistida</div>
-                        <div className="w-4 h-4 border border-black mt-1"></div>
-                    </div>
-                     <div className="border border-black p-2 flex flex-col items-center gap-1 rounded">
-                        <div className="font-bold">4. VALIDAÇÃO</div>
-                        <div>Aprovação Chef</div>
-                        <div className="w-4 h-4 border border-black mt-1"></div>
-                    </div>
-                     <div className="border border-black p-2 flex flex-col items-center gap-1 rounded">
-                        <div className="font-bold">5. AUTONOMIA</div>
-                        <div>Liberado p/ Produção</div>
-                        <div className="w-4 h-4 border border-black mt-1"></div>
-                    </div>
-                </div>
-            </div>
-
+          {/* Header */}
+          <div style={{ background: '#D9D9D9', borderBottom: '1px solid black', padding: '6px 10px' }}>
+            <h1 style={{ fontSize: '13pt', fontWeight: 'bold', textTransform: 'uppercase', margin: 0 }}>
+              FICHA TÉCNICA - {data.name}
+            </h1>
           </div>
+
+          {/* Info Gerais - inline compact */}
+          <div style={{ borderBottom: '1px solid black', padding: '4px 8px', display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '8pt' }}>
+            <span><strong>Categoria:</strong> {data.type}</span>
+            <span><strong>Preparo:</strong> {data.tempoPreparo || '-'}</span>
+            <span><strong>Rendimento:</strong> {data.rendimento}</span>
+            <span><strong>Custo:</strong> {data.custoTotal}</span>
+            {data.precoVenda && <span><strong>Preço Venda:</strong> {data.precoVenda}</span>}
+            {data.utensilios && <span><strong>Utensílios:</strong> {data.utensilios}</span>}
+          </div>
+
+          {/* Photo & Ingredients side by side */}
+          <div style={{ display: 'flex', borderBottom: '1px solid black', height: '200px' }}>
+            {/* Photo */}
+            <div style={{ width: '40%', borderRight: '1px solid black', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: '4px' }}>
+              {data.fotoPrato ? (
+                <img src={data.fotoPrato} alt="Prato" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <div style={{ color: '#999', fontWeight: 'bold', textAlign: 'center' }}>FOTO DO PRATO</div>
+              )}
+            </div>
+
+            {/* Ingredients Table */}
+            <div style={{ width: '60%', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ background: '#D9D9D9', padding: '3px', textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid black', fontSize: '8pt' }}>
+                INGREDIENTES E PORCIONAMENTO
+              </div>
+              <div style={{ display: 'flex', background: '#EFEFEF', borderBottom: '1px solid black', fontSize: '7pt', fontWeight: 'bold' }}>
+                <div style={{ width: '40%', padding: '2px 4px', borderRight: '1px solid #ccc' }}>Ingrediente</div>
+                <div style={{ width: '20%', padding: '2px 4px', borderRight: '1px solid #ccc', textAlign: 'center' }}>Qtd (PL)</div>
+                <div style={{ width: '20%', padding: '2px 4px', borderRight: '1px solid #ccc', textAlign: 'center' }}>FC</div>
+                <div style={{ width: '20%', padding: '2px 4px', textAlign: 'center' }}>Qtd (PB)</div>
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                {data.ingredients && data.ingredients.map((ing, i) => (
+                  <div key={i} style={{ display: 'flex', borderBottom: '1px solid #ddd', fontSize: '7pt' }}>
+                    <div style={{ width: '40%', padding: '1px 4px', borderRight: '1px solid #ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ing.name}</div>
+                    <div style={{ width: '20%', padding: '1px 4px', borderRight: '1px solid #ddd', textAlign: 'center' }}>{ing.netQty || ing.qty}{ing.unit}</div>
+                    <div style={{ width: '20%', padding: '1px 4px', borderRight: '1px solid #ddd', textAlign: 'center' }}>{ing.fc || '1.00'}</div>
+                    <div style={{ width: '20%', padding: '1px 4px', textAlign: 'center' }}>{ing.grossQty || ing.qty}{ing.unit}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Modo de Preparo */}
+          <div style={{ borderBottom: '1px solid black' }}>
+            <div style={{ background: '#D9D9D9', padding: '3px', textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid black', fontSize: '8pt' }}>
+              MODO DE PREPARO E MONTAGEM
+            </div>
+            <div style={{ padding: '4px 8px', fontSize: '8pt' }}>
+              {data.modoPreparo && data.modoPreparo.length > 0 ? (
+                data.modoPreparo.map((step, i) => (
+                  <div key={i} style={{ marginBottom: '2px' }}>
+                    <strong>{i + 1}.</strong> {step}
+                  </div>
+                ))
+              ) : (
+                <div style={{ color: '#999', fontStyle: 'italic' }}>Sem modo de preparo cadastrado.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Finalização */}
+          <div style={{ borderBottom: '1px solid black' }}>
+            <div style={{ background: '#D9D9D9', padding: '3px', textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid black', fontSize: '8pt' }}>
+              PADRÃO DE FINALIZAÇÃO E SAÍDA
+            </div>
+            <div style={{ padding: '4px 8px', fontSize: '8pt', minHeight: '30px' }}>
+              {data.finalizacao || <span style={{ color: '#999', fontStyle: 'italic' }}>Sem instruções de finalização.</span>}
+            </div>
+          </div>
+
+          {/* Onboarding Checklist - compact */}
+          <div>
+            <div style={{ background: '#D9D9D9', padding: '3px', textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid black', fontSize: '8pt' }}>
+              ETAPAS DO ONBOARDING (TREINAMENTO)
+            </div>
+            <div style={{ display: 'flex', padding: '4px', gap: '4px' }}>
+              {['1. TEÓRICA\nLeitura e Entendimento', '2. SHADOWING\nObservação da Execução', '3. PRÁTICA\nExecução Assistida', '4. VALIDAÇÃO\nAprovação Chef', '5. AUTONOMIA\nLiberado p/ Produção'].map((text, i) => {
+                const [title, desc] = text.split('\n');
+                return (
+                  <div key={i} style={{ flex: 1, border: '1px solid black', padding: '4px', textAlign: 'center', fontSize: '6.5pt', borderRadius: '2px' }}>
+                    <div style={{ fontWeight: 'bold' }}>{title}</div>
+                    <div>{desc}</div>
+                    <div style={{ width: '12px', height: '12px', border: '1px solid black', margin: '3px auto 0' }} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );

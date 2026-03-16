@@ -14,7 +14,15 @@ export const parseSafeNumber = (val) => {
 
 
 // ============ CARD: Ficha Técnica ============
-const FichaTecnicaCard = ({ item, onClick }) => (
+const FichaTecnicaCard = ({ item, onClick, basePercent }) => {
+  const pv = parseSafeNumber(item.precoVenda);
+  const cmv = parseSafeNumber(item.custoTotal);
+  const base = parseSafeNumber(basePercent) / 100;
+  const lucroLiqPct = pv > 0 ? (((pv - (pv * base)) - cmv) / pv) * 100 : null;
+  const lucroLiqRS = pv > 0 ? ((pv - (pv * base)) - cmv) : null;
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  return (
   <div
     className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-4 flex flex-col gap-3 cursor-pointer hover:border-[#F5A623]/40 hover:scale-[1.01] transition-all"
     onClick={onClick}
@@ -32,9 +40,26 @@ const FichaTecnicaCard = ({ item, onClick }) => (
           <div className="text-[10px] text-[#868686]">{item.type}</div>
         </div>
       </div>
-      {item.progress !== null && (
-        <div className="bg-[#00B37E]/15 text-[#00B37E] text-[11px] font-semibold px-2.5 py-1 rounded-full">
-          {item.progress}%
+      {pv > 0 && lucroLiqPct !== null && (
+        <div
+          className="relative"
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
+          <div className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${
+            lucroLiqPct > 0 ? 'bg-[#00B37E]/15 text-[#00B37E]' : 'bg-[#FF4560]/15 text-[#FF4560]'
+          }`}>
+            {lucroLiqPct.toFixed(1)}%
+          </div>
+          {showTooltip && (
+            <div className="absolute right-0 top-full mt-1 bg-[#252527] border border-[#333] rounded-lg px-3 py-2 z-50 whitespace-nowrap shadow-lg">
+              <div className="text-[10px] text-[#868686]">Lucro Líquido Estimado</div>
+              <div className={`text-[12px] font-bold ${lucroLiqRS > 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
+                R$ {lucroLiqRS.toFixed(2).replace('.', ',')}
+              </div>
+              <div className="text-[9px] text-[#555] mt-0.5">Base: {parseSafeNumber(basePercent).toFixed(0)}% | CMV: R$ {cmv.toFixed(2).replace('.', ',')}</div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -80,7 +105,8 @@ const FichaTecnicaCard = ({ item, onClick }) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // ============ CARD: Insumo ============
 const InsumoCard = ({ item, onClick }) => (
@@ -356,9 +382,9 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
       return sum + (requiredQty * unitCost);
   }, 0);
 
-  // If imported and no insumos added yet, we use the imported CMV
-  const currentCustoTotalInsumos = (addedInsumos.length === 0 && editingFicha?.isImported) 
-    ? parseSafeNumber(editingFicha.custoInsumos) 
+  // If no insumos added yet but ficha has saved cost, use the saved CMV
+  const currentCustoTotalInsumos = (addedInsumos.length === 0 && editingFicha && parseSafeNumber(editingFicha.custoInsumos) > 0)
+    ? parseSafeNumber(editingFicha.custoInsumos)
     : calculatedInsumoCost;
 
   // Handlers
@@ -805,16 +831,20 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                            </div>
                            
                            {/* Quick Margin Calculation Preview */}
-                           {parseSafeNumber(precoVenda) > 0 && (
+                           {parseSafeNumber(precoVenda) > 0 && (() => {
+                               const pv = parseSafeNumber(precoVenda);
+                               const cmvTotal = currentCustoTotalInsumos + parseSafeNumber(custoEmbalagem);
+                               const margem = pv - cmvTotal;
+                               const margemPct = (margem / pv) * 100;
+                               return (
                                <div className="mt-3 pt-3 border-t border-[#333] flex items-center justify-between">
-                                  <div className="text-[11px] text-[#868686]">Margem de Contribuição Bruta</div>
-                                  <div className={`text-[12px] font-bold ${
-                                     (parseSafeNumber(precoVenda) - (currentCustoTotalInsumos + parseSafeNumber(custoEmbalagem))) > 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'
-                                  }`}>
-                                     R$ {(parseSafeNumber(precoVenda) - (currentCustoTotalInsumos + parseSafeNumber(custoEmbalagem))).toFixed(2).replace('.', ',')}
+                                  <div className="text-[11px] text-[#868686]">Margem de Contribuição</div>
+                                  <div className={`text-[12px] font-bold ${margem > 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
+                                     R$ {margem.toFixed(2).replace('.', ',')} ({margemPct.toFixed(1)}%)
                                   </div>
                                </div>
-                           )}
+                               );
+                           })()}
                         </div>
                     </div>
                 </>
@@ -1465,7 +1495,7 @@ const FichaTecnica = () => {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {fichas.map((item) => (
-                    <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} />
+                    <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} basePercent={dashboardData.breakEven?.base?.value || '0'} />
                   ))}
                 </div>
               )}
