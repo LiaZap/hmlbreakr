@@ -17,9 +17,20 @@ export const parseSafeNumber = (val) => {
 const FichaTecnicaCard = ({ item, onClick, basePercent }) => {
   const pv = parseSafeNumber(item.precoVenda);
   const cmv = parseSafeNumber(item.custoTotal);
-  const base = parseSafeNumber(basePercent) / 100;
-  const lucroLiqPct = pv > 0 ? (((pv - (pv * base)) - cmv) / pv) * 100 : null;
-  const lucroLiqRS = pv > 0 ? ((pv - (pv * base)) - cmv) : null;
+  const baseRaw = parseSafeNumber(basePercent);
+  const hasValidBase = baseRaw > 0 && baseRaw <= 100;
+  const base = hasValidBase ? baseRaw / 100 : 0;
+
+  // If valid base, show Lucro Líquido; otherwise show Margem de Contribuição
+  const displayPct = pv > 0 ? (hasValidBase
+    ? (((pv - (pv * base)) - cmv) / pv) * 100
+    : ((pv - cmv) / pv) * 100
+  ) : null;
+  const displayRS = pv > 0 ? (hasValidBase
+    ? (pv - (pv * base)) - cmv
+    : pv - cmv
+  ) : null;
+  const displayLabel = hasValidBase ? 'Lucro Líquido Estimado' : 'Margem de Contribuição';
   const [showTooltip, setShowTooltip] = useState(false);
 
   return (
@@ -40,24 +51,24 @@ const FichaTecnicaCard = ({ item, onClick, basePercent }) => {
           <div className="text-[10px] text-[#868686]">{item.type}</div>
         </div>
       </div>
-      {pv > 0 && lucroLiqPct !== null && (
+      {pv > 0 && displayPct !== null && (
         <div
           className="relative"
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
           <div className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${
-            lucroLiqPct > 0 ? 'bg-[#00B37E]/15 text-[#00B37E]' : 'bg-[#FF4560]/15 text-[#FF4560]'
+            displayPct > 0 ? 'bg-[#00B37E]/15 text-[#00B37E]' : 'bg-[#FF4560]/15 text-[#FF4560]'
           }`}>
-            {lucroLiqPct.toFixed(1)}%
+            {displayPct.toFixed(1)}%
           </div>
           {showTooltip && (
             <div className="absolute right-0 top-full mt-1 bg-[#252527] border border-[#333] rounded-lg px-3 py-2 z-50 whitespace-nowrap shadow-lg">
-              <div className="text-[10px] text-[#868686]">Lucro Líquido Estimado</div>
-              <div className={`text-[12px] font-bold ${lucroLiqRS > 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
-                R$ {lucroLiqRS.toFixed(2).replace('.', ',')}
+              <div className="text-[10px] text-[#868686]">{displayLabel}</div>
+              <div className={`text-[12px] font-bold ${displayRS > 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
+                R$ {displayRS.toFixed(2).replace('.', ',')}
               </div>
-              <div className="text-[9px] text-[#555] mt-0.5">Base: {parseSafeNumber(basePercent).toFixed(0)}% | CMV: R$ {cmv.toFixed(2).replace('.', ',')}</div>
+              <div className="text-[9px] text-[#555] mt-0.5">{hasValidBase ? `Base: ${baseRaw.toFixed(0)}% | ` : ''}CMV: R$ {cmv.toFixed(2).replace('.', ',')}</div>
             </div>
           )}
         </div>
