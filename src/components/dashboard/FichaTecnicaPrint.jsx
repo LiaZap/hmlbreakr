@@ -8,14 +8,27 @@ const FichaTecnicaPrint = ({ data }) => {
       <style>{`
         @media print {
           @page { margin: 8mm; size: A4; }
-          /* Hide everything */
-          body > * { display: none !important; }
-          /* Show only the print container */
-          #ficha-print-container { display: block !important; }
+          /* Hide everything in the app */
+          body * { visibility: hidden; height: 0; overflow: hidden; margin: 0; padding: 0; }
+          /* Show only the print container and its children */
+          #ficha-print-container,
+          #ficha-print-container * {
+            visibility: visible !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          #ficha-print-container {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            z-index: 99999 !important;
+            background: white !important;
+          }
         }
       `}</style>
 
-      <div id="ficha-print-container" style={{ display: 'none' }}>
+      <div id="ficha-print-container" style={{ position: 'absolute', left: '-9999px', top: 0 }}>
         <div style={{ maxWidth: '194mm', margin: '0 auto', border: '1px solid black', fontFamily: 'Arial, sans-serif', fontSize: '9pt', color: 'black', background: 'white' }}>
 
           {/* Header */}
