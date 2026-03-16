@@ -1204,17 +1204,39 @@ const FichaTecnica = () => {
         const text = e.target.result;
         const lines = text.split('\n');
         const newItems = [];
+
+        // Detect separator from header line
+        const headerLine = (lines[0] || '').trim();
+        const separator = headerLine.includes(';') ? ';' : ',';
+        const headers = headerLine.split(separator).map(h => h.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+
+        // Map header names to column indices (flexible matching)
+        const findCol = (...patterns) => headers.findIndex(h => patterns.some(p => h.includes(p)));
+        const colName = findCol('produto', 'nome', 'name', 'item');
+        const colCat = findCol('categoria', 'category', 'tipo');
+        const colCmv = findCol('cmv', 'custo');
+        const colPrice = findCol('preco', 'price', 'venda');
+        const colSales = findCol('vendas', 'sales', 'qtd vendida', 'quantidade');
+
+        // Fallback to positional if no headers matched
+        const iName = colName >= 0 ? colName : 0;
+        const iCat = colCat >= 0 ? colCat : 1;
+        const iCmv = colCmv >= 0 ? colCmv : 2;
+        const iPrice = colPrice >= 0 ? colPrice : 3;
+        const iSales = colSales >= 0 ? colSales : -1;
+
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
-            const separator = line.includes(';') ? ';' : ',';
             const cols = line.split(separator);
-            if (cols.length >= 4) {
-                const name = cols[0].trim();
-                const cat = cols[1].trim();
-                const cmv = parseSafeNumber(cols[2].trim());
-                const price = parseSafeNumber(cols[3].trim());
-                
+            if (cols.length >= 3) {
+                const name = (cols[iName] || '').trim();
+                if (!name) continue;
+                const cat = (cols[iCat] || '').trim();
+                const cmv = parseSafeNumber((cols[iCmv] || '').trim());
+                const price = parseSafeNumber((cols[iPrice] || '').trim());
+                const sales = iSales >= 0 ? parseInt((cols[iSales] || '').trim(), 10) || 0 : 0;
+
                 newItems.push({
                     id: `imp_ft_${Date.now()}_${i}`,
                     name: name,
@@ -1227,8 +1249,8 @@ const FichaTecnica = () => {
                     rendimento: "0gr",
                     custoTotal: `R$ ${cmv.toFixed(2).replace('.', ',')}`,
                     precoVenda: `R$ ${price.toFixed(2).replace('.', ',')}`,
-                    vendasMes: "0",
-                    isImported: true, // Flag to indicate manual CMV
+                    vendasMes: `${sales}`,
+                    isImported: true,
                     lastUpdated: Date.now()
                 });
             }
