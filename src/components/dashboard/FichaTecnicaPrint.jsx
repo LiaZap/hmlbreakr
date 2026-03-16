@@ -4,33 +4,24 @@ const FichaTecnicaPrint = ({ data }) => {
   if (!data) return null;
 
   return (
-    <div className="hidden print:block fixed inset-0 z-9999 bg-white text-black overflow-hidden">
+    <>
       <style>{`
         @media print {
           @page { margin: 8mm; size: A4; }
-          body * { visibility: hidden; }
-          #printable-root, #printable-root * { visibility: visible; }
-          #printable-root {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 194mm;
-            margin: 0;
-            padding: 0;
-            background: white;
-            z-index: 9999;
-            font-size: 9pt;
-          }
+          /* Hide everything */
+          body > * { display: none !important; }
+          /* Show only the print container */
+          #ficha-print-container { display: block !important; }
         }
       `}</style>
 
-      <div id="printable-root">
-        <div style={{ maxWidth: '194mm', margin: '0 auto', border: '1px solid black' }}>
+      <div id="ficha-print-container" style={{ display: 'none' }}>
+        <div style={{ maxWidth: '194mm', margin: '0 auto', border: '1px solid black', fontFamily: 'Arial, sans-serif', fontSize: '9pt', color: 'black', background: 'white' }}>
 
           {/* Header */}
           <div style={{ background: '#D9D9D9', borderBottom: '1px solid black', padding: '6px 10px' }}>
             <h1 style={{ fontSize: '13pt', fontWeight: 'bold', textTransform: 'uppercase', margin: 0 }}>
-              FICHA TÉCNICA - {data.name}
+              FICHA TÉCNICA &ndash; {data.name}
             </h1>
           </div>
 
@@ -128,7 +119,7 @@ const FichaTecnicaPrint = ({ data }) => {
 
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
