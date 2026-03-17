@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import Cropper from 'react-easy-crop';
 import { formatCurrency } from '../../utils/onboardingCalculations';
 
 const MobileFieldInput = ({ field, value, onChange, allValues, globalData }) => {
@@ -219,16 +220,64 @@ const AutocompleteField = ({ field, value, onChange, focused, setFocused, baseIn
   );
 };
 
-// File upload sub-component
+// Helper: crop image from canvas
+const getCroppedImg = (imageSrc, pixelCrop) => {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = pixelCrop.width;
+      canvas.height = pixelCrop.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(
+        image,
+        pixelCrop.x, pixelCrop.y,
+        pixelCrop.width, pixelCrop.height,
+        0, 0,
+        pixelCrop.width, pixelCrop.height
+      );
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    image.src = imageSrc;
+  });
+};
+
+// File upload sub-component with crop
 const FileUploadField = ({ field, value, onChange }) => {
   const fileRef = useRef(null);
+  const [rawImage, setRawImage] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedArea, setCroppedArea] = useState(null);
 
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => onChange(field.id, reader.result, 'file');
+    reader.onload = () => setRawImage(reader.result);
     reader.readAsDataURL(file);
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+  };
+
+  const onCropComplete = useCallback((_, croppedAreaPixels) => {
+    setCroppedArea(croppedAreaPixels);
+  }, []);
+
+  const handleConfirmCrop = async () => {
+    if (rawImage && croppedArea) {
+      const cropped = await getCroppedImg(rawImage, croppedArea);
+      onChange(field.id, cropped, 'file');
+    }
+    setRawImage(null);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+  };
+
+  const handleCancelCrop = () => {
+    setRawImage(null);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
   };
 
   return (
@@ -248,6 +297,7 @@ const FileUploadField = ({ field, value, onChange }) => {
           <div className="flex items-center gap-3">
             <img src={value} alt="" className="w-10 h-10 rounded-full object-cover" />
             <span className="text-white">Foto selecionada</span>
+            <span className="text-[11px] text-[#F5A623] ml-auto">Trocar</span>
           </div>
         ) : (
           <>
@@ -258,6 +308,56 @@ const FileUploadField = ({ field, value, onChange }) => {
           </>
         )}
       </button>
+
+      {/* Fullscreen Crop Modal */}
+      {rawImage && (
+        <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-[#1B1B1D] shrink-0">
+            <button onClick={handleCancelCrop} className="text-[#868686] text-[14px] font-medium">
+              Cancelar
+            </button>
+            <span className="text-white text-[14px] font-semibold">Ajustar Foto</span>
+            <button onClick={handleConfirmCrop} className="text-[#F5A623] text-[14px] font-bold">
+              Confirmar
+            </button>
+          </div>
+
+          {/* Crop Area */}
+          <div className="flex-1 relative">
+            <Cropper
+              image={rawImage}
+              crop={crop}
+              zoom={zoom}
+              aspect={1}
+              cropShape="round"
+              showGrid={false}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+            />
+          </div>
+
+          {/* Zoom Slider */}
+          <div className="px-8 py-4 bg-[#1B1B1D] flex items-center gap-3 shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868686" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" /><path d="M8 11h6" />
+            </svg>
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.1}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="flex-1 accent-[#F5A623]"
+            />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#868686" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" /><path d="M8 11h6M11 8v6" />
+            </svg>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
