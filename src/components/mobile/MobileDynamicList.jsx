@@ -53,8 +53,8 @@ const MobileDynamicList = ({ question, items, onAdd, onRemove, onItemChange, glo
         return (
           <div key={index} className="bg-[#2A2A2C] rounded-[14px] overflow-hidden">
             {/* Accordion Header */}
-            <button
-              className="w-full flex items-center justify-between px-4 py-3.5 active:bg-[#333]"
+            <div
+              className="w-full flex items-center justify-between px-4 py-3.5 active:bg-[#333] cursor-pointer"
               onClick={() => setExpandedIndex(isExpanded ? -1 : index)}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -85,7 +85,7 @@ const MobileDynamicList = ({ question, items, onAdd, onRemove, onItemChange, glo
                   <path d="M6 9l6 6 6-6" stroke="#868686" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </div>
-            </button>
+            </div>
 
             {/* Accordion Content */}
             {isExpanded && (
