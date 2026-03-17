@@ -567,12 +567,29 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                              {fotoPrato ? (
                                  <>
                                     <img src={fotoPrato} alt="Prato" className="w-full h-full object-cover" />
-                                    <button 
-                                        onClick={() => setFotoPrato(null)}
-                                        className="absolute top-2 right-2 bg-black/50 p-1 rounded-full text-white hover:bg-red-500 transition-colors"
+                                    {/* Tap to replace photo */}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                        onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            if (file) {
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => setFotoPrato(ev.target.result);
+                                                reader.readAsDataURL(file);
+                                            }
+                                        }}
+                                    />
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setFotoPrato(null); }}
+                                        className="absolute top-2 right-2 bg-black/50 p-1.5 rounded-full text-white hover:bg-red-500 transition-colors z-20"
                                     >
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6L18 18"/></svg>
                                     </button>
+                                    <div className="absolute bottom-2 left-0 right-0 text-center z-20 pointer-events-none">
+                                        <span className="bg-black/60 text-white text-[10px] px-2 py-1 rounded-full">Toque para trocar</span>
+                                    </div>
                                  </>
                              ) : (
                                  <>
@@ -581,10 +598,9 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                         <circle cx="8.5" cy="8.5" r="1.5" />
                                         <polyline points="21 15 16 10 5 21" />
                                     </svg>
-                                    <span className="text-[12px] text-[#555]">Clique para adicionar foto</span>
-                                    {/* Hidden File Input Simulation */}
-                                    <input 
-                                        type="file" 
+                                    <span className="text-[12px] text-[#555]">Toque para adicionar foto</span>
+                                    <input
+                                        type="file"
                                         accept="image/*"
                                         className="absolute inset-0 opacity-0 cursor-pointer"
                                         onChange={(e) => {
