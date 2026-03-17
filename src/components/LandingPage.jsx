@@ -31,93 +31,117 @@ const LandingPage = ({ onComplete }) => {
       </AnimatePresence>
 
       {/* HEADER */}
-      <div className="absolute top-0 left-0 right-0 h-[80px] md:h-[113px] border-b border-white/10">
+      <div className="absolute top-0 left-0 right-0 h-[64px] md:h-[113px] border-b border-white/10">
         {/* Left - Logo + Restaurant */}
-        <div className="absolute left-4 md:left-10 top-[14px] flex items-center gap-3 md:gap-5">
+        <div className="absolute left-4 md:left-10 top-[10px] md:top-[14px] flex items-center gap-2 md:gap-5">
           {/* Breakr Logo */}
-          <div className="w-[47px] h-[47px] bg-black rounded-[15px] flex items-center justify-center">
-            <img src={boltIcon} alt="Breakr" className="w-[21px]" />
+          <div className="w-[40px] h-[40px] md:w-[47px] md:h-[47px] bg-black rounded-[12px] md:rounded-[15px] flex items-center justify-center">
+            <img src={boltIcon} alt="Breakr" className="w-[18px] md:w-[21px]" />
           </div>
-          
+
           {/* Restaurant Info */}
           <div className="flex items-center gap-[6px]">
             {restaurant.logo ? (
-            <div className="w-[46px] h-[46px] rounded-full overflow-hidden border border-white/10 bg-[#344036]">
+            <div className="w-[36px] h-[36px] md:w-[46px] md:h-[46px] rounded-full overflow-hidden border border-white/10 bg-[#344036]">
               <img src={restaurant.logo} alt={restaurant.name} className="w-full h-full object-cover" />
             </div>
           ) : (
-            <div className="w-[46px] h-[46px] rounded-full bg-[#344036]" />
+            <div className="w-[36px] h-[36px] md:w-[46px] md:h-[46px] rounded-full bg-[#344036]" />
           )}
             <div>
-              <div className="font-semibold text-[14px] text-[#514F43]">{restaurant.name}</div>
-              <div className="font-medium text-[10px] text-[#A39888]">{restaurant.category}</div>
+              <div className="font-semibold text-[12px] md:text-[14px] text-[#514F43]">{restaurant.name}</div>
+              <div className="font-medium text-[9px] md:text-[10px] text-[#A39888]">{restaurant.category}</div>
             </div>
           </div>
-          
-          {/* Dropdown */}
-          <svg width="16" height="16" viewBox="0 0 16 16">
-            <path d="M4 6L8 10L12 6" stroke="#959387" strokeWidth="1.4" fill="none"/>
-          </svg>
         </div>
 
-        {/* Right - User Profile (Only shows if name is not default "Usuário" or if specifically requested to show always) */}
-        {/* User requested: "aparecer so quando preencher". We check if it differs from default or is just truthy? 
-            Let's assume if it's "Usuário" (default), we might hide it OR show it. 
-            The user said "fica fixo esses dados para clients diferentes". 
-            Since I changed default to "Usuário", showing "Usuário" is safe. 
-            But to be cleaner, let's hide if it's the placeholder "Usuário" OR show the dynamic value.
-            Actually, the Context default is "Usuário". 
-            Let's show it, because "Usuário" is generic. 
-            OR, strict interpretation: "aparecer so quando preencher" -> Hide if it is the default value.
-        */}
+        {/* Right - User Profile */}
         {(user.name && user.name !== "Usuário") && (
-            <div className="absolute right-4 md:right-[55px] top-[16px] md:top-[28px] flex items-center gap-2 md:gap-[11px]">
-            <div className="w-[46px] h-[46px] rounded-full bg-[#FDD688] flex items-center justify-center">
-                <span className="font-semibold text-[14px] text-black">{user.initials}</span>
+            <div className="absolute right-4 md:right-[55px] top-[12px] md:top-[28px] flex items-center gap-2 md:gap-[11px]">
+            <div className="w-[36px] h-[36px] md:w-[46px] md:h-[46px] rounded-full bg-[#FDD688] flex items-center justify-center overflow-hidden">
+                {user.photo ? (
+                  <img src={user.photo} alt={user.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="font-semibold text-[12px] md:text-[14px] text-black">{user.initials}</span>
+                )}
             </div>
-            <div>
+            <div className="hidden sm:block">
                 <div className="font-medium text-[14px] text-white">{user.name}</div>
                 <div className="font-medium text-[10px] text-[#A0A0A0]">{user.role}</div>
             </div>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M3.75 6.75L9 12L14.25 6.75" stroke="#959387" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
             </div>
         )}
       </div>
 
       {/* MAIN CONTENT - Responsive Grid */}
-      <div className="pt-[100px] md:pt-[140px] px-4 md:px-10 h-full">
-        <div className="flex flex-col md:flex-row items-start gap-6 md:gap-8 max-w-[1400px] mx-auto">
+      <div className="pt-[80px] md:pt-[140px] px-5 md:px-10 h-full flex flex-col md:block">
+        <div className="flex flex-col md:flex-row items-start gap-6 md:gap-8 max-w-[1400px] mx-auto flex-1">
 
           {/* LEFT COLUMN */}
-          <div className="shrink-0 w-full md:w-[320px]">
+          <div className="shrink-0 w-full md:w-[320px] flex flex-col md:block">
             {/* Circles Row */}
-            <div className="flex items-center gap-[22px] mb-[25px]">
+            <div className="flex items-center gap-4 md:gap-[22px] mb-5 md:mb-[25px]">
               {/* Yellow Circle */}
-              <div 
-                className="w-[50px] h-[50px] bg-[#FFC100] flex items-center justify-center"
+              <div
+                className="w-[44px] h-[44px] md:w-[50px] md:h-[50px] bg-[#FFC100] flex items-center justify-center"
                 style={{ borderRadius: '60.99px 60.99px 60.99px 10px' }}
               >
-                <img src={boltIcon} alt="Bolt" className="w-[21px] h-[21px]" />
+                <img src={boltIcon} alt="Bolt" className="w-[18px] h-[18px] md:w-[21px] md:h-[21px]" />
               </div>
-              
+
               {/* Locked Circle 1 */}
-              <div className="w-[55px] h-[54px] rounded-full border border-black/25 flex items-center justify-center">
-                <img src={lockIcon} alt="Lock" className="w-[20px] h-[20px]" />
+              <div className="w-[44px] h-[44px] md:w-[55px] md:h-[54px] rounded-full border border-white/15 flex items-center justify-center">
+                <img src={lockIcon} alt="Lock" className="w-[16px] h-[16px] md:w-[20px] md:h-[20px] opacity-40" />
               </div>
-              
+
               {/* Locked Circle 2 */}
-              <div className="w-[55px] h-[54px] rounded-full border border-black/25 flex items-center justify-center">
-                <img src={lockIcon} alt="Lock" className="w-[20px] h-[20px]" />
+              <div className="w-[44px] h-[44px] md:w-[55px] md:h-[54px] rounded-full border border-white/15 flex items-center justify-center">
+                <img src={lockIcon} alt="Lock" className="w-[16px] h-[16px] md:w-[20px] md:h-[20px] opacity-40" />
+              </div>
+
+              {/* Step indicator - mobile only */}
+              <div className="ml-auto flex items-center gap-1.5 md:hidden">
+                <div className="w-2 h-2 rounded-full bg-[#FFC100]" />
+                <div className="w-2 h-2 rounded-full bg-white/10" />
+                <div className="w-2 h-2 rounded-full bg-white/10" />
               </div>
             </div>
 
             {/* Welcome Text */}
             <div className="mb-8 md:mb-[80px]">
-              <p className="font-semibold text-[22px] md:text-[29px] leading-[30px] md:leading-[38px] text-white">
-                Bem-vindo à Revolução Breakr. Em até 40 dias, seu restaurante <span className="font-bold">lucrando mais</span>, usando melhor o faturamento que você já tem hoje.
+              <p className="font-semibold text-[20px] md:text-[29px] leading-[28px] md:leading-[38px] text-white">
+                Bem-vindo à Revolução Breakr. Em até 40 dias, seu restaurante <span className="font-bold text-[#FFC100]">lucrando mais</span>, usando melhor o faturamento que você já tem hoje.
               </p>
+            </div>
+
+            {/* Mobile Card Preview */}
+            <div className="md:hidden mb-6">
+              <button
+                onClick={() => setShowOnboarding(true)}
+                className="w-full bg-[#1D1D1D] border border-white/5 rounded-[16px] p-5 text-left active:bg-[#252525] transition-colors"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"/>
+                      <path d="M10 8.5H14M10.3 12H13.7M12 15.5V16.5M12 7.5V8.5" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-white/50 font-medium">Finanças & Custos</div>
+                    <div className="text-[9px] text-white/30">1/{onboardingQuestions.length} etapas</div>
+                  </div>
+                  <div className="ml-auto px-2 py-1 bg-white/5 rounded-md">
+                    <span className="text-[9px] text-white/50 font-medium">10%</span>
+                  </div>
+                </div>
+                <p className="text-[13px] text-white/40 leading-[18px] mb-4">
+                  Hora de entendermos quanto você tem de custos visíveis e invisíveis.
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-[#FFC100] font-semibold">Iniciar →</span>
+                </div>
+              </button>
             </div>
 
             {/* Buttons */}
@@ -128,7 +152,7 @@ const LandingPage = ({ onComplete }) => {
                   exit={{ opacity: 0, x: 100 }}
                   transition={{ duration: 0.3 }}
                   onClick={() => setShowOnboarding(true)}
-                  className="flex items-center justify-center gap-[17px] w-[192px] h-[57px] bg-[#FFC100] rounded-full hover:opacity-90 transition-opacity"
+                  className="flex items-center justify-center gap-[17px] w-full md:w-[192px] h-[52px] md:h-[57px] bg-[#FFC100] rounded-full hover:opacity-90 transition-opacity active:scale-[0.98]"
                   style={{ padding: '16px 16px 16px 23px' }}
                 >
                 <span className="font-semibold text-[14px] text-black whitespace-nowrap">Começar Desafio</span>
