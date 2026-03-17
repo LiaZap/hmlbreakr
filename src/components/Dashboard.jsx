@@ -19,6 +19,7 @@ import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
 import MobileNav from './dashboard/MobileNav';
 import OnboardingForm from './OnboardingForm';
+import MobileOnboarding from './mobile/MobileOnboarding';
 
 const Dashboard = () => {
   /* MOVED TO CONTEXT */
@@ -301,11 +302,19 @@ const Dashboard = () => {
       {/* Onboarding Edit Modal */}
       {showOnboarding && (
         <div className="fixed inset-0 z-100 bg-black/60 backdrop-blur-sm">
-          <OnboardingForm
-            onClose={() => setShowOnboarding(false)}
-            onComplete={() => setShowOnboarding(false)}
-            isEditing
-          />
+          {window.matchMedia('(max-width: 767px)').matches ? (
+            <MobileOnboarding
+              onClose={() => setShowOnboarding(false)}
+              onComplete={() => setShowOnboarding(false)}
+              isEditing
+            />
+          ) : (
+            <OnboardingForm
+              onClose={() => setShowOnboarding(false)}
+              onComplete={() => setShowOnboarding(false)}
+              isEditing
+            />
+          )}
         </div>
       )}
     </div>

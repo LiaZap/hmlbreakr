@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import boltIcon from '../assets/bolt.svg';
 import lockIcon from '../assets/lock.svg';
 import OnboardingForm from './OnboardingForm';
+import MobileOnboarding from './mobile/MobileOnboarding';
 import { onboardingQuestions } from '../data/onboardingQuestions';
 
 import { useDashboard } from '../context/DashboardContext';
@@ -242,13 +243,23 @@ const LandingPage = ({ onComplete }) => {
       {/* Onboarding Form */}
       {showOnboarding && (
         <div className="fixed inset-0 z-20">
-          <OnboardingForm 
-            onClose={() => setShowOnboarding(false)} 
-            onComplete={() => {
-              setShowOnboarding(false);
-              if (onComplete) onComplete();
-            }}
-          />
+          {window.matchMedia('(max-width: 767px)').matches ? (
+            <MobileOnboarding
+              onClose={() => setShowOnboarding(false)}
+              onComplete={() => {
+                setShowOnboarding(false);
+                if (onComplete) onComplete();
+              }}
+            />
+          ) : (
+            <OnboardingForm
+              onClose={() => setShowOnboarding(false)}
+              onComplete={() => {
+                setShowOnboarding(false);
+                if (onComplete) onComplete();
+              }}
+            />
+          )}
         </div>
       )}
     </div>
