@@ -10,6 +10,24 @@ export const parseSafeNumber = (val) => {
     else if (str.includes(',')) str = str.replace(',', '.');
     return parseFloat(str) || 0;
 };
+// Unit conversion: converts a quantity from one unit to another
+// e.g., 100gr → 0.1kg, 500ml → 0.5lt
+const convertUnit = (qty, fromUnit, toUnit) => {
+  if (fromUnit === toUnit) return qty;
+  const norm = (u) => (u || '').toLowerCase().replace(/[^a-z]/g, '');
+  const from = norm(fromUnit);
+  const to = norm(toUnit);
+  if (from === to) return qty;
+  // gr <-> kg
+  if (from === 'gr' && to === 'kg') return qty / 1000;
+  if (from === 'kg' && to === 'gr') return qty * 1000;
+  // ml <-> lt
+  if (from === 'ml' && to === 'lt') return qty / 1000;
+  if (from === 'lt' && to === 'ml') return qty * 1000;
+  // Same family fallback
+  return qty;
+};
+
 // Constants moved to DashboardContext
 
 
@@ -192,7 +210,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
       unit: unit,
       rendimento: `${quantidade}${unit}`,
       custo: `R$ ${custo}`,
-      price: custo,
+      price: custo, // price per unit (e.g., R$33/kg)
       defaultQty: quantidade,
       grossQty: quantidade,
     });
@@ -262,10 +280,10 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
             </div>
           </div>
 
-          {/* Unit + Custo */}
+          {/* Unidade de Compra + Preço por Unidade */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12px] text-[#868686] mb-2">Unidade</label>
+              <label className="block text-[12px] text-[#868686] mb-2">Unidade de Compra</label>
               <div className="relative bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
                 <select
                   value={unit}
@@ -276,6 +294,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                   <option value="ml" className="bg-[#1B1B1D] text-white">Mililitros (ml)</option>
                   <option value="un" className="bg-[#1B1B1D] text-white">Unidade (un)</option>
                   <option value="kg" className="bg-[#1B1B1D] text-white">Quilogramas (kg)</option>
+                  <option value="lt" className="bg-[#1B1B1D] text-white">Litros (lt)</option>
                 </select>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                    <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -283,7 +302,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
               </div>
             </div>
             <div>
-              <label className="block text-[12px] text-[#868686] mb-2">Custo de Compra</label>
+              <label className="block text-[12px] text-[#868686] mb-2">Preço por {unit}</label>
               <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
                 <span className="text-[13px] text-[#868686] pl-4 shrink-0">R$</span>
                 <input
@@ -297,28 +316,29 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
             </div>
           </div>
 
-          {/* Quantidade */}
+          {/* Quantidade Comprada - informativo */}
           <div>
-            <label className="block text-[12px] text-[#868686] mb-2">Quantidade Comprada</label>
+            <label className="block text-[12px] text-[#868686] mb-2">Quantidade Comprada <span className="text-[10px] text-[#555]">(apenas referência)</span></label>
             <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
               <input
                 type="text"
                 value={quantidade}
                 onChange={(e) => setQuantidade(e.target.value)}
                 className="flex-1 bg-transparent px-4 py-3.5 text-[14px] text-white outline-none"
-                placeholder="Ex: 1000"
+                placeholder="Ex: 1"
               />
               <span className="text-[13px] text-[#868686] pr-4 shrink-0">{unit}</span>
             </div>
           </div>
 
-          {/* Custo unitário */}
-          {unitPrice > 0 && (
+          {/* Custo total de compra */}
+          {numericCusto > 0 && numericQtd > 0 && (
             <div className="bg-[#252527] rounded-[12px] p-4 border border-[#2A2A2C]">
               <div className="flex items-center justify-between">
-                <div className="text-[11px] text-[#868686]">Custo Unitário</div>
+                <div className="text-[11px] text-[#868686]">Custo Total da Compra</div>
                 <div className="text-[12px] font-semibold text-white">
-                  R$ {unitPrice.toFixed(4).replace('.', ',')} <span className="text-[#868686] font-normal text-[10px]">/ {unit}</span>
+                  R$ {(numericCusto * numericQtd).toFixed(2).replace('.', ',')}
+                  <span className="text-[#868686] font-normal text-[10px]"> ({quantidade} {unit} × R$ {custo}/{unit})</span>
                 </div>
               </div>
             </div>
@@ -391,13 +411,19 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
     setAddedInsumos(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
   };
 
-  const calculatedInsumoCost = addedInsumos.reduce((sum, i) => {
-      const totalPricePB = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
-      const pb = parseSafeNumber(i.grossQty || i.defaultQty || 1) || 1;
-      const unitCost = totalPricePB / pb;
-      const requiredQty = parseSafeNumber(i.qty);
-      return sum + (requiredQty * unitCost);
-  }, 0);
+  // Calculate insumo cost with unit conversion
+  // price = cost per purchase unit (e.g., R$33/kg)
+  // usage: 100gr of R$33/kg → convert 100gr to 0.1kg → 0.1 * R$33 = R$3.30
+  const calcInsumoCost = (i) => {
+    const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo); // R$33/kg
+    const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
+    const usageQty = parseSafeNumber(i.qty); // 100
+    const usageUnit = i.usageUnit || i.unit || 'gr'; // gr
+    const usageInPurchaseUnit = convertUnit(usageQty, usageUnit, purchaseUnit); // 100gr → 0.1kg
+    return usageInPurchaseUnit * pricePerUnit; // 0.1 * 33 = 3.30
+  };
+
+  const calculatedInsumoCost = addedInsumos.reduce((sum, i) => sum + calcInsumoCost(i), 0);
 
   // If no insumos added yet but ficha has saved cost, use the saved CMV
   const currentCustoTotalInsumos = (addedInsumos.length === 0 && editingFicha && parseSafeNumber(editingFicha.custoInsumos) > 0)
@@ -453,11 +479,18 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const handleAddInsumo = (insumo) => {
     // Resolve price: prefer 'price', fallback to 'custo' (strip R$ prefix)
     const resolvedPrice = insumo.price || (insumo.custo ? insumo.custo.replace(/R\$\s?/g, '').trim() : '0');
+    const purchaseUnit = insumo.unit || 'gr';
+    // Default usage: if purchase is kg, default usage to gr (common in recipes)
+    const defaultUsageUnit = (purchaseUnit === 'kg') ? 'gr' : (purchaseUnit === 'lt') ? 'ml' : purchaseUnit;
+    const defaultUsageQty = (purchaseUnit === 'kg') ? '100' : (purchaseUnit === 'lt') ? '100' : insumo.defaultQty;
     setAddedInsumos(prev => [...prev, {
         ...insumo,
         price: resolvedPrice,
-        qty: insumo.defaultQty,
-        netQty: insumo.defaultQty,
+        purchaseUnit: purchaseUnit,
+        originalUnit: purchaseUnit,
+        usageUnit: defaultUsageUnit,
+        qty: defaultUsageQty,
+        netQty: defaultUsageQty,
         grossQty: insumo.grossQty || insumo.defaultQty,
         fc: '1.00'
     }]);
@@ -664,29 +697,32 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                           <div className="text-[11px] text-[#868686]">Insumos Adicionados</div>
                         </div>
                         {addedInsumos.map((insumo) => {
-                          const isEditing = editingInsumoId === insumo.id;
-                          const insumoCost = (() => {
-                            const p = parseSafeNumber(insumo.price) || parseSafeNumber(insumo.custo);
-                            const pb = parseSafeNumber(insumo.grossQty || insumo.defaultQty || 1) || 1;
-                            const q = parseSafeNumber(insumo.qty);
-                            return (p / pb * q).toFixed(2);
-                          })();
+                          const isEditingThis = editingInsumoId === insumo.id;
+                          const insumoCost = calcInsumoCost(insumo).toFixed(2);
+                          const displayUnit = insumo.usageUnit || insumo.unit || 'gr';
+                          const pUnit = insumo.purchaseUnit || insumo.originalUnit || insumo.unit || 'gr';
+                          const purchaseQty = parseSafeNumber(insumo.grossQty || insumo.defaultQty || 0);
+                          const usageInPurchaseUnit = convertUnit(parseSafeNumber(insumo.qty), displayUnit, pUnit);
+                          const exceedsStock = purchaseQty > 0 && usageInPurchaseUnit > purchaseQty;
 
-                          if (isEditing) {
+                          if (isEditingThis) {
                             return (
                               <div key={insumo.id} className="bg-[#1E1E1E] rounded-[14px] p-3.5 border border-[#F5A623]/50">
                                 <div className="flex items-center justify-between mb-3">
-                                  <div className="font-medium text-[13px] text-white">{insumo.name}</div>
+                                  <div>
+                                    <div className="font-medium text-[13px] text-white">{insumo.name}</div>
+                                    <div className="text-[9px] text-[#868686]">Compra: R$ {parseSafeNumber(insumo.price || insumo.custo).toFixed(2).replace('.', ',')} / {pUnit}</div>
+                                  </div>
                                   <button onClick={() => setEditingInsumoId(null)} className="text-[10px] text-[#F5A623] font-semibold px-2 py-1 rounded-full bg-[#F5A623]/10">Concluir</button>
                                 </div>
                                 <div className="flex gap-2 mb-2">
                                   <div className="flex-1">
-                                    <label className="text-[9px] text-[#868686] mb-1 block">Quantidade</label>
+                                    <label className="text-[9px] text-[#868686] mb-1 block">Qtd Utilizada</label>
                                     <input type="text" value={insumo.qty} onChange={e => handleUpdateAddedInsumo(insumo.id, 'qty', e.target.value)} className="w-full bg-[#252527] text-white text-[12px] px-2.5 py-1.5 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]" />
                                   </div>
                                   <div className="w-[70px]">
                                     <label className="text-[9px] text-[#868686] mb-1 block">Unidade</label>
-                                    <select value={insumo.unit} onChange={e => handleUpdateAddedInsumo(insumo.id, 'unit', e.target.value)} className="w-full bg-[#252527] text-white text-[12px] px-2 py-1.5 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]">
+                                    <select value={displayUnit} onChange={e => handleUpdateAddedInsumo(insumo.id, 'usageUnit', e.target.value)} className="w-full bg-[#252527] text-white text-[12px] px-2 py-1.5 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]">
                                       <option value="gr">gr</option>
                                       <option value="kg">kg</option>
                                       <option value="ml">ml</option>
@@ -695,16 +731,16 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                     </select>
                                   </div>
                                 </div>
-                                <div className="flex gap-2">
-                                  <div className="flex-1">
-                                    <label className="text-[9px] text-[#868686] mb-1 block">Custo Total (R$)</label>
-                                    <input type="text" value={insumo.price || (insumo.custo ? insumo.custo.replace(/R\$\s?/g, '').trim() : '')} onChange={e => { handleUpdateAddedInsumo(insumo.id, 'price', e.target.value); handleUpdateAddedInsumo(insumo.id, 'custo', `R$ ${e.target.value}`); }} className="w-full bg-[#252527] text-white text-[12px] px-2.5 py-1.5 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]" />
-                                  </div>
-                                </div>
                                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#333]">
                                   <span className="text-[10px] text-[#868686]">Custo na receita:</span>
                                   <span className="text-[11px] text-[#00B37E] font-medium">R$ {insumoCost}</span>
                                 </div>
+                                {exceedsStock && (
+                                  <div className="mt-2 flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 rounded-[8px] px-2.5 py-1.5">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                                    <span className="text-[10px] text-red-400">Quantidade excede o estoque ({purchaseQty}{pUnit} disponível)</span>
+                                  </div>
+                                )}
                               </div>
                             );
                           }
@@ -717,10 +753,16 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-[13px] text-white">{insumo.name}</div>
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#868686]">
-                                  <span>Qtd: <span className="font-medium text-white">{insumo.qty}{insumo.unit}</span></span>
+                                  <span>Qtd: <span className="font-medium text-white">{insumo.qty}{displayUnit}</span></span>
                                   <span className="w-1 h-1 rounded-full bg-[#555]" />
                                   <span className="text-[#00B37E]">Custo: R$ {insumoCost}</span>
                               </div>
+                              {exceedsStock && (
+                                <div className="flex items-center gap-1 text-[10px] text-red-400">
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#EF4444" strokeWidth="2" strokeLinecap="round"/></svg>
+                                  Excede estoque ({purchaseQty}{pUnit})
+                                </div>
+                              )}
                             </div>
                             <div className="bg-red-500/10 text-red-400 text-[10px] font-semibold px-3 py-1.5 rounded-full shrink-0 cursor-pointer hover:bg-red-500 hover:text-white transition-colors" onClick={() => handleRemoveInsumo(insumo.id)}>
                               Remover
