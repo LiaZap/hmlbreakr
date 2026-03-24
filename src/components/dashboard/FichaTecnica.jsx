@@ -412,13 +412,17 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   };
 
   // Calculate insumo cost with unit conversion
-  // price = cost per purchase unit (e.g., R$33/kg)
-  // usage: 100gr of R$33/kg → convert 100gr to 0.1kg → 0.1 * R$33 = R$3.30
+  // price/custo = TOTAL cost for purchased quantity (e.g., R$33 for 1kg)
+  // Step 1: normalize to price-per-unit: R$33 / 1kg = R$33/kg
+  // Step 2: convert usage to purchase units: 100gr → 0.1kg
+  // Step 3: cost = 0.1kg × R$33/kg = R$3.30
   const calcInsumoCost = (i) => {
-    const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo); // R$33/kg
+    const totalPrice = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
+    const purchaseQty = parseSafeNumber(i.grossQty || i.defaultQty || 1) || 1;
     const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
-    const usageQty = parseSafeNumber(i.qty); // 100
-    const usageUnit = i.usageUnit || i.unit || 'gr'; // gr
+    const pricePerUnit = totalPrice / purchaseQty; // R$33 / 1 = R$33/kg
+    const usageQty = parseSafeNumber(i.qty);
+    const usageUnit = i.usageUnit || i.unit || 'gr';
     const usageInPurchaseUnit = convertUnit(usageQty, usageUnit, purchaseUnit); // 100gr → 0.1kg
     return usageInPurchaseUnit * pricePerUnit; // 0.1 * 33 = 3.30
   };
@@ -711,7 +715,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                 <div className="flex items-center justify-between mb-3">
                                   <div>
                                     <div className="font-medium text-[13px] text-white">{insumo.name}</div>
-                                    <div className="text-[9px] text-[#868686]">Compra: R$ {parseSafeNumber(insumo.price || insumo.custo).toFixed(2).replace('.', ',')} / {pUnit}</div>
+                                    <div className="text-[9px] text-[#868686]">Compra: R$ {(parseSafeNumber(insumo.price || insumo.custo) / (parseSafeNumber(insumo.grossQty || insumo.defaultQty || 1) || 1)).toFixed(2).replace('.', ',')} / {pUnit}</div>
                                   </div>
                                   <button onClick={() => setEditingInsumoId(null)} className="text-[10px] text-[#F5A623] font-semibold px-2 py-1 rounded-full bg-[#F5A623]/10">Concluir</button>
                                 </div>
