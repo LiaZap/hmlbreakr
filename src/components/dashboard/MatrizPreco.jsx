@@ -196,7 +196,7 @@ const MatrizPreco = () => {
       </div>
 
       {/* RIGHT PANEL: CHART (visible on all screens) */}
-      <div className="flex flex-1 bg-[#1B1B1D] rounded-[16px] md:rounded-[24px] border border-[#2A2A2C] p-4 md:p-6 flex-col relative overflow-hidden min-h-[400px] md:min-h-0">
+      <div className="flex flex-1 bg-[#1B1B1D] rounded-[16px] md:rounded-[24px] border border-[#2A2A2C] p-4 md:p-6 flex-col relative min-h-[400px] md:min-h-0">
 
         {/* Header / Filter Chips */}
         <div className="flex flex-col gap-3 mb-4 md:mb-6 z-10 relative">
@@ -349,17 +349,21 @@ const MatrizPreco = () => {
                         strokeWidth="2"
                         className="transition-all duration-300"
                      />
-                     {/* Label on Hover */}
-                     <foreignObject 
-                        x={`${getX(item.sales)}%`} 
-                        y={`${getY(item.margin)}%`} 
-                        width="150" 
-                        height="100" 
-                        style={{ overflow: 'visible', pointerEvents: 'none' }}
-                     >
-                        <div 
-                           className={`transform -translate-y-full -translate-x-1/2 mb-2 bg-[#252527] border border-[#333] px-3 py-2 rounded-[8px] shadow-xl text-center z-50 transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
-                           style={{ minWidth: '120px' }}
+                     {/* Label on Hover - flip tooltip below when near top */}
+                     {(() => {
+                        const yPct = getY(item.margin);
+                        const isNearTop = yPct < 25;
+                        return (
+                        <foreignObject
+                           x={`${getX(item.sales)}%`}
+                           y={`${yPct}%`}
+                           width="1"
+                           height="1"
+                           style={{ overflow: 'visible', pointerEvents: 'none' }}
+                        >
+                        <div
+                           className={`bg-[#252527] border border-[#333] px-3 py-2 rounded-[8px] shadow-xl text-center z-50 transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+                           style={{ minWidth: '120px', position: 'absolute', left: '-60px', ...(isNearTop ? { top: '10px' } : { bottom: '10px' }) }}
                         >
                            <p className="text-[11px] font-bold text-white mb-0.5">{item.name}</p>
                            <div className="flex justify-center gap-2 text-[9px] text-[#999]">
@@ -374,6 +378,8 @@ const MatrizPreco = () => {
                            </div>
                         </div>
                      </foreignObject>
+                        );
+                     })()}
                    </g>
                  )
               })}
