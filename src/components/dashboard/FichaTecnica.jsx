@@ -385,6 +385,11 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   });
   const [showNewInsumoForm, setShowNewInsumoForm] = useState(false);
   const [newInsumo, setNewInsumo] = useState({ name: '', category: insumoCategoryOptions[0], qty: '200', grossQty: '', unit: 'gr', price: '' });
+  const [editingInsumoId, setEditingInsumoId] = useState(null);
+
+  const handleUpdateAddedInsumo = (id, field, value) => {
+    setAddedInsumos(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
+  };
 
   const calculatedInsumoCost = addedInsumos.reduce((sum, i) => {
       const totalPricePB = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
@@ -658,9 +663,55 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                           <div className="text-[13px] font-semibold text-white">Insumos</div>
                           <div className="text-[11px] text-[#868686]">Insumos Adicionados</div>
                         </div>
-                        {addedInsumos.map((insumo) => (
-                          <div key={insumo.id} className="bg-[#1E1E1E] rounded-[14px] p-3.5 flex items-center gap-3 border border-[#2A2A2C] cursor-pointer hover:border-[#F5A623]/30 transition-colors group" onClick={() => handleRemoveInsumo(insumo.id)}>
-                            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#252527] flex items-center justify-center shrink-0">
+                        {addedInsumos.map((insumo) => {
+                          const isEditing = editingInsumoId === insumo.id;
+                          const insumoCost = (() => {
+                            const p = parseSafeNumber(insumo.price) || parseSafeNumber(insumo.custo);
+                            const pb = parseSafeNumber(insumo.grossQty || insumo.defaultQty || 1) || 1;
+                            const q = parseSafeNumber(insumo.qty);
+                            return (p / pb * q).toFixed(2);
+                          })();
+
+                          if (isEditing) {
+                            return (
+                              <div key={insumo.id} className="bg-[#1E1E1E] rounded-[14px] p-3.5 border border-[#F5A623]/50">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="font-medium text-[13px] text-white">{insumo.name}</div>
+                                  <button onClick={() => setEditingInsumoId(null)} className="text-[10px] text-[#F5A623] font-semibold px-2 py-1 rounded-full bg-[#F5A623]/10">Concluir</button>
+                                </div>
+                                <div className="flex gap-2 mb-2">
+                                  <div className="flex-1">
+                                    <label className="text-[9px] text-[#868686] mb-1 block">Quantidade</label>
+                                    <input type="text" value={insumo.qty} onChange={e => handleUpdateAddedInsumo(insumo.id, 'qty', e.target.value)} className="w-full bg-[#252527] text-white text-[12px] px-2.5 py-1.5 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]" />
+                                  </div>
+                                  <div className="w-[70px]">
+                                    <label className="text-[9px] text-[#868686] mb-1 block">Unidade</label>
+                                    <select value={insumo.unit} onChange={e => handleUpdateAddedInsumo(insumo.id, 'unit', e.target.value)} className="w-full bg-[#252527] text-white text-[12px] px-2 py-1.5 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]">
+                                      <option value="gr">gr</option>
+                                      <option value="kg">kg</option>
+                                      <option value="ml">ml</option>
+                                      <option value="lt">lt</option>
+                                      <option value="un">un</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <div className="flex-1">
+                                    <label className="text-[9px] text-[#868686] mb-1 block">Custo Total (R$)</label>
+                                    <input type="text" value={insumo.price || (insumo.custo ? insumo.custo.replace(/R\$\s?/g, '').trim() : '')} onChange={e => { handleUpdateAddedInsumo(insumo.id, 'price', e.target.value); handleUpdateAddedInsumo(insumo.id, 'custo', `R$ ${e.target.value}`); }} className="w-full bg-[#252527] text-white text-[12px] px-2.5 py-1.5 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]" />
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#333]">
+                                  <span className="text-[10px] text-[#868686]">Custo na receita:</span>
+                                  <span className="text-[11px] text-[#00B37E] font-medium">R$ {insumoCost}</span>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                          <div key={insumo.id} className="bg-[#1E1E1E] rounded-[14px] p-3.5 flex items-center gap-3 border border-[#2A2A2C] transition-colors group">
+                            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#252527] flex items-center justify-center shrink-0 cursor-pointer hover:bg-[#F5A623]/20" onClick={() => setEditingInsumoId(insumo.id)}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             </div>
                             <div className="flex-1 min-w-0">
@@ -668,22 +719,15 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#868686]">
                                   <span>Qtd: <span className="font-medium text-white">{insumo.qty}{insumo.unit}</span></span>
                                   <span className="w-1 h-1 rounded-full bg-[#555]" />
-                                  <span className="text-[#00B37E]">
-                                    Custo: R$ {(() => {
-                                      const p = parseSafeNumber(insumo.price) || parseSafeNumber(insumo.custo);
-                                      const pb = parseSafeNumber(insumo.grossQty || insumo.defaultQty || 1) || 1;
-                                      const q = parseSafeNumber(insumo.qty);
-                                      return (p / pb * q).toFixed(2);
-                                    })()}
-                                  </span>
+                                  <span className="text-[#00B37E]">Custo: R$ {insumoCost}</span>
                               </div>
                             </div>
-                            <div className="bg-[#F5A623] text-black text-[10px] font-semibold px-3 py-1.5 rounded-full flex items-center gap-1 shrink-0 group-hover:bg-red-500 group-hover:text-white transition-colors">
-                              <span className="group-hover:hidden">Adicionado</span>
-                              <span className="hidden group-hover:inline">Remover</span>
+                            <div className="bg-red-500/10 text-red-400 text-[10px] font-semibold px-3 py-1.5 rounded-full shrink-0 cursor-pointer hover:bg-red-500 hover:text-white transition-colors" onClick={() => handleRemoveInsumo(insumo.id)}>
+                              Remover
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                         <div className="w-full h-px bg-[#2A2A2C] my-2" />
                       </>
                     )}
