@@ -192,6 +192,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
       unit: unit,
       rendimento: `${quantidade}${unit}`,
       custo: `R$ ${custo}`,
+      price: custo,
       defaultQty: quantidade,
       grossQty: quantidade,
     });
@@ -386,7 +387,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const [newInsumo, setNewInsumo] = useState({ name: '', category: insumoCategoryOptions[0], qty: '200', grossQty: '', unit: 'gr', price: '' });
 
   const calculatedInsumoCost = addedInsumos.reduce((sum, i) => {
-      const totalPricePB = parseSafeNumber(i.price);
+      const totalPricePB = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
       const pb = parseSafeNumber(i.grossQty || i.defaultQty || 1) || 1;
       const unitCost = totalPricePB / pb;
       const requiredQty = parseSafeNumber(i.qty);
@@ -445,12 +446,14 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   );
 
   const handleAddInsumo = (insumo) => {
-    // When adding existing insumo, assume PB=PL and FC=1 for now unless defined
-    setAddedInsumos(prev => [...prev, { 
-        ...insumo, 
+    // Resolve price: prefer 'price', fallback to 'custo' (strip R$ prefix)
+    const resolvedPrice = insumo.price || (insumo.custo ? insumo.custo.replace(/R\$\s?/g, '').trim() : '0');
+    setAddedInsumos(prev => [...prev, {
+        ...insumo,
+        price: resolvedPrice,
         qty: insumo.defaultQty,
         netQty: insumo.defaultQty,
-        grossQty: insumo.defaultQty,
+        grossQty: insumo.grossQty || insumo.defaultQty,
         fc: '1.00'
     }]);
   };
@@ -666,7 +669,12 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                   <span>Qtd: <span className="font-medium text-white">{insumo.qty}{insumo.unit}</span></span>
                                   <span className="w-1 h-1 rounded-full bg-[#555]" />
                                   <span className="text-[#00B37E]">
-                                    Custo: R$ {((parseSafeNumber(insumo.price) / (parseSafeNumber(insumo.grossQty || insumo.defaultQty || 1) || 1)) * parseSafeNumber(insumo.qty)).toFixed(2)}
+                                    Custo: R$ {(() => {
+                                      const p = parseSafeNumber(insumo.price) || parseSafeNumber(insumo.custo);
+                                      const pb = parseSafeNumber(insumo.grossQty || insumo.defaultQty || 1) || 1;
+                                      const q = parseSafeNumber(insumo.qty);
+                                      return (p / pb * q).toFixed(2);
+                                    })()}
                                   </span>
                               </div>
                             </div>
@@ -696,7 +704,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                               <div className="font-medium text-[13px] text-[#AAA]">{insumo.name}</div>
                               <div className="text-[10px] text-[#555]">{insumo.category} • {insumo.defaultQty}{insumo.unit}</div>
                             </div>
-                            <div className="text-[11px] text-[#555]">R$ {insumo.price}</div>
+                            <div className="text-[11px] text-[#555]">{insumo.custo || (insumo.price ? `R$ ${insumo.price}` : 'R$')}</div>
                           </div>
                         ))}
                       </>
