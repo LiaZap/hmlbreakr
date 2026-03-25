@@ -722,7 +722,9 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                       if (cost > 0) costDisplay = `Custo Real: ${cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
                   } else if (question.calcType === 'clt_cost' && item.regime === 'CLT') {
                       cltData = calculateCLT(item.base_salary);
-                      if (cltData.total > 0) costDisplay = `Custo Fantasma: ${cltData.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
+                      const premio = parseCurrency(item.premio || '0');
+                      const totalWithPremio = cltData.total + premio;
+                      if (totalWithPremio > 0) costDisplay = `Custo Fantasma: ${totalWithPremio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}${premio > 0 ? ` (inclui prêmio ${premio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : ''}`;
                   } else if (question.calcType === 'depreciation') {
                       const dep = calculateDepreciation(item.value, item.lifespan);
                       if(dep > 0) costDisplay = `Depreciação Mensal: ${dep.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
@@ -757,11 +759,11 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                                 <div key={field.id} className={field.id === 'name' || field.dependsOn ? 'col-span-2' : ''}>
                                     <label className="text-[10px] text-gray-400 mb-1 flex justify-between items-center relative z-10">
                                         {field.label}
-                                        {field.helpText && (
+                                        {(field.helpText || field.tooltip) && (
                                             <div className="group relative flex items-center">
                                                 <span className="text-white/50 cursor-pointer hover:text-white transition-colors">(?)</span>
                                                 <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 p-2 bg-[#333] border border-[#444] text-white text-[10px] rounded shadow-xl z-50 text-right pointer-events-none">
-                                                    {field.helpText}
+                                                    {field.helpText || field.tooltip}
                                                 </div>
                                             </div>
                                         )}

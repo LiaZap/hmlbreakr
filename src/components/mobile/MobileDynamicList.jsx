@@ -11,9 +11,10 @@ const MobileDynamicList = ({ question, items, onAdd, onRemove, onItemChange, glo
         return calculateProLabore(item.pro_labore);
       case 'clt_cost': {
         const { total } = calculateCLT(item.base_salary);
+        const premio = parseCurrencyToNumber(item.premio);
         const transport = (parseCurrencyToNumber(item.transport_value) * (parseFloat(item.transport_qty) || 0)) * (parseFloat(item.work_days) || 0);
         const food = parseCurrencyToNumber(item.food_cost) * (parseFloat(item.work_days) || 0);
-        return total + transport + food;
+        return total + premio + transport + food;
       }
       case 'depreciation':
         return calculateDepreciation(item.value, item.lifespan || '5');

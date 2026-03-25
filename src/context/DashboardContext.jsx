@@ -329,6 +329,7 @@ export const DashboardProvider = ({ children }) => {
     if (formData.employees && Array.isArray(formData.employees)) {
         formData.employees.forEach(e => {
              const base = parseCurrency(e.base_salary);
+             const premio = parseCurrency(e.premio);
              if (e.regime === 'CLT') {
                  const fgts = base * 0.08;
                  const prov13 = base / 12;
@@ -340,9 +341,10 @@ export const DashboardProvider = ({ children }) => {
                  const aviso13 = aviso / 12;
                  const avisoFerias = (aviso + aviso / 3) / 12;
                  const avisoFgts = (aviso13 + avisoFerias) * 0.08;
-                 personnelCosts += base + fgts + prov13 + provFerias + fgtsProv + multa + aviso + aviso13 + avisoFerias + avisoFgts;
+                 // Prêmio NÃO entra na fórmula CLT, soma direto ao total
+                 personnelCosts += base + fgts + prov13 + provFerias + fgtsProv + multa + aviso + aviso13 + avisoFerias + avisoFgts + premio;
              } else {
-                 personnelCosts += base;
+                 personnelCosts += base + premio;
              }
         });
     }

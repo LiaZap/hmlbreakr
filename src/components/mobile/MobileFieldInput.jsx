@@ -158,11 +158,11 @@ const MobileFieldInput = ({ field, value, onChange, allValues, globalData }) => 
     <div className="mb-4">
       <div className="flex items-center gap-2 mb-1.5">
         <label className="text-[12px] font-medium text-[#A0A0A0]">{field.label}</label>
-        {field.helpText && (
+        {(field.helpText || field.tooltip) && (
           <div className="group relative">
             <span className="text-[10px] text-[#868686] bg-[#333] rounded-full w-4 h-4 flex items-center justify-center cursor-help">?</span>
             <div className="absolute bottom-6 left-0 bg-[#333] text-[11px] text-white p-2 rounded-lg w-[200px] hidden group-hover:block z-50">
-              {field.helpText}
+              {field.helpText || field.tooltip}
             </div>
           </div>
         )}

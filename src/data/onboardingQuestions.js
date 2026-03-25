@@ -68,6 +68,7 @@ export const onboardingQuestions = [
       { id: 'name', label: 'Nome', type: 'text', placeholder: 'Nome' },
       { id: 'role', label: 'Cargo', type: 'text', placeholder: 'Ex: Cozinheiro' },
       { id: 'base_salary', label: 'Salário Base (R$)', type: 'currency', placeholder: 'R$ 0,00' },
+      { id: 'premio', label: 'Prêmio (R$)', type: 'currency', placeholder: 'R$ 0,00', tooltip: 'Pagamento de Prêmio ou valor a mais pago fora da Folha de pagamento.' },
       { id: 'regime', label: 'Regime', type: 'select', options: ['CLT', 'Freelancer', 'PJ'] },
       { id: '_separator_benefits', type: 'separator', label: 'Benefícios e Alimentação' },
       { id: 'transport_value', label: 'Valor da Passagem (R$)', type: 'currency', placeholder: 'R$ 0,00' },
