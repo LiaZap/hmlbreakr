@@ -722,7 +722,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                       if (cost > 0) costDisplay = `Custo Real: ${cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
                   } else if (question.calcType === 'clt_cost' && item.regime === 'CLT') {
                       cltData = calculateCLT(item.base_salary);
-                      const premio = parseCurrency(item.premio || '0');
+                      const premio = parseFloat((item.premio || '0').toString().replace(/\D/g, '')) / 100 || 0;
                       const totalWithPremio = cltData.total + premio;
                       if (totalWithPremio > 0) costDisplay = `Custo Fantasma: ${totalWithPremio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}${premio > 0 ? ` (inclui prêmio ${premio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : ''}`;
                   } else if (question.calcType === 'depreciation') {
