@@ -64,8 +64,8 @@ const FichaTecnicaCard = ({ item, onClick, basePercent }) => {
             <path d="M8 6H16M8 10H12M8 14H16" stroke="#959387" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
         </div>
-        <div>
-          <div className="font-semibold text-[13px] text-white">{item.name}</div>
+        <div className="min-w-0">
+          <div className="font-semibold text-[13px] text-white truncate max-w-[150px]">{item.name}</div>
           <div className="text-[10px] text-[#868686]">{item.type}</div>
         </div>
       </div>
@@ -191,6 +191,15 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   const safeCusto = insumo.custo || '0,00';
   const [custo, setCusto] = useState(safeCusto.replace(/R\$\s?/g, '').trim());
 
+  // Auto-format currency: user types "190" → "1,90", "3300" → "33,00"
+  const handleCustoChange = (e) => {
+    const raw = e.target.value.replace(/[^0-9]/g, ''); // strip non-digits
+    if (!raw) { setCusto(''); return; }
+    const cents = parseInt(raw, 10);
+    const formatted = (cents / 100).toFixed(2).replace('.', ',');
+    setCusto(formatted);
+  };
+
   const { dashboardData } = useDashboard();
   const categoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
 
@@ -307,8 +316,9 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                 <span className="text-[13px] text-[#868686] pl-4 shrink-0">R$</span>
                 <input
                   type="text"
+                  inputMode="numeric"
                   value={custo}
-                  onChange={(e) => setCusto(e.target.value)}
+                  onChange={handleCustoChange}
                   className="flex-1 bg-transparent px-2 py-3.5 text-[14px] text-white outline-none"
                   placeholder="0,00"
                 />
@@ -412,19 +422,17 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   };
 
   // Calculate insumo cost with unit conversion
-  // price/custo = TOTAL cost for purchased quantity (e.g., R$33 for 1kg)
-  // Step 1: normalize to price-per-unit: R$33 / 1kg = R$33/kg
-  // Step 2: convert usage to purchase units: 100gr → 0.1kg
-  // Step 3: cost = 0.1kg × R$33/kg = R$3.30
+  // price/custo = price PER UNIT (e.g., R$1.90/un, R$33.00/kg)
+  // Step 1: convert usage qty to purchase units: 100gr → 0.1kg
+  // Step 2: cost = 0.1kg × R$33/kg = R$3.30
+  // Example: pão R$1.90/un, usage 1un → 1 × R$1.90 = R$1.90
   const calcInsumoCost = (i) => {
-    const totalPrice = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
-    const purchaseQty = parseSafeNumber(i.grossQty || i.defaultQty || 1) || 1;
+    const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
     const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
-    const pricePerUnit = totalPrice / purchaseQty; // R$33 / 1 = R$33/kg
     const usageQty = parseSafeNumber(i.qty);
     const usageUnit = i.usageUnit || i.unit || 'gr';
-    const usageInPurchaseUnit = convertUnit(usageQty, usageUnit, purchaseUnit); // 100gr → 0.1kg
-    return usageInPurchaseUnit * pricePerUnit; // 0.1 * 33 = 3.30
+    const usageInPurchaseUnit = convertUnit(usageQty, usageUnit, purchaseUnit);
+    return usageInPurchaseUnit * pricePerUnit;
   };
 
   const calculatedInsumoCost = addedInsumos.reduce((sum, i) => sum + calcInsumoCost(i), 0);
@@ -715,7 +723,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                 <div className="flex items-center justify-between mb-3">
                                   <div>
                                     <div className="font-medium text-[13px] text-white">{insumo.name}</div>
-                                    <div className="text-[9px] text-[#868686]">Compra: R$ {(parseSafeNumber(insumo.price || insumo.custo) / (parseSafeNumber(insumo.grossQty || insumo.defaultQty || 1) || 1)).toFixed(2).replace('.', ',')} / {pUnit}</div>
+                                    <div className="text-[9px] text-[#868686]">Compra: R$ {parseSafeNumber(insumo.price || insumo.custo).toFixed(2).replace('.', ',')} / {pUnit}</div>
                                   </div>
                                   <button onClick={() => setEditingInsumoId(null)} className="text-[10px] text-[#F5A623] font-semibold px-2 py-1 rounded-full bg-[#F5A623]/10">Concluir</button>
                                 </div>
