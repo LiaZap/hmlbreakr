@@ -73,30 +73,41 @@ const AdminPanel = () => {
     return colors[Math.abs(hash) % colors.length];
   };
 
+  const getClientPhoto = (client) => {
+    try {
+      const raw = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
+      if (!raw) return null;
+      const d = raw.formData || raw;
+      return d.user_info?.photo || null;
+    } catch { return null; }
+  };
+
   const getOnboardingProgress = (client) => {
     try {
-      const data = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
-      if (!data) return 0;
+      const raw = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
+      if (!raw) return 0;
+      // formData is nested inside dashboardData
+      const d = raw.formData || raw;
       const steps = [
-        { key: 'user_info', check: d => d.user_info?.name },
-        { key: 'identity', check: d => d.identity?.tax_regime },
-        { key: 'partners', check: d => d.partners && (Array.isArray(d.partners) ? d.partners.length > 0 : d.partners.name) },
-        { key: 'employees', check: d => d.employees && (Array.isArray(d.employees) ? d.employees.length > 0 : d.employees.count !== undefined) },
-        { key: 'benefits', check: d => d.benefits },
-        { key: 'location_costs', check: d => d.location_costs?.rent || d.location_costs?.own },
-        { key: 'utilities', check: d => d.utilities?.energy || d.utilities?.water },
-        { key: 'recurring_services', check: d => d.recurring_services },
-        { key: 'operational_fixed', check: d => d.operational_fixed },
-        { key: 'monthly_services', check: d => d.monthly_services },
-        { key: 'equipment', check: d => d.equipment && (Array.isArray(d.equipment) ? d.equipment.length > 0 : true) },
-        { key: 'admin_systems', check: d => d.admin_systems },
-        { key: 'vehicles', check: d => d.vehicles },
-        { key: 'marketing_structure', check: d => d.marketing_structure },
-        { key: 'fees_marketplaces', check: d => d.fees_marketplaces },
-        { key: 'fees_cards', check: d => d.fees_cards && (Array.isArray(d.fees_cards) ? d.fees_cards.length > 0 : true) },
-        { key: 'revenue_history', check: d => d.revenue_history?.months?.length >= 3 },
+        { check: () => d.user_info?.name },
+        { check: () => d.identity?.tax_regime },
+        { check: () => d.partners && (Array.isArray(d.partners) ? d.partners.length > 0 : d.partners.name) },
+        { check: () => d.employees && (Array.isArray(d.employees) ? d.employees.length > 0 : true) },
+        { check: () => d.location_costs?.rent || d.location_costs?.own },
+        { check: () => d.utilities?.energy || d.utilities?.water },
+        { check: () => d.recurring_services },
+        { check: () => d.operational_fixed },
+        { check: () => d.monthly_services },
+        { check: () => d.equipment && (Array.isArray(d.equipment) ? d.equipment.length > 0 : true) },
+        { check: () => d.admin_systems },
+        { check: () => d.vehicles },
+        { check: () => d.marketing_structure },
+        { check: () => d.fees_marketplaces },
+        { check: () => d.fees_cards && (Array.isArray(d.fees_cards) ? d.fees_cards.length > 0 : true) },
+        { check: () => d.other_fixed_costs },
+        { check: () => d.revenue_history?.months?.length >= 3 },
       ];
-      const completed = steps.filter(s => { try { return s.check(data); } catch { return false; } }).length;
+      const completed = steps.filter(s => { try { return s.check(); } catch { return false; } }).length;
       return Math.min(Math.round((completed / steps.length) * 100), 100);
     } catch { return 0; }
   };
@@ -165,17 +176,22 @@ const AdminPanel = () => {
             {filteredClients.map(client => {
               const color = getColor(client.name);
               const progress = getOnboardingProgress(client);
+              const photo = getClientPhoto(client);
               return (
                 <div key={client.id} className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-5 hover:border-[#3A3A3C] transition-all group">
                   {/* Card Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className="w-[44px] h-[44px] rounded-[12px] flex items-center justify-center text-[14px] font-bold shrink-0"
-                        style={{ backgroundColor: color + '20', color: color }}
-                      >
-                        {getInitials(client.name)}
-                      </div>
+                      {photo ? (
+                        <img src={photo} alt={client.name} className="w-[44px] h-[44px] rounded-[12px] object-cover shrink-0" />
+                      ) : (
+                        <div
+                          className="w-[44px] h-[44px] rounded-[12px] flex items-center justify-center text-[14px] font-bold shrink-0"
+                          style={{ backgroundColor: color + '20', color: color }}
+                        >
+                          {getInitials(client.name)}
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <div className="font-semibold text-[14px] text-white truncate">{client.name}</div>
                         <div className="text-[11px] text-[#868686]">{new Date(client.createdAt).toLocaleDateString('pt-BR')}</div>
