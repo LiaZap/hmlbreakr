@@ -77,13 +77,27 @@ const AdminPanel = () => {
     try {
       const data = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
       if (!data) return 0;
-      const totalSteps = 17;
-      let completed = 0;
-      if (data.user_info?.name) completed++;
-      if (data.identity?.tax_regime) completed++;
-      if (data.revenue_history?.months?.length >= 3) completed++;
-      const pct = Math.round((completed / totalSteps) * 100);
-      return Math.min(pct, 100);
+      const steps = [
+        { key: 'user_info', check: d => d.user_info?.name },
+        { key: 'identity', check: d => d.identity?.tax_regime },
+        { key: 'partners', check: d => d.partners && (Array.isArray(d.partners) ? d.partners.length > 0 : d.partners.name) },
+        { key: 'employees', check: d => d.employees && (Array.isArray(d.employees) ? d.employees.length > 0 : d.employees.count !== undefined) },
+        { key: 'benefits', check: d => d.benefits },
+        { key: 'location_costs', check: d => d.location_costs?.rent || d.location_costs?.own },
+        { key: 'utilities', check: d => d.utilities?.energy || d.utilities?.water },
+        { key: 'recurring_services', check: d => d.recurring_services },
+        { key: 'operational_fixed', check: d => d.operational_fixed },
+        { key: 'monthly_services', check: d => d.monthly_services },
+        { key: 'equipment', check: d => d.equipment && (Array.isArray(d.equipment) ? d.equipment.length > 0 : true) },
+        { key: 'admin_systems', check: d => d.admin_systems },
+        { key: 'vehicles', check: d => d.vehicles },
+        { key: 'marketing_structure', check: d => d.marketing_structure },
+        { key: 'fees_marketplaces', check: d => d.fees_marketplaces },
+        { key: 'fees_cards', check: d => d.fees_cards && (Array.isArray(d.fees_cards) ? d.fees_cards.length > 0 : true) },
+        { key: 'revenue_history', check: d => d.revenue_history?.months?.length >= 3 },
+      ];
+      const completed = steps.filter(s => { try { return s.check(data); } catch { return false; } }).length;
+      return Math.min(Math.round((completed / steps.length) * 100), 100);
     } catch { return 0; }
   };
 
@@ -195,11 +209,13 @@ const AdminPanel = () => {
                   {/* Status Badge */}
                   <div className="flex items-center gap-2 mb-4">
                     <div className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
-                      client.status === 'Ativo'
+                      progress >= 100
                         ? 'bg-[#00B37E]/15 text-[#00B37E]'
+                        : progress > 0
+                        ? 'bg-[#F5A623]/15 text-[#F5A623]'
                         : 'bg-[#252527] text-[#868686] border border-[#333]'
                     }`}>
-                      {client.status || 'Pendente'}
+                      {progress >= 100 ? 'Completo' : progress > 0 ? 'Em andamento' : 'Pendente'}
                     </div>
                   </div>
 
