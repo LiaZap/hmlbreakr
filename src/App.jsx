@@ -48,8 +48,9 @@ function App() {
     window.location.href = `${window.location.pathname}?hash=${hash}`;
   };
 
-  const handleAdminLogin = () => {
+  const handleAdminLogin = (adminRole) => {
     sessionStorage.setItem('breaker-admin', 'true');
+    sessionStorage.setItem('breaker-admin-role', adminRole || 'admin');
     setCurrentPage('admin-panel');
   };
 

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import boltIcon from '../../assets/bolt.svg';
 
 const AdminPanel = () => {
+  const adminRole = sessionStorage.getItem('breaker-admin-role') || 'admin';
+  const isSuperAdmin = adminRole === 'super_admin';
   const [clients, setClients] = useState([]);
   const [newClientName, setNewClientName] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -42,9 +44,17 @@ const AdminPanel = () => {
   };
 
   const handleDeleteClient = (id, name) => {
+    if (!isSuperAdmin) {
+      alert('Apenas o Super Admin pode excluir clientes.');
+      return;
+    }
     if (!window.confirm(`Excluir "${name}"? Todos os dados serão apagados.`)) return;
 
-    fetch(`/api/admin/clients/${id}`, { method: 'DELETE' })
+    fetch(`/api/admin/clients/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: adminRole })
+    })
     .then(res => res.json())
     .then(data => {
        if (data.success) {
@@ -197,15 +207,17 @@ const AdminPanel = () => {
                         <div className="text-[11px] text-[#868686]">{new Date(client.createdAt).toLocaleDateString('pt-BR')}</div>
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id, client.name); }}
-                      className="opacity-0 group-hover:opacity-100 text-[#555] hover:text-[#FF4560] transition-all p-1.5 rounded-[8px] hover:bg-[#FF4560]/10"
-                      title="Excluir"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                        <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
+                    {isSuperAdmin && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id, client.name); }}
+                        className="opacity-0 group-hover:opacity-100 text-[#555] hover:text-[#FF4560] transition-all p-1.5 rounded-[8px] hover:bg-[#FF4560]/10"
+                        title="Excluir"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                          <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94208 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    )}
                   </div>
 
                   {/* Progress Bar */}

@@ -37,7 +37,7 @@ const ClientLogin = ({ onLogin, onAdminLogin }) => {
       }
 
       if (data.role === 'admin' && onAdminLogin) {
-        onAdminLogin();
+        onAdminLogin(data.adminRole || 'admin');
         return;
       }
       onLogin(data.hash);

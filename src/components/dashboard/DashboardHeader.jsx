@@ -4,16 +4,17 @@ import { useDashboard } from '../../context/DashboardContext';
 
 const DashboardHeader = ({ data }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isEditingRestaurant, setIsEditingRestaurant] = useState(false);
+  const [editName, setEditName] = useState('');
   const { updateDashboardData } = useDashboard();
-  
+
   const hash = new URLSearchParams(window.location.search).get('hash');
 
   const handleLogout = () => {
-    window.location.href = window.location.pathname; // Clear the hash
+    window.location.href = window.location.pathname;
   };
 
   const handleNameUpdated = (newName) => {
-    // Update local context so UI reflects immediately
     updateDashboardData({
       user: {
         ...data.user,
@@ -21,6 +22,20 @@ const DashboardHeader = ({ data }) => {
         initials: newName.substring(0, 2).toUpperCase()
       }
     });
+  };
+
+  const handleEditRestaurantName = () => {
+    setEditName(data.restaurant.name || '');
+    setIsEditingRestaurant(true);
+  };
+
+  const handleSaveRestaurantName = () => {
+    if (editName.trim() && editName.trim() !== data.restaurant.name) {
+      updateDashboardData({
+        restaurant: { ...data.restaurant, name: editName.trim() }
+      });
+    }
+    setIsEditingRestaurant(false);
   };
 
   return (
@@ -37,12 +52,27 @@ const DashboardHeader = ({ data }) => {
                )}
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                 <span className="font-semibold text-[13px] md:text-[14px] text-[#959387]">{data.restaurant.name}</span>
-                 <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
-                    <path d="M1 1L5 5L9 1" stroke="#595959" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                 </svg>
-              </div>
+              {isEditingRestaurant ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveRestaurantName(); if (e.key === 'Escape') setIsEditingRestaurant(false); }}
+                    autoFocus
+                    className="bg-[#1A1A1A] border border-[#F5A623] rounded-[6px] px-2 py-0.5 text-[13px] text-white outline-none w-[160px]"
+                  />
+                  <button onClick={handleSaveRestaurantName} className="text-[#00B37E] hover:text-[#00D48F] text-[11px] font-medium px-1">✓</button>
+                  <button onClick={() => setIsEditingRestaurant(false)} className="text-[#666] hover:text-white text-[11px] px-1">✕</button>
+                </div>
+              ) : (
+                <button onClick={handleEditRestaurantName} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none">
+                   <span className="font-semibold text-[13px] md:text-[14px] text-[#959387]">{data.restaurant.name}</span>
+                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
+                      <path d="M1 1L5 5L9 1" stroke="#595959" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                   </svg>
+                </button>
+              )}
               <div className="font-medium text-[10px] text-white/35">{data.restaurant.category}</div>
             </div>
           </div>

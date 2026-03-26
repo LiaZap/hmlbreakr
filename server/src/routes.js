@@ -8,14 +8,28 @@ const prisma = new PrismaClient();
 // ADMIN ROUTES
 // ========================
 
+// Admin accounts configuration
+const ADMIN_ACCOUNTS = [
+  {
+    email: process.env.SUPER_ADMIN_EMAIL || 'gustavo@breakr.com.br',
+    password: process.env.SUPER_ADMIN_PASSWORD || '$SUPER-Brkr26@',
+    name: 'Gustavo Costa',
+    role: 'super_admin'
+  },
+  {
+    email: process.env.ADMIN_EMAIL || 'contato@breakr.com.br',
+    password: process.env.ADMIN_PASSWORD || '$ADMIN-Brkr26@',
+    name: process.env.ADMIN_NAME || 'Douglas',
+    role: 'admin'
+  }
+];
+
 // Admin Login
 router.post('/admin/login', (req, res) => {
   const { email, password } = req.body;
-  const adminEmail = process.env.ADMIN_EMAIL || 'contato@breakr.com.br';
-  const adminPassword = process.env.ADMIN_PASSWORD || '$ADMIN-Brkr26@';
-  const adminName = process.env.ADMIN_NAME || 'Gustavo Costa';
-  if (email === adminEmail && password === adminPassword) {
-    return res.json({ success: true, token: 'mock-admin-token', name: adminName });
+  const admin = ADMIN_ACCOUNTS.find(a => a.email === email && a.password === password);
+  if (admin) {
+    return res.json({ success: true, token: 'mock-admin-token', name: admin.name, role: admin.role });
   }
   return res.status(401).json({ error: 'Credenciais incorretas' });
 });
@@ -62,10 +76,14 @@ router.get('/admin/clients', async (req, res) => {
   }
 });
 
-// Delete Client
+// Delete Client (super_admin only)
 router.delete('/admin/clients/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { role } = req.body;
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Apenas o Super Admin pode excluir clientes.' });
+    }
     await prisma.client.delete({
       where: { id }
     });
@@ -114,12 +132,10 @@ router.post('/client/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
-    // Check if it's the admin
-    const adminEmail = process.env.ADMIN_EMAIL || 'contato@breakr.com.br';
-    const adminPassword = process.env.ADMIN_PASSWORD || '$ADMIN-Brkr26@';
-    const adminName = process.env.ADMIN_NAME || 'Gustavo Costa';
-    if (email === adminEmail && password === adminPassword) {
-      return res.json({ success: true, role: 'admin', name: adminName });
+    // Check if it's an admin
+    const admin = ADMIN_ACCOUNTS.find(a => a.email === email && a.password === password);
+    if (admin) {
+      return res.json({ success: true, role: 'admin', name: admin.name, adminRole: admin.role });
     }
 
     // Checking if the user is a Client (Owner)
