@@ -87,8 +87,8 @@ const AdminPanel = () => {
     try {
       const raw = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
       if (!raw) return null;
-      const d = raw.formData || raw;
-      return d.user_info?.photo || null;
+      // Check restaurant logo first, then user photo, then formData paths
+      return raw.restaurant?.logo || raw.user?.photo || raw.formData?.user_info?.photo || null;
     } catch { return null; }
   };
 
