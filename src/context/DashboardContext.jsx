@@ -120,13 +120,13 @@ export const DashboardProvider = ({ children }) => {
 
     // Determines if it is Form Data (flat object) or Partial Update (nested object)
     // If it has 'operational' OR 'menuEngineering', assume it's a direct state update
-    if (newData.operational || newData.menuEngineering || newData.tips) {
+    if (newData.operational || newData.menuEngineering || newData.tips || newData.user || newData.restaurant) {
          setDashboardData(prev => {
              const updated = { ...prev, ...newData };
-             // Preserve server-injected fields
+             // Preserve server-injected fields (merge so callers can update _profile)
              if (prev._clientEmail) updated._clientEmail = prev._clientEmail;
              if (prev._hasCredentials) updated._hasCredentials = prev._hasCredentials;
-             if (prev._profile) updated._profile = prev._profile;
+             updated._profile = { ...(prev._profile || {}), ...(newData._profile || {}) };
              // Persist to Backend
              const params = new URLSearchParams(window.location.search);
              const hash = params.get('hash');

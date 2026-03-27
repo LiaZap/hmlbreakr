@@ -37,6 +37,7 @@ const ClientLogin = ({ onLogin, onAdminLogin }) => {
       }
 
       if (data.role === 'admin' && onAdminLogin) {
+        if (data.name) sessionStorage.setItem('breaker-admin-name', data.name);
         onAdminLogin(data.adminRole || 'admin');
         return;
       }

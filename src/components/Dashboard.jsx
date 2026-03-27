@@ -61,25 +61,25 @@ const Dashboard = () => {
       <>
       {/* MAIN CONTENT - Full-width black background */}
       <div className="w-full bg-[#101010]">
-      <div className="ml-0 md:ml-[85px] py-2 pb-6">
+      <div className="ml-0 md:ml-[85px] py-1 md:py-2 pb-4 md:pb-6">
         <div className="w-full px-3 md:px-6 2xl:px-10 flex flex-col min-h-0">
         
         <DashboardHeader data={dashboardData} />
 
         {/* MAIN GRID - 4 columns layout (responsive fluid) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 xl:gap-6 mb-0 min-h-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 xl:gap-6 mb-0 min-h-0">
           
           {/* COL 1 - Left Panel */}
-          <div className="flex flex-col h-full py-2">
+          <div className="flex flex-col h-full py-1 md:py-2">
             
             {/* 1. Header Small */}
-            <div className="mb-8">
+            <div className="hidden md:block mb-8">
               <span className="block font-bold text-[14px] text-white leading-tight">Dashboard</span>
               <span className="block font-normal text-[11px] text-[#595959] leading-tight">Painel de Controle</span>
             </div>
 
             {/* 2. Date & Status Row */}
-            <div className="flex items-center gap-5 mb-8">
+            <div className="hidden md:flex items-center gap-5 mb-8">
                <div className="flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#595959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   <span className="text-[#595959] font-medium text-[11px]">{dashboardData.period.date}</span>
@@ -93,8 +93,8 @@ const Dashboard = () => {
             </div>
 
             {/* 3. Main Title */}
-            <div className="mb-4 pr-4">
-              <h1 className="text-[22px] md:text-[28px] leading-[1.15] tracking-tight mb-3">
+            <div className="mb-3 md:mb-4 pr-4">
+              <h1 className="text-[20px] md:text-[28px] leading-[1.15] tracking-tight mb-2 md:mb-3">
                 <span className="font-bold text-[#FF9406]">{dashboardData.restaurant.name}</span>
                 <span className="font-medium text-[#E1E1E1]">, como <br className="hidden md:inline"/>você nunca viu antes</span>
               </h1>
@@ -104,7 +104,7 @@ const Dashboard = () => {
             </div>
 
             {/* 4. Pills Grid (Responsive) */}
-            <div className="flex flex-wrap gap-2 mb-auto mt-4">
+            <div className="flex flex-nowrap md:flex-wrap overflow-x-auto gap-2 mb-auto mt-3 md:mt-4 pb-1 md:pb-0 scrollbar-hide">
                {dashboardData.overview.tags.map((tag, idx) => (
                  <div key={idx} className="bg-[#151515] border border-[#222] rounded-full px-3 py-1.5 flex items-center gap-2">
                     <span className="text-[10px] text-[#999] whitespace-nowrap">{tag.label}</span>

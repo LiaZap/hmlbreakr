@@ -11,8 +11,10 @@ const AdminPanel = () => {
   const [resetEmail, setResetEmail] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+  const [newClientEmail, setNewClientEmail] = useState('');
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState(null);
+  const [resentId, setResentId] = useState(null);
 
   useEffect(() => {
     fetch('/api/admin/clients')
@@ -29,15 +31,35 @@ const AdminPanel = () => {
     fetch('/api/admin/clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newClientName })
+      body: JSON.stringify({ name: newClientName, email: newClientEmail.trim() || undefined })
     })
     .then(res => res.json())
     .then(newClient => {
       setClients(prev => [...prev, newClient]);
       setNewClientName('');
+      setNewClientEmail('');
       setShowModal(false);
     })
     .catch(() => alert("Erro ao criar cliente"));
+  };
+
+  const handleResendWelcome = async (clientId, clientName) => {
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/resend-welcome`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: adminRole })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setResentId(clientId);
+        setTimeout(() => setResentId(null), 2500);
+      } else {
+        alert(data.error || 'Erro ao reenviar email.');
+      }
+    } catch {
+      alert('Erro de conexão.');
+    }
   };
 
   const copyLink = (hash, id) => {
@@ -318,17 +340,43 @@ const AdminPanel = () => {
                         </>
                       )}
                     </button>
-                    {/* Reset Password - Super Admin only */}
+                    {/* Super Admin actions */}
                     {isSuperAdmin && client.email && (
-                      <button
-                        onClick={() => { setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash, currentEmail: client.email }); setResetEmail(client.email || ''); }}
-                        className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white transition-colors"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                          <path d="M15 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H15M10 17L15 12M15 12L10 7M15 12H3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                        Reset
-                      </button>
+                      <>
+                        <button
+                          onClick={() => { setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash, currentEmail: client.email }); setResetEmail(client.email || ''); }}
+                          className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white transition-colors"
+                          title="Redefinir credenciais"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                            <path d="M15 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H15M10 17L15 12M15 12L10 7M15 12H3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          Reset
+                        </button>
+                        <button
+                          onClick={() => handleResendWelcome(client.id, client.name)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] transition-colors ${
+                            resentId === client.id
+                              ? 'bg-[#00B37E]/15 text-[#00B37E]'
+                              : 'bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white'
+                          }`}
+                          title="Reenviar email de acesso"
+                        >
+                          {resentId === client.id ? (
+                            <>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 13L9 17L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              Enviado!
+                            </>
+                          ) : (
+                            <>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                                <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9L22 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              Email
+                            </>
+                          )}
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -377,7 +425,7 @@ const AdminPanel = () => {
             <h3 className="text-[18px] font-bold mb-1">Novo Cliente</h3>
             <p className="text-[12px] text-[#868686] mb-6">Cadastre um novo restaurante no sistema</p>
 
-            <div className="mb-6">
+            <div className="mb-4">
               <label className="block text-[12px] text-[#868686] mb-2">Nome do Restaurante</label>
               <input
                 type="text"
@@ -387,6 +435,17 @@ const AdminPanel = () => {
                 className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[12px] px-4 py-3.5 text-white outline-none focus:border-[#F5A623] transition-colors"
                 placeholder="Ex: Meu Restaurante"
                 autoFocus
+              />
+            </div>
+            <div className="mb-6">
+              <label className="block text-[12px] text-[#868686] mb-2">E-mail do Cliente <span className="text-[#555]">(opcional — envia boas-vindas)</span></label>
+              <input
+                type="email"
+                value={newClientEmail}
+                onChange={(e) => setNewClientEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateClient()}
+                className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[12px] px-4 py-3.5 text-white outline-none focus:border-[#F5A623] transition-colors"
+                placeholder="cliente@email.com"
               />
             </div>
 

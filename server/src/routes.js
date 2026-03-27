@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const router = express.Router();
 const prisma = new PrismaClient();
+const { sendWelcomeEmail, sendCredentialResetEmail } = require('./services/emailService');
 
 // ========================
 // ADMIN ROUTES
@@ -49,6 +50,8 @@ router.post('/admin/clients', async (req, res) => {
         operational: { fichas: [], insumos: [] }
     };
 
+    const { email: clientEmail } = req.body;
+
     const client = await prisma.client.create({
       data: {
         name,
@@ -56,6 +59,13 @@ router.post('/admin/clients', async (req, res) => {
         data: JSON.stringify(initialData)
       }
     });
+
+    // Send welcome email if an email was provided at creation
+    if (clientEmail) {
+      sendWelcomeEmail({ to: clientEmail, clientName: name, hash }).catch(err =>
+        console.error('Welcome email error:', err.message)
+      );
+    }
 
     res.json(client);
   } catch (error) {
@@ -113,14 +123,46 @@ router.post('/admin/clients/:id/reset-password', async (req, res) => {
     if (password) updateData.password = await bcrypt.hash(password, 10);
     if (email) updateData.email = email;
 
-    await prisma.client.update({
+    const updatedClient = await prisma.client.update({
       where: { id },
       data: updateData
     });
+
+    // Send notification email with new password if provided
+    const targetEmail = email || updatedClient.email;
+    if (password && targetEmail) {
+      sendCredentialResetEmail({
+        to: targetEmail,
+        clientName: updatedClient.name,
+        newPassword: password
+      }).catch(err => console.error('Credential reset email error:', err.message));
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erro ao redefinir credenciais' });
+  }
+});
+
+// Resend Welcome Email (super_admin only)
+router.post('/admin/clients/:id/resend-welcome', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Apenas o Super Admin pode reenviar o email.' });
+    }
+
+    const client = await prisma.client.findUnique({ where: { id } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    if (!client.email) return res.status(400).json({ error: 'Cliente não possui email cadastrado.' });
+
+    await sendWelcomeEmail({ to: client.email, clientName: client.name, hash: client.hash });
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao reenviar email' });
   }
 });
 
@@ -313,7 +355,7 @@ router.post('/client/:hash/sync', async (req, res) => {
 router.put('/client/:hash/profile', async (req, res) => {
   try {
     const { hash } = req.params;
-    const { name, password, email, phone, cpf, birthday } = req.body;
+    const { name, password, email, phone, cpf, birthday, photo } = req.body;
 
     let userToUpdate = null;
     let isClient = true;
@@ -347,8 +389,8 @@ router.put('/client/:hash/profile', async (req, res) => {
       updateData.name = name;
     }
 
-    // Store extra profile fields (phone, cpf, birthday) in the data JSON
-    if (isClient && (name || phone || cpf || birthday)) {
+    // Store extra profile fields (phone, cpf, birthday, photo) in the data JSON
+    if (isClient && (name || phone || cpf || birthday || photo)) {
       try {
         const clientData = JSON.parse(userToUpdate.data);
         if (!clientData.profile) clientData.profile = {};
@@ -362,6 +404,10 @@ router.put('/client/:hash/profile', async (req, res) => {
         if (phone) clientData.profile.phone = phone;
         if (cpf) clientData.profile.cpf = cpf;
         if (birthday) clientData.profile.birthday = birthday;
+        if (photo) {
+          clientData.profile.photo = photo;
+          if (clientData.user) clientData.user.photo = photo;
+        }
         updateData.data = JSON.stringify(clientData);
       } catch (parseError) {
         console.error("Error parsing client data:", parseError);

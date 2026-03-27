@@ -10,6 +10,11 @@ const DashboardHeader = ({ data }) => {
 
   const hash = new URLSearchParams(window.location.search).get('hash');
 
+  const adminSession = sessionStorage.getItem('breaker-admin');
+  const adminRole = sessionStorage.getItem('breaker-admin-role') || 'admin';
+  const adminName = adminRole === 'super_admin' ? 'Gustavo Costa' : (sessionStorage.getItem('breaker-admin-name') || 'Admin');
+  const isAdminViewing = !!adminSession;
+
   const handleLogout = () => {
     window.location.href = window.location.pathname;
   };
@@ -20,7 +25,15 @@ const DashboardHeader = ({ data }) => {
         ...data.user,
         name: newName,
         initials: newName.substring(0, 2).toUpperCase()
-      }
+      },
+      _profile: { ...(data._profile || {}), name: newName }
+    });
+  };
+
+  const handlePhotoUpdated = (newPhoto) => {
+    updateDashboardData({
+      user: { ...data.user, photo: newPhoto },
+      _profile: { ...(data._profile || {}), photo: newPhoto }
     });
   };
 
@@ -83,9 +96,9 @@ const DashboardHeader = ({ data }) => {
       {/* Right - User Profile */}
       <div className="flex items-center gap-4 md:gap-8">
 
-        <button 
+        <button
           onClick={() => setIsProfileModalOpen(true)}
-          className="flex items-center gap-3 md:gap-4 border-l border-[#333] pl-3 md:pl-6 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none"
+          className="flex items-center gap-3 md:gap-4 md:border-l md:border-[#333] md:pl-6 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none"
         >
           <div className="flex items-center gap-[8px]">
             <div className="w-[36px] h-[36px] md:w-[40px] md:h-[40px] rounded-full bg-[#FDD688] flex items-center justify-center overflow-hidden">
@@ -120,6 +133,11 @@ const DashboardHeader = ({ data }) => {
         clientPhone={data._profile?.phone}
         clientCpf={data._profile?.cpf}
         clientBirthday={data._profile?.birthday}
+        clientPhoto={data._profile?.photo || data.user?.photo}
+        onPhotoUpdated={handlePhotoUpdated}
+        isAdminViewing={isAdminViewing}
+        adminName={adminName}
+        adminRole={adminRole}
       />
     </div>
   );
