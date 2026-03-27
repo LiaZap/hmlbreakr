@@ -94,26 +94,33 @@ router.delete('/admin/clients/:id', async (req, res) => {
   }
 });
 
-// Reset Client Password (super_admin only)
+// Reset Client Credentials (super_admin only)
 router.post('/admin/clients/:id/reset-password', async (req, res) => {
   try {
     const { id } = req.params;
-    const { password, role } = req.body;
+    const { password, email, role } = req.body;
     if (role !== 'super_admin') {
-      return res.status(403).json({ error: 'Apenas o Super Admin pode redefinir senhas.' });
+      return res.status(403).json({ error: 'Apenas o Super Admin pode redefinir credenciais.' });
     }
-    if (!password || password.length < 6) {
+    if (password && password.length < 6) {
       return res.status(400).json({ error: 'A senha deve ter no mínimo 6 caracteres.' });
     }
-    const hashedPassword = await bcrypt.hash(password, 10);
+    if (!password && !email) {
+      return res.status(400).json({ error: 'Informe email ou senha para redefinir.' });
+    }
+
+    const updateData = {};
+    if (password) updateData.password = await bcrypt.hash(password, 10);
+    if (email) updateData.email = email;
+
     await prisma.client.update({
       where: { id },
-      data: { password: hashedPassword }
+      data: updateData
     });
     res.json({ success: true });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro ao redefinir senha' });
+    res.status(500).json({ error: 'Erro ao redefinir credenciais' });
   }
 });
 

@@ -7,7 +7,8 @@ const AdminPanel = () => {
   const [clients, setClients] = useState([]);
   const [newClientName, setNewClientName] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [resetModal, setResetModal] = useState(null); // { clientId, clientName, hash }
+  const [resetModal, setResetModal] = useState(null); // { clientId, clientName, hash, currentEmail }
+  const [resetEmail, setResetEmail] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -69,25 +70,31 @@ const AdminPanel = () => {
     .catch(() => alert("Erro de conexão ao tentar excluir."));
   };
 
-  const handleResetPassword = async () => {
-    if (!resetModal || !resetPassword || resetPassword.length < 6) {
-      alert('A senha deve ter no mínimo 6 caracteres.');
-      return;
-    }
+  const handleResetCredentials = async () => {
+    if (!resetModal) return;
+    if (!resetEmail && !resetPassword) { alert('Preencha ao menos um campo.'); return; }
+    if (resetPassword && resetPassword.length < 6) { alert('A senha deve ter no mínimo 6 caracteres.'); return; }
     setResetLoading(true);
     try {
+      const payload = { role: adminRole };
+      if (resetPassword) payload.password = resetPassword;
+      if (resetEmail && resetEmail !== resetModal.currentEmail) payload.email = resetEmail;
       const res = await fetch(`/api/admin/clients/${resetModal.clientId}/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: resetPassword, role: adminRole })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.success) {
-        alert(`Senha de "${resetModal.clientName}" redefinida com sucesso!`);
+        alert(`Credenciais de "${resetModal.clientName}" atualizadas!`);
+        if (payload.email) {
+          setClients(prev => prev.map(c => c.id === resetModal.clientId ? { ...c, email: payload.email } : c));
+        }
         setResetModal(null);
+        setResetEmail('');
         setResetPassword('');
       } else {
-        alert(data.error || 'Erro ao redefinir senha.');
+        alert(data.error || 'Erro ao redefinir.');
       }
     } catch {
       alert('Erro de conexão.');
@@ -314,7 +321,7 @@ const AdminPanel = () => {
                     {/* Reset Password - Super Admin only */}
                     {isSuperAdmin && client.email && (
                       <button
-                        onClick={() => setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash })}
+                        onClick={() => { setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash, currentEmail: client.email }); setResetEmail(client.email || ''); }}
                         className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white transition-colors"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
@@ -331,23 +338,31 @@ const AdminPanel = () => {
         )}
       </div>
 
-      {/* Reset Password Modal */}
+      {/* Reset Credentials Modal */}
       {resetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => { setResetModal(null); setResetPassword(''); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => { setResetModal(null); setResetEmail(''); setResetPassword(''); }}>
           <div className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[16px] font-bold text-white mb-1">Redefinir Senha</h3>
+            <h3 className="text-[16px] font-bold text-white mb-1">Redefinir Credenciais</h3>
             <p className="text-[12px] text-[#868686] mb-4">Cliente: <span className="text-white">{resetModal.clientName}</span></p>
+            <label className="block text-[11px] font-semibold text-[#666] mb-2 uppercase tracking-wider">E-mail</label>
+            <input
+              type="email"
+              value={resetEmail}
+              onChange={(e) => setResetEmail(e.target.value)}
+              placeholder="email@cliente.com"
+              className="w-full bg-[#161616] border border-[#2A2A2C] rounded-[10px] px-4 py-3 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors mb-3"
+            />
             <label className="block text-[11px] font-semibold text-[#666] mb-2 uppercase tracking-wider">Nova Senha</label>
             <input
               type="text"
               value={resetPassword}
               onChange={(e) => setResetPassword(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Deixe em branco para manter a atual"
               className="w-full bg-[#161616] border border-[#2A2A2C] rounded-[10px] px-4 py-3 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors mb-4"
             />
             <div className="flex gap-3">
-              <button onClick={() => { setResetModal(null); setResetPassword(''); }} className="flex-1 bg-[#252527] text-[#868686] font-medium text-[13px] rounded-[10px] py-2.5">Cancelar</button>
-              <button onClick={handleResetPassword} disabled={resetLoading} className="flex-1 bg-[#F5A623] text-black font-bold text-[13px] rounded-[10px] py-2.5 disabled:opacity-50">
+              <button onClick={() => { setResetModal(null); setResetEmail(''); setResetPassword(''); }} className="flex-1 bg-[#252527] text-[#868686] font-medium text-[13px] rounded-[10px] py-2.5">Cancelar</button>
+              <button onClick={handleResetCredentials} disabled={resetLoading} className="flex-1 bg-[#F5A623] text-black font-bold text-[13px] rounded-[10px] py-2.5 disabled:opacity-50">
                 {resetLoading ? 'Salvando...' : 'Redefinir'}
               </button>
             </div>
