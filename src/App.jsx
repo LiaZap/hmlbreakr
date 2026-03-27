@@ -8,8 +8,9 @@ import AdminPanel from './components/admin/AdminPanel';
 import { useDashboard } from './context/DashboardContext';
 
 function App() {
-  const { dashboardData, clientDataError } = useDashboard();
+  const { dashboardData, clientDataError, clientDataLoaded } = useDashboard();
   const [currentPage, setCurrentPage] = useState('loading');
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -33,12 +34,19 @@ function App() {
   }, [clientDataError, currentPage]);
 
   const handleSplashComplete = () => {
-    if (dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
-        setCurrentPage('dashboard');
-    } else {
-        setCurrentPage('landing');
-    }
+    setSplashDone(true);
   };
+
+  // Wait for BOTH splash animation AND data to load before deciding route
+  useEffect(() => {
+    if (splashDone && clientDataLoaded) {
+      if (dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
+        setCurrentPage('dashboard');
+      } else {
+        setCurrentPage('landing');
+      }
+    }
+  }, [splashDone, clientDataLoaded, dashboardData]);
 
   const handleOnboardingComplete = () => {
     setCurrentPage('dashboard');
