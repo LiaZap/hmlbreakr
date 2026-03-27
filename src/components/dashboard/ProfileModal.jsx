@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpdated, clientEmail, clientPhone, clientCpf, clientBirthday }) => {
   const [name, setName] = useState(currentName || '');
@@ -11,6 +11,21 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Sync state when modal opens or props change
+  useEffect(() => {
+    if (isOpen) {
+      setName(currentName || '');
+      setEmail(clientEmail || '');
+      setPhone(clientPhone || '');
+      setCpf(clientCpf || '');
+      setBirthday(clientBirthday || '');
+      setPassword('');
+      setConfirmPassword('');
+      setError('');
+      setSuccess('');
+    }
+  }, [isOpen, currentName, clientEmail, clientPhone, clientCpf, clientBirthday]);
 
   if (!isOpen) return null;
 
