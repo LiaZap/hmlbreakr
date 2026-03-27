@@ -783,6 +783,14 @@ export const DashboardProvider = ({ children }) => {
       newDashboardData._clientEmail = prev._clientEmail;
       newDashboardData._hasCredentials = prev._hasCredentials;
       newDashboardData._profile = prev._profile;
+      // Preserve profile photo/name saved via profile endpoint (not in formData)
+      if (!newDashboardData.user.photo && prev.user?.photo) {
+        newDashboardData.user.photo = prev.user.photo;
+      }
+      if (prev.user?.name && prev.user.name !== 'Usuário' && !formData?.user_info?.user_name) {
+        newDashboardData.user.name = prev.user.name;
+        newDashboardData.user.initials = prev.user.initials || prev.user.name.substring(0, 2).toUpperCase();
+      }
       return newDashboardData;
     });
 
