@@ -139,8 +139,10 @@ export const DashboardProvider = ({ children }) => {
              }
              return updated;
          });
-         // Schedule full recalculation so financial metrics update
-         recalcPendingRef.current = true;
+         // Only trigger recalc for operational/financial changes, not for profile updates (user/restaurant)
+         if (newData.operational || newData.menuEngineering || newData.tips) {
+             recalcPendingRef.current = true;
+         }
          return;
     }
 

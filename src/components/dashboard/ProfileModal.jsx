@@ -282,7 +282,7 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div onClick={onClose} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
 
-        <div className="relative w-full max-w-md bg-[#161616] border border-[#2A2A2C] rounded-[24px] p-4 sm:p-6 shadow-2xl overflow-y-auto max-h-[90vh] font-jakarta">
+        <div className="relative w-full max-w-lg bg-[#161616] border border-[#2A2A2C] rounded-[24px] p-5 sm:p-7 shadow-2xl overflow-y-auto max-h-[90vh] scrollbar-hide font-jakarta">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-white">Seu Perfil</h2>
