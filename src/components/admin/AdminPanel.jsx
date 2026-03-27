@@ -7,6 +7,9 @@ const AdminPanel = () => {
   const [clients, setClients] = useState([]);
   const [newClientName, setNewClientName] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [resetModal, setResetModal] = useState(null); // { clientId, clientName, hash }
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState(null);
 
@@ -64,6 +67,32 @@ const AdminPanel = () => {
        }
     })
     .catch(() => alert("Erro de conexão ao tentar excluir."));
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetModal || !resetPassword || resetPassword.length < 6) {
+      alert('A senha deve ter no mínimo 6 caracteres.');
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const res = await fetch(`/api/admin/clients/${resetModal.clientId}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: resetPassword, role: adminRole })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Senha de "${resetModal.clientName}" redefinida com sucesso!`);
+        setResetModal(null);
+        setResetPassword('');
+      } else {
+        alert(data.error || 'Erro ao redefinir senha.');
+      }
+    } catch {
+      alert('Erro de conexão.');
+    }
+    setResetLoading(false);
   };
 
   const filteredClients = clients.filter(c =>
@@ -282,6 +311,18 @@ const AdminPanel = () => {
                         </>
                       )}
                     </button>
+                    {/* Reset Password - Super Admin only */}
+                    {isSuperAdmin && client.email && (
+                      <button
+                        onClick={() => setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash })}
+                        className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white transition-colors"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                          <path d="M15 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H15M10 17L15 12M15 12L10 7M15 12H3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Reset
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -289,6 +330,30 @@ const AdminPanel = () => {
           </div>
         )}
       </div>
+
+      {/* Reset Password Modal */}
+      {resetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => { setResetModal(null); setResetPassword(''); }}>
+          <div className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[16px] font-bold text-white mb-1">Redefinir Senha</h3>
+            <p className="text-[12px] text-[#868686] mb-4">Cliente: <span className="text-white">{resetModal.clientName}</span></p>
+            <label className="block text-[11px] font-semibold text-[#666] mb-2 uppercase tracking-wider">Nova Senha</label>
+            <input
+              type="text"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              className="w-full bg-[#161616] border border-[#2A2A2C] rounded-[10px] px-4 py-3 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors mb-4"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => { setResetModal(null); setResetPassword(''); }} className="flex-1 bg-[#252527] text-[#868686] font-medium text-[13px] rounded-[10px] py-2.5">Cancelar</button>
+              <button onClick={handleResetPassword} disabled={resetLoading} className="flex-1 bg-[#F5A623] text-black font-bold text-[13px] rounded-[10px] py-2.5 disabled:opacity-50">
+                {resetLoading ? 'Salvando...' : 'Redefinir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New Client Modal */}
       {showModal && (

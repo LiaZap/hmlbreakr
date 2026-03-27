@@ -109,13 +109,17 @@ const DashboardHeader = ({ data }) => {
 
       </div>
 
-      <ProfileModal 
+      <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         currentName={data.user?.name}
         hash={hash}
         onLogout={handleLogout}
         onNameUpdated={handleNameUpdated}
+        clientEmail={data._clientEmail}
+        clientPhone={data._profile?.phone}
+        clientCpf={data._profile?.cpf}
+        clientBirthday={data._profile?.birthday}
       />
     </div>
   );

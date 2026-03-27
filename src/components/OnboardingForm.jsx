@@ -183,6 +183,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
   const [formData, setFormData] = useState({});
   const [direction, setDirection] = useState(0);
   const [showRegistration, setShowRegistration] = useState(false);
+  const [registrationDone, setRegistrationDone] = useState(false);
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirm, setRegConfirm] = useState('');
@@ -194,7 +195,9 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
   const currentQuestion = onboardingQuestions[currentStepIndex];
   const totalSteps = onboardingQuestions.length;
   const totalWithReg = isEditing ? totalSteps : totalSteps + 1;
-  const progress = showRegistration ? 100 : ((currentStepIndex + 1) / totalWithReg) * 100;
+  const progress = showRegistration
+    ? (1 / totalWithReg) * 100
+    : ((currentStepIndex + (registrationDone ? 2 : 1)) / totalWithReg) * 100;
 
   // Format currency helper
   const formatCurrency = (value) => {
@@ -271,6 +274,10 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
     if (dashboardData?.formData) {
       setFormData(dashboardData.formData);
     }
+    // Show registration FIRST if client has no credentials yet (and not editing)
+    if (!isEditing && dashboardData && !dashboardData._hasCredentials && !registrationDone) {
+      setShowRegistration(true);
+    }
   }, [dashboardData]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -282,12 +289,8 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
       setDirection(1);
       setCurrentStepIndex(prev => prev + 1);
     } else {
-      if (isEditing) {
-        if (onComplete) onComplete(formData);
-      } else {
-        setDirection(1);
-        setShowRegistration(true);
-      }
+      // Last step — complete onboarding
+      if (onComplete) onComplete(formData);
     }
   };
 
@@ -326,7 +329,10 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
         setRegLoading(false);
         return;
       }
-      if (onComplete) onComplete(formData);
+      // Registration done — proceed to onboarding steps
+      setRegistrationDone(true);
+      setShowRegistration(false);
+      setRegLoading(false);
     } catch {
       setRegError('Erro de conexão. Tente novamente.');
       setRegLoading(false);
@@ -932,10 +938,10 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
         {/* Header - Top Left */}
         <div className="absolute left-4 md:left-[66px] top-[38px] md:top-[79px]">
           <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[12px] md:text-[14px] leading-[18px] text-white mb-1 md:mb-2">
-            {showRegistration ? `Passo ${totalWithReg} de ${totalWithReg}` : `Passo ${currentStepIndex + 1} de ${totalWithReg}`}
+            {showRegistration ? `Passo 1 de ${totalWithReg}` : `Passo ${currentStepIndex + (registrationDone ? 2 : 1)} de ${totalWithReg}`}
           </div>
           <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-white/20">
-            {showRegistration ? 'Criar Acesso' : currentQuestion.section}
+            {showRegistration ? 'Crie seu Acesso' : currentQuestion.section}
           </div>
         </div>
 
@@ -1013,7 +1019,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                         className={`flex items-center justify-center gap-[10px] bg-[#FFC100] rounded-full h-[50px] px-8 transition-colors ${regLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#ffdb65]'}`}
                     >
                         <span className="font-['Plus_Jakarta_Sans'] font-bold text-[14px] text-black">
-                            {regLoading ? 'Criando...' : 'Criar Acesso e Entrar'}
+                            {regLoading ? 'Criando...' : 'Criar Acesso e Continuar'}
                         </span>
                     </button>
                     <button

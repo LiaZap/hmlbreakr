@@ -12,17 +12,21 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
   const [formData, setFormData] = useState({});
   const [direction, setDirection] = useState(1);
   const [showRegistration, setShowRegistration] = useState(false);
+  const [registrationDone, setRegistrationDone] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const totalSteps = onboardingQuestions.length;
   const currentQuestion = onboardingQuestions[currentStepIndex];
 
-  // Load existing data
+  // Load existing data + check if registration needed
   useEffect(() => {
     if (dashboardData?.formData) {
       setFormData(dashboardData.formData);
     }
-  }, []);
+    if (!isEditing && dashboardData && !dashboardData._hasCredentials && !registrationDone) {
+      setShowRegistration(true);
+    }
+  }, [dashboardData]);
 
   // Auto-fill defaultValues for composite steps
   useEffect(() => {
@@ -112,10 +116,9 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
     if (currentStepIndex < totalSteps - 1) {
       setDirection(1);
       setCurrentStepIndex(prev => prev + 1);
-    } else if (!isEditing) {
-      setShowRegistration(true);
     } else {
-      onClose?.();
+      // Last step — complete onboarding
+      if (onComplete) onComplete(formData);
     }
     setIsSubmitting(false);
   };
@@ -192,9 +195,10 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
               className="pt-4"
             >
               <MobileRegistration
-                hash={dashboardData?.hash}
+                hash={dashboardData?.hash || new URLSearchParams(window.location.search).get('hash')}
                 onComplete={() => {
-                  onComplete?.(formData);
+                  setRegistrationDone(true);
+                  setShowRegistration(false);
                 }}
               />
             </motion.div>

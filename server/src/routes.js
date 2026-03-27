@@ -94,11 +94,34 @@ router.delete('/admin/clients/:id', async (req, res) => {
   }
 });
 
+// Reset Client Password (super_admin only)
+router.post('/admin/clients/:id/reset-password', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password, role } = req.body;
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Apenas o Super Admin pode redefinir senhas.' });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter no mínimo 6 caracteres.' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await prisma.client.update({
+      where: { id },
+      data: { password: hashedPassword }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao redefinir senha' });
+  }
+});
+
 // ========================
 // CLIENT AUTH ROUTES
 // ========================
 
-// Register (at end of onboarding)
+// Register (at start of onboarding)
 router.post('/client/register', async (req, res) => {
   try {
     const { hash, email, password } = req.body;
@@ -209,6 +232,11 @@ router.get('/client/:hash', async (req, res) => {
       }
     }
 
+    // Include credential status and profile data for frontend
+    dashboardData._hasCredentials = !!(client.email && client.password);
+    dashboardData._clientEmail = client.email || null;
+    dashboardData._profile = dashboardData.profile || {};
+
     res.json(dashboardData);
   } catch (error) {
     console.error("Error loading data:", error);
@@ -269,7 +297,7 @@ router.post('/client/:hash/sync', async (req, res) => {
 router.put('/client/:hash/profile', async (req, res) => {
   try {
     const { hash } = req.params;
-    const { name, password } = req.body;
+    const { name, password, email, phone, cpf, birthday } = req.body;
 
     let userToUpdate = null;
     let isClient = true;
@@ -294,21 +322,33 @@ router.put('/client/:hash/profile', async (req, res) => {
       updateData.password = await bcrypt.hash(password, 10);
     }
 
+    // Update email on the Client record directly
+    if (email && email.trim() !== '' && isClient) {
+      updateData.email = email;
+    }
+
     if (name && name.trim() !== '') {
       updateData.name = name;
-      
-      // If it's the owner, also update the data JSON profile block
-      if (isClient) {
-        try {
-          const clientData = JSON.parse(userToUpdate.data);
+    }
+
+    // Store extra profile fields (phone, cpf, birthday) in the data JSON
+    if (isClient && (name || phone || cpf || birthday)) {
+      try {
+        const clientData = JSON.parse(userToUpdate.data);
+        if (!clientData.profile) clientData.profile = {};
+        if (name) {
+          clientData.profile.name = name;
           if (clientData.user) {
             clientData.user.name = name;
             clientData.user.initials = name.substring(0, 2).toUpperCase();
           }
-          updateData.data = JSON.stringify(clientData);
-        } catch (parseError) {
-          console.error("Error parsing client data:", parseError);
         }
+        if (phone) clientData.profile.phone = phone;
+        if (cpf) clientData.profile.cpf = cpf;
+        if (birthday) clientData.profile.birthday = birthday;
+        updateData.data = JSON.stringify(clientData);
+      } catch (parseError) {
+        console.error("Error parsing client data:", parseError);
       }
     }
 

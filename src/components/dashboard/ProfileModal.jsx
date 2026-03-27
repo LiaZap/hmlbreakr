@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 
-const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpdated }) => {
+const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpdated, clientEmail, clientPhone, clientCpf, clientBirthday }) => {
   const [name, setName] = useState(currentName || '');
+  const [email, setEmail] = useState(clientEmail || '');
+  const [phone, setPhone] = useState(clientPhone || '');
+  const [cpf, setCpf] = useState(clientCpf || '');
+  const [birthday, setBirthday] = useState(clientBirthday || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,6 +28,10 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
     try {
       const payload = {};
       if (name !== currentName) payload.name = name;
+      if (email !== (clientEmail || '')) payload.email = email;
+      if (phone !== (clientPhone || '')) payload.phone = phone;
+      if (cpf !== (clientCpf || '')) payload.cpf = cpf;
+      if (birthday !== (clientBirthday || '')) payload.birthday = birthday;
       if (password) payload.password = password;
 
       if (Object.keys(payload).length === 0) {
@@ -92,12 +100,59 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
             {/* Name Field */}
             <div>
               <label className="block text-[12px] font-semibold text-[#666] mb-2 uppercase tracking-wider pl-1">Nome Completo</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[16px] px-5 py-3.5 text-[15px] text-white outline-none focus:border-[#F5A623] transition-all"
                 placeholder="Seu nome"
+              />
+            </div>
+
+            {/* Email Field */}
+            <div>
+              <label className="block text-[12px] font-semibold text-[#666] mb-2 uppercase tracking-wider pl-1">E-mail</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[16px] px-5 py-3.5 text-[15px] text-white outline-none focus:border-[#F5A623] transition-all"
+                placeholder="seu@email.com"
+              />
+            </div>
+
+            {/* Phone & CPF */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[12px] font-semibold text-[#666] mb-2 uppercase tracking-wider pl-1">Telefone</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[16px] px-5 py-3.5 text-[15px] text-white outline-none focus:border-[#F5A623] transition-all"
+                  placeholder="(11) 99999-9999"
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-[#666] mb-2 uppercase tracking-wider pl-1">CPF</label>
+                <input
+                  type="text"
+                  value={cpf}
+                  onChange={(e) => setCpf(e.target.value)}
+                  className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[16px] px-5 py-3.5 text-[15px] text-white outline-none focus:border-[#F5A623] transition-all"
+                  placeholder="000.000.000-00"
+                />
+              </div>
+            </div>
+
+            {/* Birthday */}
+            <div>
+              <label className="block text-[12px] font-semibold text-[#666] mb-2 uppercase tracking-wider pl-1">Data de Nascimento</label>
+              <input
+                type="date"
+                value={birthday}
+                onChange={(e) => setBirthday(e.target.value)}
+                className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[16px] px-5 py-3.5 text-[15px] text-white outline-none focus:border-[#F5A623] transition-all"
               />
             </div>
 
