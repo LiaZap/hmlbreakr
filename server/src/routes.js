@@ -274,10 +274,19 @@ router.post('/client/:hash/sync', async (req, res) => {
         if (parsedData.user && (!newData.user || newData.user.isOwner === false)) {
             newData.user = parsedData.user; // preserve owner profile
         }
+        // Preserve profile data (phone, cpf, birthday) saved via profile endpoint
+        if (parsedData.profile && !newData.profile) {
+            newData.profile = parsedData.profile;
+        }
       } catch (e) {
         console.error("Error parsing existing client data before save:", e);
       }
     }
+
+    // Remove server-injected metadata fields before saving
+    delete newData._clientEmail;
+    delete newData._hasCredentials;
+    delete newData._profile;
 
     await prisma.client.update({
       where: { id: clientIdToUpdate },
