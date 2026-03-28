@@ -33,6 +33,7 @@ const DashboardHeader = ({ data }) => {
   const handlePhotoUpdated = (newPhoto) => {
     updateDashboardData({
       user: { ...data.user, photo: newPhoto },
+      profile: { ...(data.profile || {}), photo: newPhoto },
       _profile: { ...(data._profile || {}), photo: newPhoto }
     });
   };

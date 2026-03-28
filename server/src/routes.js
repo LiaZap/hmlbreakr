@@ -20,7 +20,7 @@ const ADMIN_ACCOUNTS = [
   {
     email: process.env.ADMIN_EMAIL || 'contato@breakr.com.br',
     password: process.env.ADMIN_PASSWORD || '$ADMIN-Brkr26@',
-    name: process.env.ADMIN_NAME || 'Douglas',
+    name: process.env.ADMIN_NAME || 'Admin',
     role: 'admin'
   }
 ];

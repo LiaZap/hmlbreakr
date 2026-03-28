@@ -4,6 +4,8 @@ import boltIcon from '../../assets/bolt.svg';
 const AdminPanel = () => {
   const adminRole = sessionStorage.getItem('breaker-admin-role') || 'admin';
   const isSuperAdmin = adminRole === 'super_admin';
+  const adminName = isSuperAdmin ? 'Gustavo Costa' : (sessionStorage.getItem('breaker-admin-name') || 'Admin');
+  const roleLabel = isSuperAdmin ? 'Super Admin' : 'Admin';
   const [clients, setClients] = useState([]);
   const [newClientName, setNewClientName] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -195,6 +197,16 @@ const AdminPanel = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {/* Logged-in admin info */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-[#1E1E1E] rounded-[10px] border border-[#2A2A2C]">
+              <div className="w-[28px] h-[28px] rounded-full bg-[#F5A623]/20 flex items-center justify-center shrink-0">
+                <span className="text-[#F5A623] font-bold text-[11px]">{adminName.substring(0, 2).toUpperCase()}</span>
+              </div>
+              <div className="flex flex-col leading-tight">
+                <span className="text-[12px] font-semibold text-white">{adminName}</span>
+                <span className="text-[10px] text-[#F5A623]">{roleLabel}</span>
+              </div>
+            </div>
             <button
               onClick={() => setShowModal(true)}
               className="bg-[#F5A623] text-black font-semibold text-[13px] px-5 py-2.5 rounded-[10px] hover:bg-[#E5961E] transition-colors flex items-center gap-2"
@@ -309,7 +321,7 @@ const AdminPanel = () => {
                   <div className="flex items-center gap-2 pt-3 border-t border-[#2A2A2C]">
                     <button
                       onClick={() => window.open(`${window.location.origin}/?hash=${client.hash}`, '_blank')}
-                      className="flex-1 flex items-center justify-center gap-1.5 text-[12px] text-white font-medium py-2 rounded-[8px] bg-[#252527] hover:bg-[#333] transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1.5 text-[12px] text-white font-medium py-2 rounded-[8px] bg-[#252527] hover:bg-[#333] transition-colors whitespace-nowrap"
                     >
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                         <path d="M15 3H21V9M21 3L13 11M10 5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21H17C18.1046 21 19 20.1046 19 19V14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -318,7 +330,7 @@ const AdminPanel = () => {
                     </button>
                     <button
                       onClick={() => copyLink(client.hash, client.id)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] transition-colors ${
+                      className={`flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] transition-colors whitespace-nowrap ${
                         copiedId === client.id
                           ? 'bg-[#00B37E]/15 text-[#00B37E]'
                           : 'bg-[#252527] text-[#F5A623] hover:bg-[#333]'
@@ -345,7 +357,7 @@ const AdminPanel = () => {
                       <>
                         <button
                           onClick={() => { setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash, currentEmail: client.email }); setResetEmail(client.email || ''); }}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white transition-colors whitespace-nowrap"
                           title="Redefinir credenciais"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
@@ -355,7 +367,7 @@ const AdminPanel = () => {
                         </button>
                         <button
                           onClick={() => handleResendWelcome(client.id, client.name)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] transition-colors ${
+                          className={`flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] transition-colors whitespace-nowrap ${
                             resentId === client.id
                               ? 'bg-[#00B37E]/15 text-[#00B37E]'
                               : 'bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white'
