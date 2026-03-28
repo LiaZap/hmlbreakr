@@ -318,19 +318,19 @@ const AdminPanel = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pt-3 border-t border-[#2A2A2C]">
+                  <div className="flex items-center gap-1 pt-3 border-t border-[#2A2A2C]">
                     <button
                       onClick={() => window.open(`${window.location.origin}/?hash=${client.hash}`, '_blank')}
-                      className="flex-1 flex items-center justify-center gap-1.5 text-[12px] text-white font-medium py-2 rounded-[8px] bg-[#252527] hover:bg-[#333] transition-colors whitespace-nowrap"
+                      className="flex-1 flex items-center justify-center gap-1 text-[11px] text-white font-medium py-2 rounded-[8px] bg-[#252527] hover:bg-[#333] transition-colors whitespace-nowrap"
                     >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                         <path d="M15 3H21V9M21 3L13 11M10 5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21H17C18.1046 21 19 20.1046 19 19V14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                       Acessar
                     </button>
                     <button
                       onClick={() => copyLink(client.hash, client.id)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] transition-colors whitespace-nowrap ${
+                      className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-medium py-2 rounded-[8px] transition-colors whitespace-nowrap ${
                         copiedId === client.id
                           ? 'bg-[#00B37E]/15 text-[#00B37E]'
                           : 'bg-[#252527] text-[#F5A623] hover:bg-[#333]'
@@ -338,14 +338,14 @@ const AdminPanel = () => {
                     >
                       {copiedId === client.id ? (
                         <>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                             <path d="M5 13L9 17L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                           Copiado!
                         </>
                       ) : (
                         <>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                             <path d="M13.8284 10.1716L16.6569 7.34315C17.4379 6.5621 18.7042 6.5621 19.4853 7.34315C20.2663 8.1242 20.2663 9.39052 19.4853 10.1716L16.6569 13M10.1716 13.8284L7.34315 16.6569C6.5621 17.4379 5.29577 17.4379 4.51472 16.6569C3.73367 15.8758 3.73367 14.6095 4.51472 13.8284L7.34315 11M8.75736 15.2426L15.2426 8.75736" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                           Copiar Link
@@ -357,17 +357,17 @@ const AdminPanel = () => {
                       <>
                         <button
                           onClick={() => { setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash, currentEmail: client.email }); setResetEmail(client.email || ''); }}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white transition-colors whitespace-nowrap"
+                          className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium py-2 rounded-[8px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white transition-colors whitespace-nowrap"
                           title="Redefinir credenciais"
                         >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                             <path d="M15 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H15M10 17L15 12M15 12L10 7M15 12H3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                           Reset
                         </button>
                         <button
                           onClick={() => handleResendWelcome(client.id, client.name)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium py-2 rounded-[8px] transition-colors whitespace-nowrap ${
+                          className={`flex-1 flex items-center justify-center gap-1 text-[11px] font-medium py-2 rounded-[8px] transition-colors whitespace-nowrap ${
                             resentId === client.id
                               ? 'bg-[#00B37E]/15 text-[#00B37E]'
                               : 'bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white'
@@ -381,7 +381,7 @@ const AdminPanel = () => {
                             </>
                           ) : (
                             <>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                                 <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9L22 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
                               Email
