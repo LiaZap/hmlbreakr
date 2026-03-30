@@ -281,6 +281,7 @@ const AdminPanel = () => {
               const photo = getClientPhoto(client);
               const raw = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
               const displayName = raw.restaurant?.name || raw.formData?.identity?.restaurant_name || client.name;
+              const ownerName = raw.formData?.user_info?.user_name || raw.user?.name || '';
               return (
                 <div key={client.id} className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-5 hover:border-[#3A3A3C] transition-all group">
                   {/* Card Header */}
@@ -298,7 +299,7 @@ const AdminPanel = () => {
                       )}
                       <div className="min-w-0">
                         <div className="font-semibold text-[14px] text-white truncate">{displayName}</div>
-                        <div className="text-[11px] text-[#868686]">{client.name} · {new Date(client.createdAt).toLocaleDateString('pt-BR')}</div>
+                        <div className="text-[11px] text-[#868686]">{ownerName ? `${ownerName} · ` : ''}{new Date(client.createdAt).toLocaleDateString('pt-BR')}</div>
                       </div>
                     </div>
                     {isSuperAdmin && (
