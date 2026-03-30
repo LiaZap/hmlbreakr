@@ -280,8 +280,11 @@ const AdminPanel = () => {
               const progress = getOnboardingProgress(client);
               const photo = getClientPhoto(client);
               const raw = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
-              const displayName = raw.restaurant?.name || raw.formData?.identity?.restaurant_name || client.name;
-              const ownerName = raw.formData?.user_info?.user_name || raw.user?.name || '';
+              const GENERIC = ['Seu Restaurante', 'Acesso Cliente', 'Usuário', ''];
+              const restaurantFromData = raw.formData?.identity?.restaurant_name || raw.restaurant?.name;
+              const displayName = (restaurantFromData && !GENERIC.includes(restaurantFromData)) ? restaurantFromData : client.name;
+              const rawOwner = raw.formData?.user_info?.user_name || raw.user?.name || '';
+              const ownerName = GENERIC.includes(rawOwner) ? '' : rawOwner;
               return (
                 <div key={client.id} className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-5 hover:border-[#3A3A3C] transition-all group">
                   {/* Card Header */}
