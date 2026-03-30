@@ -279,24 +279,26 @@ const AdminPanel = () => {
               const color = getColor(client.name);
               const progress = getOnboardingProgress(client);
               const photo = getClientPhoto(client);
+              const raw = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
+              const clientPersonalName = raw.formData?.user_info?.name || raw.user?.name || client.name;
               return (
                 <div key={client.id} className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-5 hover:border-[#3A3A3C] transition-all group">
                   {/* Card Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3 min-w-0">
                       {photo ? (
-                        <img src={photo} alt={client.name} className="w-[44px] h-[44px] rounded-[12px] object-cover shrink-0" />
+                        <img src={photo} alt={clientPersonalName} className="w-[44px] h-[44px] rounded-[12px] object-cover shrink-0" />
                       ) : (
                         <div
                           className="w-[44px] h-[44px] rounded-[12px] flex items-center justify-center text-[14px] font-bold shrink-0"
                           style={{ backgroundColor: color + '20', color: color }}
                         >
-                          {getInitials(client.name)}
+                          {getInitials(clientPersonalName)}
                         </div>
                       )}
                       <div className="min-w-0">
-                        <div className="font-semibold text-[14px] text-white truncate">{client.name}</div>
-                        <div className="text-[11px] text-[#868686]">{new Date(client.createdAt).toLocaleDateString('pt-BR')}</div>
+                        <div className="font-semibold text-[14px] text-white truncate">{clientPersonalName}</div>
+                        <div className="text-[11px] text-[#868686]">{client.name} · {new Date(client.createdAt).toLocaleDateString('pt-BR')}</div>
                       </div>
                     </div>
                     {isSuperAdmin && (

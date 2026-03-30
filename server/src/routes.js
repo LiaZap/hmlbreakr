@@ -109,7 +109,7 @@ router.post('/admin/clients/:id/mark-complete', async (req, res) => {
   try {
     const { id } = req.params;
     const { completed } = req.body; // true or false
-    const client = await prisma.client.findUnique({ where: { id: parseInt(id) } });
+    const client = await prisma.client.findUnique({ where: { id } });
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     const clientData = JSON.parse(client.data || '{}');
     if (!clientData.formData) clientData.formData = {};
@@ -118,7 +118,7 @@ router.post('/admin/clients/:id/mark-complete', async (req, res) => {
     } else {
       delete clientData.formData.onboarding_completed;
     }
-    await prisma.client.update({ where: { id: parseInt(id) }, data: { data: JSON.stringify(clientData) } });
+    await prisma.client.update({ where: { id }, data: { data: JSON.stringify(clientData) } });
     res.json({ success: true });
   } catch (err) {
     console.error(err);
