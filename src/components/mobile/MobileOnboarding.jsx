@@ -117,8 +117,10 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
       setDirection(1);
       setCurrentStepIndex(prev => prev + 1);
     } else {
-      // Last step — complete onboarding
-      if (onComplete) onComplete(formData);
+      // Last step — mark onboarding complete and close
+      const completedFormData = { ...formData, onboarding_completed: true };
+      updateDashboardData(completedFormData);
+      if (onComplete) onComplete(completedFormData);
     }
     setIsSubmitting(false);
   };

@@ -535,13 +535,12 @@ export const DashboardProvider = ({ children }) => {
     if (fixedCostPercentage > 33 && currentRevenue > 0) {
         const excess = ((fixedCostPercentage - 33) / 100) * currentRevenue;
         moneyOnTableTotal += excess;
-        const fcColor = fixedCostPercentage > 40 ? '#FF4560' : '#FF9406';
-        moneyOnTableItems.push({ label: `Custo Fixo (${fixedCostPercentage.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(fixedCostPercentage - 33).toFixed(1)}% acima`, color: fcColor, pctOfRevenue: fixedCostPercentage });
+        moneyOnTableItems.push({ label: `Custo Fixo (${fixedCostPercentage.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(fixedCostPercentage - 33).toFixed(1)}% acima`, color: '#FF9406', pctOfRevenue: fixedCostPercentage });
     }
     if (cmvPercentageDisplay > 30 && currentRevenue > 0 && hasCmvData) {
         const excess = ((cmvPercentageDisplay - 30) / 100) * currentRevenue;
         moneyOnTableTotal += excess;
-        moneyOnTableItems.push({ label: `CMV (${cmvPercentageDisplay.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(cmvPercentageDisplay - 30).toFixed(1)}% acima`, color: '#FFC100', pctOfRevenue: cmvPercentageDisplay });
+        moneyOnTableItems.push({ label: `CMV (${cmvPercentageDisplay.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(cmvPercentageDisplay - 30).toFixed(1)}% acima`, color: '#FDD789', pctOfRevenue: cmvPercentageDisplay });
     }
 
     // Break Even Point (Ponto de Equilíbrio)
