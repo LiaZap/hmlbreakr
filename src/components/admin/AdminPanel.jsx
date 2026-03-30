@@ -126,6 +126,27 @@ const AdminPanel = () => {
     setResetLoading(false);
   };
 
+  const handleMarkComplete = async (clientId, currentlyComplete) => {
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/mark-complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed: !currentlyComplete })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setClients(prev => prev.map(c => {
+          if (c.id !== clientId) return c;
+          const raw = typeof c.data === 'string' ? JSON.parse(c.data) : c.data;
+          if (!raw.formData) raw.formData = {};
+          if (!currentlyComplete) raw.formData.onboarding_completed = true;
+          else delete raw.formData.onboarding_completed;
+          return { ...c, data: JSON.stringify(raw) };
+        }));
+      }
+    } catch { alert('Erro de conexão.'); }
+  };
+
   const filteredClients = clients.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -158,6 +179,7 @@ const AdminPanel = () => {
       if (!raw) return 0;
       // formData is nested inside dashboardData
       const d = raw.formData || raw;
+      if (d.onboarding_completed) return 100;
       const steps = [
         { check: () => d.user_info?.name },
         { check: () => d.identity?.tax_regime },
@@ -305,17 +327,35 @@ const AdminPanel = () => {
                   </div>
 
                   {/* Status Badge */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
-                      progress >= 100
-                        ? 'bg-[#00B37E]/15 text-[#00B37E]'
-                        : progress > 0
-                        ? 'bg-[#F5A623]/15 text-[#F5A623]'
-                        : 'bg-[#252527] text-[#868686] border border-[#333]'
-                    }`}>
-                      {progress >= 100 ? 'Completo' : progress > 0 ? 'Em andamento' : 'Pendente'}
-                    </div>
-                  </div>
+                  {(() => {
+                    const raw = typeof client.data === 'string' ? JSON.parse(client.data) : (client.data || {});
+                    const d = raw.formData || raw;
+                    const isManuallyComplete = !!d.onboarding_completed;
+                    return (
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className={`px-2.5 py-1 rounded-full text-[10px] font-medium ${
+                          progress >= 100
+                            ? 'bg-[#00B37E]/15 text-[#00B37E]'
+                            : progress > 0
+                            ? 'bg-[#F5A623]/15 text-[#F5A623]'
+                            : 'bg-[#252527] text-[#868686] border border-[#333]'
+                        }`}>
+                          {progress >= 100 ? 'Completo' : progress > 0 ? 'Em andamento' : 'Pendente'}
+                        </div>
+                        <button
+                          onClick={() => handleMarkComplete(client.id, isManuallyComplete)}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-colors ${
+                            isManuallyComplete
+                              ? 'bg-[#00B37E]/10 text-[#00B37E] border-[#00B37E]/30 hover:bg-[#00B37E]/20'
+                              : 'bg-transparent text-[#555] border-[#333] hover:border-[#555] hover:text-[#868686]'
+                          }`}
+                          title={isManuallyComplete ? 'Desmarcar como concluído' : 'Marcar como concluído'}
+                        >
+                          {isManuallyComplete ? '✓ Concluído' : 'Marcar concluído'}
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 pt-3 border-t border-[#2A2A2C]">

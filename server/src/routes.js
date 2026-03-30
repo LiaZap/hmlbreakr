@@ -104,6 +104,28 @@ router.delete('/admin/clients/:id', async (req, res) => {
   }
 });
 
+// Mark onboarding as completed (admin override)
+router.post('/admin/clients/:id/mark-complete', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { completed } = req.body; // true or false
+    const client = await prisma.client.findUnique({ where: { id: parseInt(id) } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    const clientData = JSON.parse(client.data || '{}');
+    if (!clientData.formData) clientData.formData = {};
+    if (completed) {
+      clientData.formData.onboarding_completed = true;
+    } else {
+      delete clientData.formData.onboarding_completed;
+    }
+    await prisma.client.update({ where: { id: parseInt(id) }, data: { data: JSON.stringify(clientData) } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao marcar cliente' });
+  }
+});
+
 // Reset Client Credentials (super_admin only)
 router.post('/admin/clients/:id/reset-password', async (req, res) => {
   try {
@@ -385,9 +407,7 @@ router.put('/client/:hash/profile', async (req, res) => {
       updateData.email = email;
     }
 
-    if (name && name.trim() !== '') {
-      updateData.name = name;
-    }
+    // NOTE: We do NOT update client.name (project name) here — only user profile fields inside data JSON
 
     // Store extra profile fields (phone, cpf, birthday, photo) in the data JSON
     if (isClient && (name || phone || cpf || birthday || photo)) {
