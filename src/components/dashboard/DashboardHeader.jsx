@@ -79,6 +79,8 @@ const DashboardHeader = ({ data }) => {
                   <button onClick={handleSaveRestaurantName} className="text-[#00B37E] hover:text-[#00D48F] text-[11px] font-medium px-1">✓</button>
                   <button onClick={() => setIsEditingRestaurant(false)} className="text-[#666] hover:text-white text-[11px] px-1">✕</button>
                 </div>
+              ) : isAdminViewing ? (
+                <span className="font-semibold text-[13px] md:text-[14px] text-[#959387]">{data.restaurant.name}</span>
               ) : (
                 <button onClick={handleEditRestaurantName} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none">
                    <span className="font-semibold text-[13px] md:text-[14px] text-[#959387]">{data.restaurant.name}</span>
