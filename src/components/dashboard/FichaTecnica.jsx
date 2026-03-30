@@ -151,12 +151,12 @@ const InsumoCard = ({ item, onClick }) => (
             <path d="M8 6H16M8 10H12M8 14H16" stroke="#959387" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
         </div>
-        <div>
-          <div className="font-semibold text-[13px] text-white">{item.name}</div>
+        <div className="min-w-0">
+          <div className="font-semibold text-[13px] text-white break-words leading-tight">{item.name}</div>
           <div className="text-[10px] text-[#868686]">{item.category}</div>
         </div>
       </div>
-      <div className="bg-[#2A2A2C] text-[#868686] text-[10px] font-medium px-2.5 py-1 rounded-full border border-[#3A3A3C]">
+      <div className="bg-[#2A2A2C] text-[#868686] text-[10px] font-medium px-2.5 py-1 rounded-full border border-[#3A3A3C] shrink-0">
         Insumo
       </div>
     </div>
@@ -1571,7 +1571,7 @@ const FichaTecnica = () => {
         <div className="flex-1 flex flex-col min-w-0">
 
           {/* Content Area */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {/* Breadcrumb + Title + Actions */}
             <div className="px-6 pt-6 pb-4">
               <div className="text-[11px] text-[#868686] mb-2">
