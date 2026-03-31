@@ -37,7 +37,7 @@ function App() {
     setSplashDone(true);
   };
 
-  // Wait for BOTH splash animation AND data to load before deciding route
+  // Wait for BOTH splash animation AND data to load before deciding initial route (runs once)
   useEffect(() => {
     if (splashDone && clientDataLoaded) {
       if (dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
@@ -46,7 +46,8 @@ function App() {
         setCurrentPage('landing');
       }
     }
-  }, [splashDone, clientDataLoaded, dashboardData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [splashDone, clientDataLoaded]);
 
   const handleOnboardingComplete = () => {
     setCurrentPage('dashboard');
