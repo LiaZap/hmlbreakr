@@ -37,17 +37,18 @@ function App() {
     setSplashDone(true);
   };
 
-  // Wait for BOTH splash animation AND data to load before deciding initial route (runs once)
+  // Wait for BOTH splash animation AND data to load before deciding route
+  // Also re-evaluates if data changes (e.g. client returns after partial onboarding)
+  // but never redirects while client is actively filling the onboarding form
   useEffect(() => {
-    if (splashDone && clientDataLoaded) {
+    if (splashDone && clientDataLoaded && currentPage !== 'landing') {
       if (dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
         setCurrentPage('dashboard');
       } else {
         setCurrentPage('landing');
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splashDone, clientDataLoaded]);
+  }, [splashDone, clientDataLoaded, dashboardData]);
 
   const handleOnboardingComplete = () => {
     setCurrentPage('dashboard');
