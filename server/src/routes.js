@@ -74,13 +74,50 @@ router.post('/admin/clients', async (req, res) => {
   }
 });
 
-// List Clients
+// List Clients — returns lightweight summary (strips fichas/insumos/large arrays)
 router.get('/admin/clients', async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
       select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true }
     });
-    res.json(clients);
+    const lightweight = clients.map(c => {
+      try {
+        const d = JSON.parse(c.data || '{}');
+        const fd = d.formData || {};
+        // Strip operational (fichas + insumos can be huge), keep only what admin panel needs
+        return {
+          ...c,
+          data: JSON.stringify({
+            restaurant: { name: d.restaurant?.name, logo: d.restaurant?.logo },
+            user: { name: d.user?.name, photo: d.user?.photo },
+            profile: { photo: d.profile?.photo },
+            formData: {
+              onboarding_completed: fd.onboarding_completed,
+              user_info: fd.user_info ? { user_name: fd.user_info.user_name } : undefined,
+              identity: fd.identity ? { restaurant_name: fd.identity.restaurant_name, tax_regime: fd.identity.tax_regime } : undefined,
+              partners: Array.isArray(fd.partners) ? fd.partners.map(() => ({})) : fd.partners,
+              employees: Array.isArray(fd.employees) ? fd.employees.map(() => ({})) : fd.employees,
+              location_costs: fd.location_costs ? { rent: fd.location_costs.rent, own: fd.location_costs.own } : undefined,
+              utilities: fd.utilities ? { energy: fd.utilities.energy, water: fd.utilities.water } : undefined,
+              recurring_services: fd.recurring_services ? true : undefined,
+              operational_fixed: fd.operational_fixed ? true : undefined,
+              monthly_services: fd.monthly_services ? true : undefined,
+              equipment: Array.isArray(fd.equipment) ? fd.equipment.map(() => ({})) : fd.equipment,
+              admin_systems: fd.admin_systems ? true : undefined,
+              vehicles: fd.vehicles ? true : undefined,
+              marketing_structure: fd.marketing_structure ? true : undefined,
+              fees_marketplaces: fd.fees_marketplaces ? true : undefined,
+              fees_cards: Array.isArray(fd.fees_cards) ? fd.fees_cards.map(() => ({})) : fd.fees_cards,
+              other_fixed_costs: fd.other_fixed_costs ? true : undefined,
+              revenue_history: fd.revenue_history?.months
+                ? { months: fd.revenue_history.months.map(m => ({ month: m.month })) }
+                : fd.revenue_history,
+            }
+          })
+        };
+      } catch { return c; }
+    });
+    res.json(lightweight);
   } catch {
     res.status(500).json({ error: 'Erro ao listar clientes' });
   }

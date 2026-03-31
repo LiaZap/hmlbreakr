@@ -270,15 +270,16 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
 
   const { dashboardData, updateDashboardData } = useDashboard();
 
+  // Load formData only once on mount — never overwrite in-progress edits from context updates
   useEffect(() => {
-    if (dashboardData?.formData) {
+    if (dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
       setFormData(dashboardData.formData);
     }
-    // Show registration FIRST if client has no credentials yet (and not editing)
     if (!isEditing && dashboardData && !dashboardData._hasCredentials && !registrationDone) {
       setShowRegistration(true);
     }
-  }, [dashboardData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // On initial mount, resume from the last step that was filled
   useEffect(() => {

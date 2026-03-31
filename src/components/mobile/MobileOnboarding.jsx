@@ -18,15 +18,16 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
   const totalSteps = onboardingQuestions.length;
   const currentQuestion = onboardingQuestions[currentStepIndex];
 
-  // Load existing data + check if registration needed
+  // Load formData only once on mount — never overwrite in-progress edits from context updates
   useEffect(() => {
-    if (dashboardData?.formData) {
+    if (dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
       setFormData(dashboardData.formData);
     }
     if (!isEditing && dashboardData && !dashboardData._hasCredentials && !registrationDone) {
       setShowRegistration(true);
     }
-  }, [dashboardData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // On initial mount, resume from the last step that was filled
   useEffect(() => {
@@ -135,7 +136,7 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
     } else {
       // Last step — mark onboarding complete and close
       const completedFormData = { ...formData, onboarding_completed: true };
-      updateDashboardData(completedFormData);
+      await updateDashboardData(completedFormData);
       if (onComplete) onComplete(completedFormData);
     }
     setIsSubmitting(false);
