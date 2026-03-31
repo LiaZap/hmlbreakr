@@ -42,10 +42,12 @@ function App() {
   // but never redirects while client is actively filling the onboarding form
   useEffect(() => {
     if (splashDone && clientDataLoaded && currentPage !== 'landing') {
-      if (dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
+      const fd = dashboardData?.formData;
+      const finished = fd?.onboarding_completed || (fd?.revenue_history && fd.revenue_history.length > 0);
+      if (finished) {
         setCurrentPage('dashboard');
       } else {
-        setCurrentPage('landing');
+        setCurrentPage('landing'); // no data or incomplete → show/continue onboarding
       }
     }
   }, [splashDone, clientDataLoaded, dashboardData]);

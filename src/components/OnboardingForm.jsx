@@ -280,6 +280,23 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
     }
   }, [dashboardData]);
 
+  // On initial mount, resume from the last step that was filled
+  useEffect(() => {
+    if (!isEditing && dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
+      const fd = dashboardData.formData;
+      // Find first step without data
+      const firstEmpty = onboardingQuestions.findIndex(q => {
+        const val = fd[q.id];
+        if (val === undefined || val === null) return true;
+        if (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0) return true;
+        return false;
+      });
+      if (firstEmpty > 0) setCurrentStepIndex(firstEmpty);
+      else if (firstEmpty === -1) setCurrentStepIndex(onboardingQuestions.length - 1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleContinue = () => {
