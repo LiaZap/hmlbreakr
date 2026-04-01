@@ -386,7 +386,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const [activeTab, setActiveTab] = useState('custos'); // 'custos' or 'operacional'
   const [nome, setNome] = useState(editingFicha ? editingFicha.name : '');
   
-  const fichaCategoryOptions = dashboardData.operational?.categories?.fichas || ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
+  const fichaCategoryOptions = (dashboardData.operational?.categories?.fichas || ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento']).filter(c => c !== 'Insumo Pronto Preparado');
   const insumoCategoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
   const availableInsumos = dashboardData.operational?.insumos || [];
 
@@ -1181,20 +1181,6 @@ const FichaTecnica = () => {
         lastUpdated: Date.now(),
         isImported: false
       };
-
-      // Ensure "Insumo Pronto Preparado" exists in fichas categories (preserve existing + defaults)
-      const DEFAULT_FICHA_CATS = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
-      const existingFichaCats = updatePayload.operational.categories?.fichas;
-      const fichaCategories = (existingFichaCats && existingFichaCats.length > 0)
-        ? [...existingFichaCats]
-        : [...DEFAULT_FICHA_CATS];
-      if (!fichaCategories.includes('Insumo Pronto Preparado')) {
-        fichaCategories.push('Insumo Pronto Preparado');
-        updatePayload.operational.categories = {
-          ...updatePayload.operational.categories,
-          fichas: fichaCategories
-        };
-      }
 
       updatePayload.operational.fichas = [...(dashboardData.operational?.fichas || []), autoFicha];
     }
