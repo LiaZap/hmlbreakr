@@ -537,7 +537,7 @@ export const DashboardProvider = ({ children }) => {
         moneyOnTableTotal += excess;
         moneyOnTableItems.push({ label: `Custo Fixo (${fixedCostPercentage.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(fixedCostPercentage - 33).toFixed(1)}% acima`, color: '#FF9406', pctOfRevenue: fixedCostPercentage });
     }
-    if (cmvPercentageDisplay > 30 && currentRevenue > 0 && hasCmvData) {
+    if (cmvPercentageDisplay > 30 && currentRevenue > 0) {
         const excess = ((cmvPercentageDisplay - 30) / 100) * currentRevenue;
         moneyOnTableTotal += excess;
         moneyOnTableItems.push({ label: `CMV (${cmvPercentageDisplay.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(cmvPercentageDisplay - 30).toFixed(1)}% acima`, color: '#FDD789', pctOfRevenue: cmvPercentageDisplay });
@@ -756,7 +756,6 @@ export const DashboardProvider = ({ children }) => {
             tags: [
                 { label: `Rec. Líquida: R$ ${formatMoney(receitaLiquida)}`, active: false },
                 { label: `MC: ${contributionMarginPercentageDisplay.toFixed(0)}%`, active: false },
-                { label: `Lucro: R$ ${formatMoney(profit)}`, active: true, color: profit >= 0 ? '#E2FD89' : '#FF4560' },
             ]
         },
         // DRE data for detailed view

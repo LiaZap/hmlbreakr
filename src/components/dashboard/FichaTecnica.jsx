@@ -1182,8 +1182,12 @@ const FichaTecnica = () => {
         isImported: false
       };
 
-      // Add "Insumo Pronto Preparado" to fichas categories if not present
-      const fichaCategories = [...(updatePayload.operational.categories?.fichas || [])];
+      // Ensure "Insumo Pronto Preparado" exists in fichas categories (preserve existing + defaults)
+      const DEFAULT_FICHA_CATS = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
+      const existingFichaCats = updatePayload.operational.categories?.fichas;
+      const fichaCategories = (existingFichaCats && existingFichaCats.length > 0)
+        ? [...existingFichaCats]
+        : [...DEFAULT_FICHA_CATS];
       if (!fichaCategories.includes('Insumo Pronto Preparado')) {
         fichaCategories.push('Insumo Pronto Preparado');
         updatePayload.operational.categories = {
