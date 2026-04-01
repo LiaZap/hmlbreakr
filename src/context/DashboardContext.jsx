@@ -499,6 +499,14 @@ export const DashboardProvider = ({ children }) => {
     const fixedCostPercentage = currentRevenue > 0 ? (totalFixedCosts / currentRevenue) * 100 : 0;
     const cmvPercentageDisplay = cmvPercentage * 100;
 
+    // CMV for MoneyOnTable: prefer menuEngineering-based, fallback to average from fichas with price
+    const allFichasForCmv = dashboardData.operational?.fichas || [];
+    const fichasComPreco = allFichasForCmv.filter(f => parseCurrency(f.precoVenda) > 0 && parseCurrency(f.custoTotal) > 0);
+    const cmvFromFichas = fichasComPreco.length > 0
+      ? (fichasComPreco.reduce((sum, f) => sum + (parseCurrency(f.custoTotal) / parseCurrency(f.precoVenda)), 0) / fichasComPreco.length) * 100
+      : 0;
+    const cmvEffective = cmvPercentageDisplay > 0 ? cmvPercentageDisplay : cmvFromFichas;
+
     // BASE = %CF + %Impostos + %Cartão/Voucher (+ Royalties if franchise)
     // Marketplace commissions weighted by sales_percentage
     let marketplaceFeePct = 0;
@@ -537,10 +545,10 @@ export const DashboardProvider = ({ children }) => {
         moneyOnTableTotal += excess;
         moneyOnTableItems.push({ label: `Custo Fixo (${fixedCostPercentage.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(fixedCostPercentage - 33).toFixed(1)}% acima`, color: '#FF9406', pctOfRevenue: fixedCostPercentage });
     }
-    if (cmvPercentageDisplay > 30 && currentRevenue > 0) {
-        const excess = ((cmvPercentageDisplay - 30) / 100) * currentRevenue;
+    if (cmvEffective > 30 && currentRevenue > 0) {
+        const excess = ((cmvEffective - 30) / 100) * currentRevenue;
         moneyOnTableTotal += excess;
-        moneyOnTableItems.push({ label: `CMV (${cmvPercentageDisplay.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(cmvPercentageDisplay - 30).toFixed(1)}% acima`, color: '#FDD789', pctOfRevenue: cmvPercentageDisplay });
+        moneyOnTableItems.push({ label: `CMV (${cmvEffective.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(cmvEffective - 30).toFixed(1)}% acima`, color: '#FDD789', pctOfRevenue: cmvEffective });
     }
 
     // Break Even Point (Ponto de Equilíbrio)
