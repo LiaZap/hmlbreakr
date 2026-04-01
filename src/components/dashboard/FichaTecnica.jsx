@@ -132,6 +132,14 @@ const FichaTecnicaCard = ({ item, onClick, basePercent }) => {
         <span className="text-[#868686]">Custo</span>
         <span className="text-white font-medium">{item.custoTotal}</span>
       </div>
+      {pv > 0 && displayRS !== null && (
+        <div className="flex justify-between text-[11px]">
+          <span className="text-[#868686]">Ganho</span>
+          <span className={`font-medium ${displayRS >= 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
+            R$ {displayRS.toFixed(2).replace('.', ',')}
+          </span>
+        </div>
+      )}
     </div>
   </div>
   );
@@ -386,7 +394,9 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const [activeTab, setActiveTab] = useState('custos'); // 'custos' or 'operacional'
   const [nome, setNome] = useState(editingFicha ? editingFicha.name : '');
   
-  const fichaCategoryOptions = (dashboardData.operational?.categories?.fichas || ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento']).filter(c => c !== 'Insumo Pronto Preparado');
+  const DEFAULT_FICHA_CATS = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
+  const _rawFichaCats = (dashboardData.operational?.categories?.fichas || []).filter(c => c !== 'Insumo Pronto Preparado');
+  const fichaCategoryOptions = _rawFichaCats.length > 0 ? _rawFichaCats : DEFAULT_FICHA_CATS;
   const insumoCategoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
   const availableInsumos = dashboardData.operational?.insumos || [];
 
