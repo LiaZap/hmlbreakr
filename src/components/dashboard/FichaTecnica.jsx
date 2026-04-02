@@ -1173,6 +1173,49 @@ const FichaTecnica = () => {
         }
     };
 
+    // Propagate updated price to all fichas that use this insumo as ingredient
+    if (exists) {
+      let newMenuEngineering = [...(dashboardData.menuEngineering || [])];
+      const updatedFichas = fichas.map(ficha => {
+        if (!ficha.ingredients || ficha.ingredients.length === 0) return ficha;
+        if (!ficha.ingredients.some(ing => String(ing.id) === String(updatedInsumo.id))) return ficha;
+
+        const newIngredients = ficha.ingredients.map(ing =>
+          String(ing.id) === String(updatedInsumo.id)
+            ? { ...ing, price: updatedInsumo.price, custo: updatedInsumo.custo }
+            : ing
+        );
+
+        const custoInsumos = newIngredients.reduce((sum, i) => {
+          const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
+          const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
+          const usageQty = parseSafeNumber(i.qty);
+          const usageUnit = i.usageUnit || i.unit || 'gr';
+          return sum + convertUnit(usageQty, usageUnit, purchaseUnit) * pricePerUnit;
+        }, 0);
+
+        const custoEmb = parseSafeNumber(ficha.custoEmbalagem);
+        const newCustoTotal = `R$ ${(custoInsumos + custoEmb).toFixed(2).replace('.', ',')}`;
+
+        // Sync cost into menuEngineering if this ficha is listed there
+        const meIdx = newMenuEngineering.findIndex(m => m.id === `ft_${ficha.id}`);
+        if (meIdx >= 0) {
+          newMenuEngineering[meIdx] = { ...newMenuEngineering[meIdx], cost: newCustoTotal };
+        }
+
+        return {
+          ...ficha,
+          ingredients: newIngredients,
+          custoInsumos: `R$ ${custoInsumos.toFixed(2).replace('.', ',')}`,
+          custoTotal: newCustoTotal,
+          lastUpdated: Date.now()
+        };
+      });
+
+      updatePayload.operational.fichas = updatedFichas;
+      updatePayload.menuEngineering = newMenuEngineering;
+    }
+
     // Auto-create ficha técnica for "Insumo Pronto Preparado"
     if (updatedInsumo.category === 'Insumo Pronto Preparado' && !exists) {
       const autoFicha = {
