@@ -71,8 +71,8 @@ export const onboardingQuestions = [
       { id: 'premio', label: 'Prêmio (R$)', type: 'currency', placeholder: 'R$ 0,00', tooltip: 'Pagamento de Prêmio ou valor a mais pago fora da Folha de pagamento.' },
       { id: 'regime', label: 'Regime', type: 'select', options: ['CLT', 'Freelancer', 'PJ'] },
       { id: '_separator_benefits', type: 'separator', label: 'Benefícios e Alimentação' },
-      { id: 'transport_value', label: 'Valor da Passagem (R$)', type: 'currency', placeholder: 'R$ 0,00' },
-      { id: 'transport_qty', label: 'Qtd Passagens/Dia', type: 'number', placeholder: 'Ex: 2' },
+      { id: 'transport_value', label: 'Valor do Vale Transporte (R$)', type: 'currency', placeholder: 'R$ 0,00' },
+      { id: 'transport_qty', label: 'Qtd Vales/Dia', type: 'number', placeholder: 'Ex: 2' },
       { id: 'work_days', label: 'Dias Trabalhados/Mês', type: 'number', placeholder: 'Ex: 22' },
       { id: 'food_cost', label: 'Custo Refeição/Dia (R$)', type: 'currency', placeholder: 'R$ 0,00' }
     ]

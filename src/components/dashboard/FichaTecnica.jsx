@@ -236,7 +236,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div className="relative w-[95vw] sm:w-[90vw] max-w-[480px] max-h-[90vh] overflow-y-auto bg-[#1B1B1D] rounded-[20px] p-5 sm:p-8 shadow-2xl border border-[#2A2A2C]">
         {/* Header */}
         <div className="flex items-start justify-between mb-6 sm:mb-8">
@@ -594,8 +594,8 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
       {/* Print Component (Hidden unless printing) */}
       <FichaTecnicaPrint data={getPrintData()} />
 
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      {/* Backdrop — no onClick to prevent accidental data loss */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
       {/* Modal Content — fullscreen on mobile, centered on desktop */}
       <div className="relative w-full h-full md:w-[90vw] md:max-w-[1000px] md:h-[85vh] md:max-h-[750px] bg-[#1B1B1D] md:rounded-[20px] flex flex-col md:flex-row overflow-hidden shadow-2xl border-0 md:border border-[#2A2A2C]">
