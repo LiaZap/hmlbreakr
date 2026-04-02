@@ -142,6 +142,14 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
     setIsSubmitting(false);
   };
 
+  // In edit mode, save current step's data before closing
+  const handleClose = () => {
+    if (isEditing && Object.keys(formData).length > 0) {
+      updateDashboardData(formData);
+    }
+    onClose?.();
+  };
+
   // Navigate back
   const handleBack = () => {
     if (showRegistration) {
@@ -152,7 +160,7 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
       setDirection(-1);
       setCurrentStepIndex(prev => prev - 1);
     } else {
-      onClose?.();
+      handleClose();
     }
   };
 
@@ -189,7 +197,7 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
             )}
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-[#2A2A2C] active:bg-[#333]"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -255,12 +263,21 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
       {!showRegistration && (
         <div className="shrink-0 px-4 py-3 bg-[#1D1D1D] border-t border-white/5">
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleBack}
-              className="min-h-[48px] px-5 rounded-full border border-white/10 text-white text-[14px] font-medium active:bg-white/5"
-            >
-              {currentStepIndex === 0 ? 'Cancelar' : 'Voltar'}
-            </button>
+            {isEditing ? (
+              <button
+                onClick={handleClose}
+                className="min-h-[48px] px-5 rounded-full border border-[#F5A623]/40 text-[#F5A623] text-[14px] font-medium active:bg-[#F5A623]/10"
+              >
+                Salvar e Fechar
+              </button>
+            ) : (
+              <button
+                onClick={handleBack}
+                className="min-h-[48px] px-5 rounded-full border border-white/10 text-white text-[14px] font-medium active:bg-white/5"
+              >
+                {currentStepIndex === 0 ? 'Cancelar' : 'Voltar'}
+              </button>
+            )}
             <button
               onClick={handleContinue}
               disabled={isSubmitting}

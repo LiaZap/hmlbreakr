@@ -505,7 +505,7 @@ export const DashboardProvider = ({ children }) => {
     const cmvFromFichas = fichasComPreco.length > 0
       ? (fichasComPreco.reduce((sum, f) => sum + (parseCurrency(f.custoTotal) / parseCurrency(f.precoVenda)), 0) / fichasComPreco.length) * 100
       : 0;
-    const cmvEffective = cmvPercentageDisplay > 0 ? cmvPercentageDisplay : cmvFromFichas;
+    const cmvEffective = Math.max(cmvPercentageDisplay, cmvFromFichas);
 
     // BASE = %CF + %Impostos + %Cartão/Voucher (+ Royalties if franchise)
     // Marketplace commissions weighted by sales_percentage

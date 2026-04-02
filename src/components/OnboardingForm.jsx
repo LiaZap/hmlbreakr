@@ -300,6 +300,14 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // In edit mode, save current step's data before closing
+  const handleClose = () => {
+    if (isEditing && Object.keys(formData).length > 0) {
+      updateDashboardData(formData);
+    }
+    onClose();
+  };
+
   const handleContinue = () => {
     // Auto-save on every step advance so user doesn't lose progress
     updateDashboardData(formData);
@@ -365,7 +373,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
       setDirection(-1);
       setCurrentStepIndex(prev => prev - 1);
     } else {
-      onClose();
+      handleClose();
     }
   };
 
@@ -1118,12 +1126,12 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                         </button>
                     )}
 
-                    {/* Cancelar - inline on mobile */}
+                    {/* Cancelar / Salvar e Fechar - inline on mobile */}
                     <button
-                      onClick={onClose}
-                      className="md:hidden font-['Plus_Jakarta_Sans'] font-semibold text-[12px] text-white/40 hover:text-white transition-colors ml-auto"
+                      onClick={handleClose}
+                      className={`md:hidden font-['Plus_Jakarta_Sans'] font-semibold text-[12px] transition-colors ml-auto ${isEditing ? 'text-[#F5A623]' : 'text-white/40 hover:text-white'}`}
                     >
-                      Cancelar
+                      {isEditing ? 'Salvar e Fechar' : 'Cancelar'}
                     </button>
                 </div>
             </div>
@@ -1131,12 +1139,21 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
         )}
 
         {/* Close/Back - Bottom Left (desktop only) */}
-        <button
-          onClick={onClose}
-          className="hidden md:block absolute left-[75px] bottom-[50px] font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-white hover:opacity-80 transition-opacity"
-        >
-          Cancelar Onboarding
-        </button>
+        {isEditing ? (
+          <button
+            onClick={handleClose}
+            className="hidden md:flex md:items-center md:gap-2 absolute left-[75px] bottom-[50px] font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-[#F5A623] hover:opacity-80 transition-opacity"
+          >
+            Salvar e Fechar
+          </button>
+        ) : (
+          <button
+            onClick={handleClose}
+            className="hidden md:block absolute left-[75px] bottom-[50px] font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-white hover:opacity-80 transition-opacity"
+          >
+            Cancelar Onboarding
+          </button>
+        )}
       </motion.div>
       <AnimatePresence>
         {cropSource && (
