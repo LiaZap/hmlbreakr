@@ -62,8 +62,14 @@ app.listen(PORT, () => {
 
 // Global error handler
 app.use((err, req, res, next) => {
+  // Ignore aborted requests (client disconnected before response)
+  if (req.aborted || err.code === 'ECONNRESET' || err.type === 'request.aborted' || err.message?.includes('aborted')) {
+    return;
+  }
   console.error('Unhandled error:', err.message);
-  res.status(500).json({ error: 'Erro interno do servidor' });
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
 });
 
 // Graceful Shutdown
