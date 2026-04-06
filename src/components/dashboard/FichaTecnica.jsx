@@ -1320,23 +1320,21 @@ const FichaTecnica = () => {
       vendasMes: '0',
       lastUpdated: Date.now()
     };
-    const newFichas = [...fichas, copy];
+    const newFichas = [copy, ...fichas];
     updateDashboardData({
       operational: { ...dashboardData.operational, fichas: newFichas }
     });
-    // Jump to last page so the new copy is visible
-    setFichasPage(Math.floor(newFichas.length / ITEMS_PER_PAGE));
+    setFichasPage(0);
   };
 
   const handleDuplicateInsumo = (insumo) => {
     const newId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const copy = { ...insumo, id: newId, name: `Cópia de ${insumo.name}` };
-    const newInsumos = [...insumos, copy];
+    const newInsumos = [copy, ...insumos];
     updateDashboardData({
       operational: { ...dashboardData.operational, insumos: newInsumos }
     });
-    // Jump to last page so the new copy is visible
-    setInsumoPage(Math.floor(newInsumos.length / ITEMS_PER_PAGE));
+    setInsumoPage(0);
   };
 
   const handleDeleteFicha = (id) => {
