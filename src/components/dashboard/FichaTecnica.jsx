@@ -161,9 +161,9 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent })
       </div>
       {pv > 0 && displayRS !== null && (
         <div className="flex justify-between text-[11px]">
-          <span className="text-[#868686]">Ganho</span>
+          <span className="text-[#868686]">MC(%)</span>
           <span className={`font-medium ${displayRS >= 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
-            R$ {displayRS.toFixed(2).replace('.', ',')}
+            {displayPct !== null ? `${displayPct.toFixed(1)}%` : ''} / R$ {displayRS.toFixed(2).replace('.', ',')}
           </span>
         </div>
       )}
