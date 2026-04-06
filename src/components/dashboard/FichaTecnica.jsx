@@ -32,7 +32,7 @@ const convertUnit = (qty, fromUnit, toUnit) => {
 
 
 // ============ CARD: Ficha Técnica ============
-const FichaTecnicaCard = ({ item, onClick, basePercent }) => {
+const FichaTecnicaCard = ({ item, onClick, onDuplicate, basePercent }) => {
   const pv = parseSafeNumber(item.precoVenda);
   const cmv = parseSafeNumber(item.custoTotal);
   const baseRaw = parseSafeNumber(basePercent);
@@ -101,15 +101,30 @@ const FichaTecnicaCard = ({ item, onClick, basePercent }) => {
         </div>
         <span className="text-[11px] text-[#868686]">{item.insumos} Insumos</span>
       </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onClick && onClick(); }}
-        className="flex items-center gap-1 text-[11px] text-white font-medium hover:text-[#F5A623] transition-colors"
-      >
-        Adicionar
-        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-          <path d="M4 12L12 4M12 4H6M12 4V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
+      <div className="flex items-center gap-2">
+        {onDuplicate && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDuplicate(item); }}
+            className="flex items-center gap-1 text-[11px] text-[#868686] hover:text-[#F5A623] transition-colors"
+            title="Duplicar ficha"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+            Duplicar
+          </button>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onClick && onClick(); }}
+          className="flex items-center gap-1 text-[11px] text-white font-medium hover:text-[#F5A623] transition-colors"
+        >
+          Editar
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+            <path d="M4 12L12 4M12 4H6M12 4V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div className="w-full h-px bg-[#2A2A2C]" />
     <div className="flex flex-col gap-1.5">
@@ -146,7 +161,7 @@ const FichaTecnicaCard = ({ item, onClick, basePercent }) => {
 };
 
 // ============ CARD: Insumo ============
-const InsumoCard = ({ item, onClick }) => (
+const InsumoCard = ({ item, onClick, onDuplicate }) => (
   <div
     className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-4 flex flex-col gap-3 cursor-pointer hover:border-[#F5A623]/40 hover:scale-[1.01] transition-all"
     onClick={onClick}
@@ -178,6 +193,21 @@ const InsumoCard = ({ item, onClick }) => (
         <span className="text-[#868686]">Custo</span>
         <span className="text-white font-medium">{item.custo}</span>
       </div>
+    </div>
+    <div className="flex justify-end">
+      {onDuplicate && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDuplicate(item); }}
+          className="flex items-center gap-1 text-[11px] text-[#868686] hover:text-[#F5A623] transition-colors"
+          title="Duplicar insumo"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="1.5"/>
+          </svg>
+          Duplicar
+        </button>
+      )}
     </div>
   </div>
 );
@@ -1241,6 +1271,29 @@ const FichaTecnica = () => {
     updateDashboardData(updatePayload);
   };
 
+  const handleDuplicateFicha = (ficha) => {
+    const newId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const copy = {
+      ...ficha,
+      id: newId,
+      name: `Cópia de ${ficha.name}`,
+      precoVenda: '',
+      vendasMes: '0',
+      lastUpdated: Date.now()
+    };
+    updateDashboardData({
+      operational: { ...dashboardData.operational, fichas: [...fichas, copy] }
+    });
+  };
+
+  const handleDuplicateInsumo = (insumo) => {
+    const newId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const copy = { ...insumo, id: newId, name: `Cópia de ${insumo.name}` };
+    updateDashboardData({
+      operational: { ...dashboardData.operational, insumos: [...insumos, copy] }
+    });
+  };
+
   const handleDeleteFicha = (id) => {
     const newFichas = fichas.filter(f => String(f.id) !== String(id));
     const newMenuEngineering = (dashboardData.menuEngineering || []).filter(
@@ -1687,13 +1740,13 @@ const FichaTecnica = () => {
               {activeTab === 'insumos' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
                   {insumos.map((item) => (
-                    <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} />
+                    <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} />
                   ))}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {fichas.map((item) => (
-                    <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} basePercent={dashboardData.breakEven?.base?.value || '0'} />
+                    <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} />
                   ))}
                 </div>
               )}
