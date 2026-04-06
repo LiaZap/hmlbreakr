@@ -1132,15 +1132,21 @@ import CategoriesModal from './CategoriesModal';
 // ... (keep Modals and sub-components as is)
 
 // ============ MAIN COMPONENT ============
+const ITEMS_PER_PAGE = 12;
+
 const FichaTecnica = () => {
   const { dashboardData, updateDashboardData } = useDashboard();
   const [activeTab, setActiveTab] = useState('insumos');
   const [modalFicha, setModalFicha] = useState(null);
-  
+
   // Use Context Data with fallback
   const fichas = dashboardData.operational?.fichas || [];
   const insumos = dashboardData.operational?.insumos || [];
-  
+
+  // Pagination
+  const [fichasPage, setFichasPage] = useState(0);
+  const [insumoPage, setInsumoPage] = useState(0);
+
   const [editingInsumo, setEditingInsumo] = useState(null);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
 
@@ -1281,17 +1287,23 @@ const FichaTecnica = () => {
       vendasMes: '0',
       lastUpdated: Date.now()
     };
+    const newFichas = [...fichas, copy];
     updateDashboardData({
-      operational: { ...dashboardData.operational, fichas: [...fichas, copy] }
+      operational: { ...dashboardData.operational, fichas: newFichas }
     });
+    // Jump to last page so the new copy is visible
+    setFichasPage(Math.floor(newFichas.length / ITEMS_PER_PAGE));
   };
 
   const handleDuplicateInsumo = (insumo) => {
     const newId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const copy = { ...insumo, id: newId, name: `Cópia de ${insumo.name}` };
+    const newInsumos = [...insumos, copy];
     updateDashboardData({
-      operational: { ...dashboardData.operational, insumos: [...insumos, copy] }
+      operational: { ...dashboardData.operational, insumos: newInsumos }
     });
+    // Jump to last page so the new copy is visible
+    setInsumoPage(Math.floor(newInsumos.length / ITEMS_PER_PAGE));
   };
 
   const handleDeleteFicha = (id) => {
@@ -1737,19 +1749,71 @@ const FichaTecnica = () => {
 
             {/* Cards Grid with grey background */}
             <div className="bg-[#1B1B1D] mx-4 rounded-[16px] p-4 flex-1">
-              {activeTab === 'insumos' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
-                  {insumos.map((item) => (
-                    <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} />
-                  ))}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {fichas.map((item) => (
-                    <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} />
-                  ))}
-                </div>
-              )}
+              {activeTab === 'insumos' ? (() => {
+                const totalPages = Math.ceil(insumos.length / ITEMS_PER_PAGE);
+                const page = Math.min(insumoPage, Math.max(0, totalPages - 1));
+                const pageItems = insumos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+                return (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+                      {pageItems.map((item) => (
+                        <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} />
+                      ))}
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-[#2A2A2C]">
+                        <button
+                          onClick={() => setInsumoPage(p => Math.max(0, p - 1))}
+                          disabled={page === 0}
+                          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 transition-colors"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                        <span className="text-[12px] text-[#868686]">{page + 1} / {totalPages}</span>
+                        <button
+                          onClick={() => setInsumoPage(p => Math.min(totalPages - 1, p + 1))}
+                          disabled={page === totalPages - 1}
+                          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 transition-colors"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })() : (() => {
+                const totalPages = Math.ceil(fichas.length / ITEMS_PER_PAGE);
+                const page = Math.min(fichasPage, Math.max(0, totalPages - 1));
+                const pageItems = fichas.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+                return (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {pageItems.map((item) => (
+                        <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} />
+                      ))}
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-[#2A2A2C]">
+                        <button
+                          onClick={() => setFichasPage(p => Math.max(0, p - 1))}
+                          disabled={page === 0}
+                          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 transition-colors"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                        <span className="text-[12px] text-[#868686]">{page + 1} / {totalPages}</span>
+                        <button
+                          onClick={() => setFichasPage(p => Math.min(totalPages - 1, p + 1))}
+                          disabled={page === totalPages - 1}
+                          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 transition-colors"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
 
