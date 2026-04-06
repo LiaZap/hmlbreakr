@@ -32,7 +32,7 @@ const convertUnit = (qty, fromUnit, toUnit) => {
 
 
 // ============ CARD: Ficha Técnica ============
-const FichaTecnicaCard = ({ item, onClick, onDuplicate, basePercent }) => {
+const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent }) => {
   const pv = parseSafeNumber(item.precoVenda);
   const cmv = parseSafeNumber(item.custoTotal);
   const baseRaw = parseSafeNumber(basePercent);
@@ -102,6 +102,18 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, basePercent }) => {
         <span className="text-[11px] text-[#868686]">{item.insumos} Insumos</span>
       </div>
       <div className="flex items-center gap-2">
+        {onDelete && (
+          <button
+            onClick={(e) => { e.stopPropagation(); if (window.confirm(`Excluir "${item.name}"?`)) onDelete(item.id); }}
+            className="flex items-center gap-1 text-[11px] text-[#868686] hover:text-[#FF4560] transition-colors"
+            title="Excluir ficha"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Excluir
+          </button>
+        )}
         {onDuplicate && (
           <button
             onClick={(e) => { e.stopPropagation(); onDuplicate(item); }}
@@ -161,7 +173,7 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, basePercent }) => {
 };
 
 // ============ CARD: Insumo ============
-const InsumoCard = ({ item, onClick, onDuplicate }) => (
+const InsumoCard = ({ item, onClick, onDuplicate, onDelete }) => (
   <div
     className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-4 flex flex-col gap-3 cursor-pointer hover:border-[#F5A623]/40 hover:scale-[1.01] transition-all"
     onClick={onClick}
@@ -194,7 +206,19 @@ const InsumoCard = ({ item, onClick, onDuplicate }) => (
         <span className="text-white font-medium">{item.custo}</span>
       </div>
     </div>
-    <div className="flex justify-end">
+    <div className="flex items-center justify-end gap-3">
+      {onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); if (window.confirm(`Excluir "${item.name}"?`)) onDelete(item.id); }}
+          className="flex items-center gap-1 text-[11px] text-[#868686] hover:text-[#FF4560] transition-colors"
+          title="Excluir insumo"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Excluir
+        </button>
+      )}
       {onDuplicate && (
         <button
           onClick={(e) => { e.stopPropagation(); onDuplicate(item); }}
@@ -208,6 +232,15 @@ const InsumoCard = ({ item, onClick, onDuplicate }) => (
           Duplicar
         </button>
       )}
+      <button
+        onClick={(e) => { e.stopPropagation(); onClick && onClick(); }}
+        className="flex items-center gap-1 text-[11px] text-white font-medium hover:text-[#F5A623] transition-colors"
+      >
+        Editar
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+          <path d="M4 12L12 4M12 4H6M12 4V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
     </div>
   </div>
 );
@@ -1132,7 +1165,7 @@ import CategoriesModal from './CategoriesModal';
 // ... (keep Modals and sub-components as is)
 
 // ============ MAIN COMPONENT ============
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 6;
 
 const FichaTecnica = () => {
   const { dashboardData, updateDashboardData } = useDashboard();
@@ -1757,7 +1790,7 @@ const FichaTecnica = () => {
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
                       {pageItems.map((item) => (
-                        <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} />
+                        <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} onDelete={handleDeleteInsumo} />
                       ))}
                     </div>
                     {totalPages > 1 && (
@@ -1789,7 +1822,7 @@ const FichaTecnica = () => {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {pageItems.map((item) => (
-                        <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} />
+                        <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} />
                       ))}
                     </div>
                     {totalPages > 1 && (
