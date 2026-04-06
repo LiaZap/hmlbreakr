@@ -482,7 +482,19 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const [searchInsumo, setSearchInsumo] = useState('');
   const [addedInsumos, setAddedInsumos] = useState(() => {
     if (editingFicha && editingFicha.insumos > 0) {
-      return editingFicha.ingredients || [];
+      const currentInsumos = dashboardData.operational?.insumos || [];
+      // Enrich ingredients with grossQty/defaultQty from current insumos list
+      // (older saved fichas may not have grossQty stored on the ingredient)
+      return (editingFicha.ingredients || []).map(ing => {
+        if (ing.grossQty || ing.defaultQty) return ing;
+        const master = currentInsumos.find(s => String(s.id) === String(ing.id));
+        if (!master) return ing;
+        return {
+          ...ing,
+          grossQty: master.grossQty || master.defaultQty || master.qty,
+          defaultQty: master.defaultQty || master.qty,
+        };
+      });
     }
     return [];
   });
