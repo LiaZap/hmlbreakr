@@ -499,13 +499,17 @@ export const DashboardProvider = ({ children }) => {
     const fixedCostPercentage = currentRevenue > 0 ? (totalFixedCosts / currentRevenue) * 100 : 0;
     const cmvPercentageDisplay = cmvPercentage * 100;
 
-    // CMV for MoneyOnTable: prefer menuEngineering-based, fallback to average from fichas with price
+    // CMV effective: mirrors exactly what cmvTeorico panel shows
+    // 1. If fichas have precoVenda → use fichas avg (same as panel)
+    // 2. Else if menuEngineering has sales data → use cmvPercentageDisplay (same as panel fallback)
+    // 3. Else → 0
     const allFichasForCmv = dashboardData.operational?.fichas || [];
     const fichasComPreco = allFichasForCmv.filter(f => parseCurrency(f.precoVenda) > 0 && parseCurrency(f.custoTotal) > 0);
     const cmvFromFichas = fichasComPreco.length > 0
       ? (fichasComPreco.reduce((sum, f) => sum + (parseCurrency(f.custoTotal) / parseCurrency(f.precoVenda)), 0) / fichasComPreco.length) * 100
       : 0;
-    const cmvEffective = Math.max(cmvPercentageDisplay, cmvFromFichas);
+    // Mirror cmvTeorico: fichas take priority, then menuEngineering, then 0
+    const cmvEffective = fichasComPreco.length > 0 ? cmvFromFichas : (hasCmvData ? cmvPercentageDisplay : 0);
 
     // BASE = %CF + %Impostos + %Cartão/Voucher (+ Royalties if franchise)
     // Marketplace commissions weighted by sales_percentage
