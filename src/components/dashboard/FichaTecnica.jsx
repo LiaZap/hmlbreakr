@@ -494,13 +494,15 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
     setAddedInsumos(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
   };
 
-  // Calculate insumo cost with unit conversion
-  // price/custo = price PER UNIT (e.g., R$1.90/un, R$33.00/kg)
-  // Step 1: convert usage qty to purchase units: 100gr → 0.1kg
-  // Step 2: cost = 0.1kg × R$33/kg = R$3.30
-  // Example: pão R$1.90/un, usage 1un → 1 × R$1.90 = R$1.90
+  // Calculate ingredient cost:
+  // price = total cost for the whole package (e.g., R$10 for 100gr, R$33 for 1kg)
+  // pricePerUnit = price / packageQty  (e.g., R$10/100 = R$0.10/gr)
+  // cost = usageInPurchaseUnit × pricePerUnit
   const calcInsumoCost = (i) => {
-    const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
+    const priceForPackage = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
+    // grossQty is the package size (e.g., 100 for "100gr @ R$10"). Dividing gives price-per-unit.
+    const packageQty = parseSafeNumber(i.grossQty || i.defaultQty) || 1;
+    const pricePerUnit = priceForPackage / packageQty;
     const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
     const usageQty = parseSafeNumber(i.qty);
     const usageUnit = i.usageUnit || i.unit || 'gr';
@@ -1251,12 +1253,19 @@ const FichaTecnica = () => {
 
         const newIngredients = ficha.ingredients.map(ing =>
           String(ing.id) === String(updatedInsumo.id)
-            ? { ...ing, price: updatedInsumo.price, custo: updatedInsumo.custo }
+            ? { ...ing,
+                price: updatedInsumo.price,
+                custo: updatedInsumo.custo,
+                grossQty: updatedInsumo.grossQty || updatedInsumo.defaultQty || ing.grossQty,
+                defaultQty: updatedInsumo.defaultQty || ing.defaultQty
+              }
             : ing
         );
 
         const custoInsumos = newIngredients.reduce((sum, i) => {
-          const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
+          const priceForPackage = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
+          const packageQty = parseSafeNumber(i.grossQty || i.defaultQty) || 1;
+          const pricePerUnit = priceForPackage / packageQty;
           const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
           const usageQty = parseSafeNumber(i.qty);
           const usageUnit = i.usageUnit || i.unit || 'gr';
