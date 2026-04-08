@@ -837,15 +837,13 @@ export const DashboardProvider = ({ children }) => {
                     parseCurrency(formData?.marketing_structure?.ads_budget || 0) -
                     (parseCurrency(formData?.marketing_structure?.gifts_cost || 0) * (parseFloat(formData?.marketing_structure?.gifts_qty) || 0));
 
-                // Fixed costs % over average annual revenue
-                const activeMonthsCount = revenueHistory.filter(v => v > 0).length;
-                const avgMonthlyRev = activeMonthsCount > 0 ? totalAnnualRevenue / activeMonthsCount : 0;
-                const fixedCostPctAnnual = avgMonthlyRev > 0 ? Math.round((totalFixedCosts / avgMonthlyRev) * 100) + "%" : "0%";
+                // Fixed costs % — same revenue base as the main percentage
+                const fixedCostPct = currentRevenue > 0 ? Math.round((totalFixedCosts / currentRevenue) * 100) + "%" : "0%";
 
                 return {
                     total: formatMoney(totalCosts),
                     percentage: currentRevenue > 0 ? Math.round((totalCosts / currentRevenue) * 100) + "%" : "0%",
-                    fixedCostPercentage: fixedCostPctAnnual,
+                    fixedCostPercentage: fixedCostPct,
                     breakdown: [
                         { label: 'Pessoal + Sócios', value: `R$ ${formatMoney(personnelCosts)}` },
                         { label: 'Infraestrutura', value: `R$ ${formatMoney(Math.max(0, infraCosts))}` },

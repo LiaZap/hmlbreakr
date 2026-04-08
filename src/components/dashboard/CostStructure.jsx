@@ -10,7 +10,7 @@ const CostStructure = ({ data }) => {
             Estrutura de custos
           </h3>
           <p className="font-normal text-[11px] text-[#868686]">
-            Custos fixos e variáveis do período
+            % do faturamento do período
           </p>
         </div>
         <div className="shrink-0">
@@ -30,8 +30,8 @@ const CostStructure = ({ data }) => {
           <span className="font-semibold text-[20px] md:text-[24px] text-white tracking-tight">{data.total}</span>
         </div>
         {data.fixedCostPercentage && (
-          <div className="shrink-0 flex items-center justify-center bg-[#FFC100]/15 rounded-md px-2.5 h-[24px]">
-            <span className="text-[#FFC100] text-[10px] font-bold">CF: {data.fixedCostPercentage}</span>
+          <div className="shrink-0 flex items-center justify-center bg-[#FFC100]/15 rounded-md px-2.5 h-[24px]" title="Custos Fixos sobre o faturamento do período">
+            <span className="text-[#FFC100] text-[10px] font-bold">Fixos: {data.fixedCostPercentage}</span>
           </div>
         )}
       </div>
