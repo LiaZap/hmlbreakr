@@ -711,7 +711,7 @@ router.post('/menu/upload', upload.single('file'), (req, res) => {
 // ========================
 // AGENCY ROUTES
 // ========================
-const { createClientCheckout, createAgencyCheckout, createPortalSession, stripe } = require('./services/stripeService');
+const { createClientCheckout, createAgencyCheckout, createPortalSession, getStripe } = require('./services/stripeService');
 
 // Agency Signup
 router.post('/agency/signup', async (req, res) => {
@@ -919,7 +919,7 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   let event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    event = getStripe().webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err) {
     return res.status(400).json({ error: `Webhook error: ${err.message}` });
   }
