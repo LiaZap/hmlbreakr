@@ -253,7 +253,7 @@ const AgencyPanel = ({ agencyHash, onLogout }) => {
     if (!agency?.stripeCustomerId) return;
     setPortalLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/stripe/portal`, {
+      const res = await fetch(`${API_URL}/api/asaas/portal`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stripeCustomerId: agency.stripeCustomerId,
@@ -362,7 +362,7 @@ const AgencyPanel = ({ agencyHash, onLogout }) => {
               <button
                 onClick={async () => {
                   try {
-                    const res = await fetch(`${API_URL}/api/stripe/agency-checkout`, {
+                    const res = await fetch(`${API_URL}/api/asaas/agency-checkout`, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ agencyHash: agency.hash, email: agency.email, plan: agency.plan })
                     });

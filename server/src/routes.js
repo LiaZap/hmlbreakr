@@ -711,7 +711,7 @@ router.post('/menu/upload', upload.single('file'), (req, res) => {
 // ========================
 // AGENCY ROUTES
 // ========================
-const { createClientCheckout, createAgencyCheckout, createPortalSession, getStripe } = require('./services/stripeService');
+const { createClientCheckout, createAgencyCheckout, getPortalUrl, validateWebhook } = require('./services/asaasService');
 
 // Agency Signup
 router.post('/agency/signup', async (req, res) => {
@@ -861,94 +861,97 @@ router.delete('/agency/:hash/clients/:clientId', async (req, res) => {
 // STRIPE ROUTES
 // ========================
 
-// Create checkout for client subscription
-router.post('/stripe/client-checkout', async (req, res) => {
+// Create checkout for client subscription (Asaas)
+router.post('/asaas/client-checkout', async (req, res) => {
   try {
     const { hash } = req.body;
     if (!hash) return res.status(400).json({ error: 'Hash é obrigatório' });
     const client = await prisma.client.findUnique({ where: { hash } });
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
-    const session = await createClientCheckout({ clientHash: hash, email: client.email || '', name: client.name });
-    res.json({ url: session.url });
+    const result = await createClientCheckout({ clientHash: hash, email: client.email || '', name: client.name });
+    res.json({ url: result.url });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro ao criar checkout' });
+    res.status(500).json({ error: 'Erro ao criar link de pagamento' });
   }
 });
 
-// Create checkout for agency subscription
-router.post('/stripe/agency-checkout', async (req, res) => {
+// Create checkout for agency subscription (Asaas)
+router.post('/asaas/agency-checkout', async (req, res) => {
   try {
     const { hash, plan } = req.body;
     if (!hash) return res.status(400).json({ error: 'Hash é obrigatório' });
     const agency = await prisma.agency.findUnique({ where: { hash } });
     if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
-    const session = await createAgencyCheckout({ agencyHash: hash, email: agency.email, plan: plan || agency.plan });
-    res.json({ url: session.url });
+    const result = await createAgencyCheckout({ agencyHash: hash, email: agency.email, plan: plan || agency.plan, name: agency.name });
+    res.json({ url: result.url });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Erro ao criar checkout' });
+    res.status(500).json({ error: 'Erro ao criar link de pagamento' });
   }
 });
 
-// Customer portal (manage subscription)
-router.post('/stripe/portal', async (req, res) => {
+// Portal de assinatura — Asaas não tem portal hosted, retorna null por ora
+router.post('/asaas/portal', async (req, res) => {
   try {
-    const { hash, type } = req.body; // type: 'client' | 'agency'
-    let stripeCustomerId;
+    const { hash, type } = req.body;
+    let asaasCustomerId;
     if (type === 'agency') {
       const agency = await prisma.agency.findUnique({ where: { hash } });
-      stripeCustomerId = agency?.stripeCustomerId;
+      asaasCustomerId = agency?.stripeCustomerId; // reusing field for Asaas customer id
     } else {
       const client = await prisma.client.findUnique({ where: { hash } });
-      stripeCustomerId = client?.stripeCustomerId;
+      asaasCustomerId = client?.stripeCustomerId;
     }
-    if (!stripeCustomerId) return res.status(400).json({ error: 'Nenhuma assinatura ativa encontrada' });
-    const APP_URL = process.env.APP_URL || 'https://app.breakr.com.br';
-    const session = await createPortalSession({ stripeCustomerId, returnUrl: type === 'agency' ? `${APP_URL}?agency=${hash}` : `${APP_URL}?hash=${hash}` });
-    res.json({ url: session.url });
+    const url = asaasCustomerId ? await getPortalUrl({ asaasCustomerId }) : null;
+    res.json({ url });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erro ao abrir portal' });
   }
 });
 
-// Stripe Webhook
-router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  let event;
-  try {
-    event = getStripe().webhooks.constructEvent(req.body, sig, webhookSecret);
-  } catch (err) {
-    return res.status(400).json({ error: `Webhook error: ${err.message}` });
+// Asaas Webhook
+router.post('/asaas/webhook', express.json(), async (req, res) => {
+  if (!validateWebhook(req)) {
+    return res.status(401).json({ error: 'Token inválido' });
   }
 
   try {
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const { type, clientHash, agencyHash, plan } = session.metadata || {};
-      if (type === 'client' && clientHash) {
+    const { event, payment } = req.body;
+
+    // payment.externalReference = "client:HASH" or "agency:HASH:plan"
+    const ref = payment?.externalReference || '';
+
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+      if (ref.startsWith('client:')) {
+        const clientHash = ref.split(':')[1];
         await prisma.client.update({
           where: { hash: clientHash },
-          data: { active: true, stripeCustomerId: session.customer, stripeSubscriptionId: session.subscription }
+          data: { active: true, stripeCustomerId: payment.customer }
         });
-      } else if (type === 'agency' && agencyHash) {
+      } else if (ref.startsWith('agency:')) {
+        const parts = ref.split(':');
+        const agencyHash = parts[1];
+        const plan = parts[2] || 'basic';
         await prisma.agency.update({
           where: { hash: agencyHash },
-          data: { active: true, plan: plan || 'basic', stripeCustomerId: session.customer, stripeSubscriptionId: session.subscription }
+          data: { active: true, plan, stripeCustomerId: payment.customer }
         });
       }
-    } else if (event.type === 'customer.subscription.deleted') {
-      const sub = event.data.object;
-      const clientByStripe = await prisma.client.findFirst({ where: { stripeSubscriptionId: sub.id } });
-      if (clientByStripe) await prisma.client.update({ where: { id: clientByStripe.id }, data: { active: false } });
-      const agencyByStripe = await prisma.agency.findFirst({ where: { stripeSubscriptionId: sub.id } });
-      if (agencyByStripe) await prisma.agency.update({ where: { id: agencyByStripe.id }, data: { active: false } });
+    } else if (event === 'PAYMENT_OVERDUE' || event === 'PAYMENT_DELETED') {
+      if (ref.startsWith('client:')) {
+        const clientHash = ref.split(':')[1];
+        await prisma.client.update({ where: { hash: clientHash }, data: { active: false } });
+      } else if (ref.startsWith('agency:')) {
+        const agencyHash = ref.split(':')[1];
+        await prisma.agency.update({ where: { hash: agencyHash }, data: { active: false } });
+      }
     }
+
     res.json({ received: true });
   } catch (error) {
-    console.error('Webhook handler error:', error);
+    console.error('Asaas webhook error:', error);
     res.status(500).json({ error: 'Webhook handler failed' });
   }
 });
