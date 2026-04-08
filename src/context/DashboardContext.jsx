@@ -1,6 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useState, useContext, useRef, useEffect } from 'react';
 
+const API_URL = import.meta.env.VITE_API_URL || '';
+
 export const DashboardContext = createContext();
 
 export const useDashboard = () => useContext(DashboardContext);
@@ -50,7 +52,7 @@ export const DashboardProvider = ({ children }) => {
 
     if (hash) {
       // Fetch from Backend API
-      fetch(`/api/client/${hash}`)
+      fetch(`${API_URL}/api/client/${hash}`)
         .then(res => {
           if (!res.ok) throw new Error('Client not found');
           return res.json();
@@ -131,7 +133,7 @@ export const DashboardProvider = ({ children }) => {
              const params = new URLSearchParams(window.location.search);
              const hash = params.get('hash');
              if (hash) {
-                 fetch(`/api/client/${hash}/sync`, {
+                 fetch(`${API_URL}/api/client/${hash}/sync`, {
                      method: 'POST',
                      headers: { 'Content-Type': 'application/json' },
                      body: JSON.stringify(updated)
@@ -926,7 +928,7 @@ export const DashboardProvider = ({ children }) => {
         const params = new URLSearchParams(window.location.search);
         const hash = params.get('hash');
         if (hash) {
-            fetch(`/api/client/${hash}/sync`, {
+            fetch(`${API_URL}/api/client/${hash}/sync`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newDashboardData)
