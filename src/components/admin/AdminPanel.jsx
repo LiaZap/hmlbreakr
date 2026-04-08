@@ -366,7 +366,7 @@ const AdminPanel = () => {
                   {/* Actions */}
                   <div className="flex items-center gap-1 pt-3 border-t border-[#2A2A2C]">
                     <button
-                      onClick={() => window.open(`${window.location.origin}/?hash=${client.hash}`, '_blank')}
+                      onClick={() => window.open(`${window.location.origin}/?hash=${client.hash}`, '_blank', 'noopener,noreferrer')}
                       className="flex-1 flex items-center justify-center gap-1 text-[11px] text-white font-medium py-2 rounded-[8px] bg-[#252527] hover:bg-[#333] transition-colors whitespace-nowrap"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
