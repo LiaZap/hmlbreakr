@@ -1,23 +1,26 @@
 import React, { useState } from 'react';
 
 const FinanceOverview = ({ data, onSelectMonth }) => {
-  const [selectedMonth, setSelectedMonth] = useState(null);
-  const [hoveredMonth, setHoveredMonth] = useState(null);
+  const [selectedKey, setSelectedKey] = useState(null); // MM/YYYY key or legacy monthIdx
+  const [hoveredKey, setHoveredKey] = useState(null);
 
   const history = data.history || [];
-  
-  // Helper to format currency
+  const timeline = data.timeline || [];
+  const useTimeline = timeline.length > 0;
+
   const formatVal = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  // Determine what to show
-  // If hovering, show hovered data (optional, maybe just tooltip). 
-  // User asked: "passar o mouse saber ... ou clicar saber".
-  // Fallback: if data.total logic is complex, just use data.total/data.month as default unless selectedMonth is set.
-
-  const displayValue = selectedMonth !== null ? formatVal(history[selectedMonth]) : data.total;
-  
   const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-  const displayMonth = selectedMonth !== null ? monthNames[selectedMonth] : data.month;
+
+  let displayValue, displayMonth;
+  if (useTimeline) {
+    const entry = timeline.find(e => e.key === selectedKey);
+    displayValue = entry ? formatVal(entry.value) : data.total;
+    displayMonth = entry ? entry.label : data.month;
+  } else {
+    displayValue = selectedKey !== null ? formatVal(history[selectedKey]) : data.total;
+    displayMonth = selectedKey !== null ? monthNames[selectedKey] : data.month;
+  }
 
   return (
     <div className="flex flex-col w-full bg-[#101010] rounded-[16px]">
@@ -48,65 +51,88 @@ const FinanceOverview = ({ data, onSelectMonth }) => {
         </div>
       )}
 
-      {/* Bar Chart - Only months with data + current month */}
+      {/* Bar Chart */}
       <div className="h-[60px] flex items-end justify-between gap-[3px] w-full mb-4 px-1 relative">
-        {(() => {
+        {useTimeline ? (() => {
+            // Timeline mode: oldest → newest, left → right
+            const maxVal = Math.max(...timeline.map(e => e.value), 1);
+            const lastKey = timeline[timeline.length - 1]?.key;
+            return timeline.map((entry, idx) => {
+              const isMostRecent = entry.key === lastKey;
+              const isSelected = selectedKey === entry.key;
+              const hasData = entry.value > 0;
+              const hasSelection = selectedKey !== null;
+
+              let bgColor = 'bg-[#333]';
+              if (isSelected && hasData) bgColor = 'bg-[#FF9406]';
+              else if (!hasSelection && isMostRecent && hasData) bgColor = 'bg-[#FF9406]';
+              else if (hasData) bgColor = 'bg-[#E1E1E1]';
+
+              let opacity = 0.2;
+              if (isSelected) opacity = 1;
+              else if (!hasSelection && isMostRecent) opacity = 1;
+              else if (hoveredKey === entry.key) opacity = 1;
+              else if (hasData) opacity = 0.4;
+
+              return (
+                <div
+                  key={entry.key}
+                  className="group relative flex flex-col items-center justify-end h-full flex-1"
+                  onMouseEnter={() => setHoveredKey(entry.key)}
+                  onMouseLeave={() => setHoveredKey(null)}
+                  onClick={() => { setSelectedKey(entry.key); if (onSelectMonth) onSelectMonth(entry.monthIdx); }}
+                >
+                  <AnimateTooltip show={hoveredKey === entry.key} value={entry.value} label={entry.label} />
+                  <div
+                    className={`w-full max-w-[12px] md:max-w-[16px] rounded-[3px] transition-all duration-300 cursor-pointer ${bgColor} hover:bg-[#FF9406]`}
+                    style={{ height: entry.value > 0 ? `${Math.max((entry.value / maxVal) * 100, 15)}%` : '4px', opacity }}
+                  />
+                  <span className="text-[7px] text-[#555] mt-1 leading-tight text-center">{entry.label}</span>
+                </div>
+              );
+            });
+        })() : (() => {
+            // Legacy fallback: 12 months, oldest → newest
             const monthsShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const currentMonthIdx = new Date().getMonth();
-
-            // Show 12 months in reverse: current month first, then backwards wrapping to previous year
             const months12 = [];
-            for (let m = 0; m < 12; m++) {
+            for (let m = 11; m >= 0; m--) {
               const idx = (currentMonthIdx - m + 12) % 12;
               months12.push({ val: history[idx] || 0, i: idx });
             }
             const maxVal = Math.max(...months12.map(m => m.val), 1);
-
             return months12.map(({ val, i }) => {
               const isCurrent = i === currentMonthIdx;
-              const isSelected = selectedMonth === i;
+              const isSelected = selectedKey === i;
               const hasData = val > 0;
-
-              const hasSelection = selectedMonth !== null;
+              const hasSelection = selectedKey !== null;
               let bgColor = 'bg-[#333]';
               if (isSelected && hasData) bgColor = 'bg-[#FF9406]';
               else if (!hasSelection && isCurrent && hasData) bgColor = 'bg-[#FF9406]';
               else if (hasData) bgColor = 'bg-[#E1E1E1]';
-
-              let opacity = 0.3;
+              let opacity = 0.2;
               if (!hasData) opacity = 0.2;
               else if (isSelected) opacity = 1;
               else if (!hasSelection && isCurrent) opacity = 1;
-              else if (hoveredMonth === i) opacity = 1;
+              else if (hoveredKey === i) opacity = 1;
               else opacity = 0.4;
-
               return (
-              <div
-                key={i}
-                className="group relative flex flex-col items-center justify-end h-full flex-1"
-                onMouseEnter={() => setHoveredMonth(i)}
-                onMouseLeave={() => setHoveredMonth(null)}
-                onClick={() => {
-                  setSelectedMonth(i);
-                  if (onSelectMonth) onSelectMonth(i);
-                }}
-              >
-                 <AnimateTooltip
-                    show={hoveredMonth === i}
-                    value={val}
-                    label={monthsShort[i]}
-                 />
-
                 <div
-                  className={`w-full max-w-[12px] md:max-w-[16px] rounded-[3px] transition-all duration-300 cursor-pointer ${bgColor} hover:bg-[#FF9406]`}
-                  style={{
-                      height: val > 0 ? `${Math.max((val / maxVal) * 100, 15)}%` : '4px',
-                      opacity: opacity
-                  }}
-                />
-                <span className="text-[7px] text-[#555] mt-1">{monthsShort[i]}</span>
-              </div>
-            )});
+                  key={i}
+                  className="group relative flex flex-col items-center justify-end h-full flex-1"
+                  onMouseEnter={() => setHoveredKey(i)}
+                  onMouseLeave={() => setHoveredKey(null)}
+                  onClick={() => { setSelectedKey(i); if (onSelectMonth) onSelectMonth(i); }}
+                >
+                  <AnimateTooltip show={hoveredKey === i} value={val} label={monthsShort[i]} />
+                  <div
+                    className={`w-full max-w-[12px] md:max-w-[16px] rounded-[3px] transition-all duration-300 cursor-pointer ${bgColor} hover:bg-[#FF9406]`}
+                    style={{ height: val > 0 ? `${Math.max((val / maxVal) * 100, 15)}%` : '4px', opacity }}
+                  />
+                  <span className="text-[7px] text-[#555] mt-1">{monthsShort[i]}</span>
+                </div>
+              );
+            });
         })()}
       </div>
 

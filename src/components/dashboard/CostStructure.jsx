@@ -42,7 +42,7 @@ const CostStructure = ({ data }) => {
       </div>
 
       {/* Cost breakdown table */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[10px]">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[10px] mb-4">
         {data.breakdown.map((item, idx) => (
           <div key={idx} className="flex justify-between">
             <span className="text-[#7E7E7E]">{item.label}</span>
@@ -50,6 +50,37 @@ const CostStructure = ({ data }) => {
           </div>
         ))}
       </div>
+
+      {/* Provisões */}
+      {data.reserves?.hasData && (
+        <div className="border border-[#2A2A2C] rounded-[10px] p-3 bg-[#161616]">
+          <div className="flex items-center gap-1.5 mb-2">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="#F5A623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span className="text-[10px] font-semibold text-[#F5A623]">Provisões a reservar / mês</span>
+          </div>
+          <div className="flex flex-col gap-1.5 text-[10px]">
+            {parseFloat(data.reserves.employees.replace(/\./g,'').replace(',','.')) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-[#7E7E7E]">Reserva trabalhista (CLT)</span>
+                <span className="text-[#CACACA] font-medium">R$ {data.reserves.employees}</span>
+              </div>
+            )}
+            {parseFloat(data.reserves.depreciation.replace(/\./g,'').replace(',','.')) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-[#7E7E7E]">Depreciação equipamentos</span>
+                <span className="text-[#CACACA] font-medium">R$ {data.reserves.depreciation}</span>
+              </div>
+            )}
+            <div className="w-full h-px bg-[#2A2A2C] my-0.5" />
+            <div className="flex justify-between">
+              <span className="text-[#F5A623] font-semibold">Total provisões</span>
+              <span className="text-[#F5A623] font-semibold">R$ {data.reserves.total}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

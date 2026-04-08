@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useState, useContext, useRef, useEffect } from 'react';
 
-const DashboardContext = createContext();
+export const DashboardContext = createContext();
 
 export const useDashboard = () => useContext(DashboardContext);
 
@@ -207,6 +207,40 @@ export const DashboardProvider = ({ children }) => {
 
     const totalAnnualRevenue = revenueHistory.reduce((acc, val) => acc + val, 0);
 
+    // Build chronological timeline for chart display (preserves year info)
+    const monthNamesShortPT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    let revenueTimeline = [];
+    if (formData.revenue_history && Array.isArray(formData.revenue_history)) {
+        const parsed = formData.revenue_history
+            .filter(e => e.month && e.amount)
+            .map(e => {
+                const parts = e.month.split('/');
+                if (parts.length < 2) return null;
+                const mm = parseInt(parts[0], 10);
+                const yyyy = parseInt(parts[1], 10);
+                if (isNaN(mm) || isNaN(yyyy) || mm < 1 || mm > 12) return null;
+                const val = parseCurrency(e.amount);
+                // Apply daily overlay for this month (current year only)
+                const isCurrentYearMonth = yyyy === nowForRevenue.getFullYear() && mm - 1 === currentMonthIdx;
+                const finalVal = isCurrentYearMonth && dailyByMonth[mm - 1] > 0
+                    ? dailyByMonth[mm - 1]
+                    : val;
+                return {
+                    key: e.month,
+                    label: `${monthNamesShortPT[mm-1]}/${String(yyyy).slice(-2)}`,
+                    value: finalVal,
+                    monthIdx: mm - 1,
+                    year: yyyy
+                };
+            })
+            .filter(Boolean);
+        // Sort oldest → newest
+        parsed.sort((a, b) => a.year !== b.year ? a.year - b.year : a.monthIdx - b.monthIdx);
+        // Deduplicate by key
+        const seen = new Set();
+        revenueTimeline = parsed.filter(e => { if (seen.has(e.key)) return false; seen.add(e.key); return true; });
+    }
+
     // For financial calcs: past months with daily data use the daily total (complete month).
     // Current month with daily data is partial, so use onboarding value for calcs.
     const revenueHistoryForCalc = [...revenueHistory];
@@ -307,11 +341,15 @@ export const DashboardProvider = ({ children }) => {
     }
 
     // Equipment (Depreciation — fixed 5-year lifespan = 60 months)
+    let depreciationTotal = 0;
     if (formData.equipment && Array.isArray(formData.equipment)) {
         formData.equipment.forEach(eq => {
             const val = parseCurrency(eq.value);
             const years = parseFloat(eq.lifespan) || 5; // Fixed at 5 years
-            if (years > 0) fixedCosts += val / (years * 12);
+            if (years > 0) {
+                depreciationTotal += val / (years * 12);
+                fixedCosts += val / (years * 12);
+            }
         });
     }
 
@@ -322,7 +360,8 @@ export const DashboardProvider = ({ children }) => {
 
     // Personnel Costs
     let personnelCosts = 0;
-    
+    let employeeReserves = 0; // CLT provisions: 13°, férias, FGTS, multa, aviso prévio
+
     if (formData.partners && Array.isArray(formData.partners)) {
         formData.partners.forEach(p => {
              const pl = parseCurrency(p.pro_labore);
@@ -341,12 +380,12 @@ export const DashboardProvider = ({ children }) => {
                  const fgtsProv = (prov13 + provFerias) * 0.08;
                  const multa = (fgts + fgtsProv) * 0.50;
                  const aviso = base / 12;
-                 // Férias/13o/FGTS sobre Aviso Prévio (provisioning rights accrued during notice period)
                  const aviso13 = aviso / 12;
                  const avisoFerias = (aviso + aviso / 3) / 12;
                  const avisoFgts = (aviso13 + avisoFerias) * 0.08;
-                 // Prêmio NÃO entra na fórmula CLT, soma direto ao total
-                 personnelCosts += base + fgts + prov13 + provFerias + fgtsProv + multa + aviso + aviso13 + avisoFerias + avisoFgts + premio;
+                 const reserves = fgts + prov13 + provFerias + fgtsProv + multa + aviso + aviso13 + avisoFerias + avisoFgts;
+                 employeeReserves += reserves;
+                 personnelCosts += base + reserves + premio;
              } else {
                  personnelCosts += base + premio;
              }
@@ -399,18 +438,36 @@ export const DashboardProvider = ({ children }) => {
     }
 
     // Card machine fees (Débito + Crédito) — variable cost
+    // Reference (ideal) market rates in Brazil
+    const IDEAL_DEBIT_RATE = 1.5;  // %
+    const IDEAL_CREDIT_RATE = 2.5; // %
     let cardFeePercentage = 0;
+    const cardComparisonItems = [];
     if (formData.fees_cards && Array.isArray(formData.fees_cards)) {
         let totalRates = 0;
         let count = 0;
         formData.fees_cards.forEach(card => {
             const debit = parseFloat(String(card.debit_rate || '0').replace(',', '.').replace('%', '')) || 0;
             const credit = parseFloat(String(card.credit_rate || '0').replace(',', '.').replace('%', '')) || 0;
-            totalRates += (debit + credit) / 2; // average of debit+credit per operator
+            totalRates += (debit + credit) / 2;
             count++;
+            const debitExcess = Math.max(0, debit - IDEAL_DEBIT_RATE);
+            const creditExcess = Math.max(0, credit - IDEAL_CREDIT_RATE);
+            const avgExcess = (debitExcess + creditExcess) / 2;
+            cardComparisonItems.push({
+                name: card.provider || card.name || `Máquina ${cardComparisonItems.length + 1}`,
+                debit, credit,
+                debitIdeal: IDEAL_DEBIT_RATE,
+                creditIdeal: IDEAL_CREDIT_RATE,
+                avgExcessPct: avgExcess,
+                aboveIdeal: debit > IDEAL_DEBIT_RATE || credit > IDEAL_CREDIT_RATE,
+            });
         });
         if (count > 0) cardFeePercentage = totalRates / count / 100;
     }
+    // Total monthly excess cost if card fees are above ideal
+    const idealCardFeePercentage = (IDEAL_DEBIT_RATE + IDEAL_CREDIT_RATE) / 2 / 100;
+    const cardFeeExcessCost = currentRevenue * Math.max(0, cardFeePercentage - idealCardFeePercentage);
 
     // Marketplace commissions (iFood, Rappi, etc.) — variable cost
     let marketplaceCommissionCost = 0;
@@ -538,22 +595,48 @@ export const DashboardProvider = ({ children }) => {
             mpAboveThreshold.push(mp);
         }
     });
+    // mot_actions: previously acknowledged excess values { [key]: { rawValue, date } }
+    const motActions = formData.mot_actions || {};
+
+    const calcRecovered = (key, currentExcess) => {
+        const stored = motActions[key];
+        if (!stored || stored.rawValue <= currentExcess) return 0;
+        return stored.rawValue - currentExcess;
+    };
+
     if (mpAboveThreshold.length > 0) {
         moneyOnTableTotal += mpExcessTotal;
         const avgPct = mpAboveThreshold.reduce((s, m) => s + m.salesPct, 0) / mpAboveThreshold.length;
-        const mpNames = mpAboveThreshold.map(m => m.name).join(', ');
-        moneyOnTableItems.push({ label: `Marketplaces (${avgPct.toFixed(0)}%)`, value: formatMoney(mpExcessTotal), pct: `${(avgPct - 23).toFixed(1)}% acima`, color: '#FF4560', pctOfRevenue: avgPct });
+        moneyOnTableItems.push({ key: 'marketplace', label: `Marketplaces (${avgPct.toFixed(0)}%)`, value: formatMoney(mpExcessTotal), rawValue: mpExcessTotal, pct: `${(avgPct - 23).toFixed(1)}% acima`, color: '#FF4560', pctOfRevenue: avgPct, recovered: calcRecovered('marketplace', mpExcessTotal) });
     }
     if (fixedCostPercentage > 33 && currentRevenue > 0) {
         const excess = ((fixedCostPercentage - 33) / 100) * currentRevenue;
         moneyOnTableTotal += excess;
-        moneyOnTableItems.push({ label: `Custo Fixo (${fixedCostPercentage.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(fixedCostPercentage - 33).toFixed(1)}% acima`, color: '#FF9406', pctOfRevenue: fixedCostPercentage });
+        moneyOnTableItems.push({ key: 'fixedCosts', label: `Custo Fixo (${fixedCostPercentage.toFixed(0)}%)`, value: formatMoney(excess), rawValue: excess, pct: `${(fixedCostPercentage - 33).toFixed(1)}% acima`, color: '#FF9406', pctOfRevenue: fixedCostPercentage, recovered: calcRecovered('fixedCosts', excess) });
     }
     if (cmvEffective > 30 && currentRevenue > 0) {
         const excess = ((cmvEffective - 30) / 100) * currentRevenue;
         moneyOnTableTotal += excess;
-        moneyOnTableItems.push({ label: `CMV (${cmvEffective.toFixed(0)}%)`, value: formatMoney(excess), pct: `${(cmvEffective - 30).toFixed(1)}% acima`, color: '#FDD789', pctOfRevenue: cmvEffective });
+        moneyOnTableItems.push({ key: 'cmv', label: `CMV (${cmvEffective.toFixed(0)}%)`, value: formatMoney(excess), rawValue: excess, pct: `${(cmvEffective - 30).toFixed(1)}% acima`, color: '#FDD789', pctOfRevenue: cmvEffective, recovered: calcRecovered('cmv', excess) });
     }
+    if (cardFeeExcessCost > 0 && currentRevenue > 0) {
+        moneyOnTableTotal += cardFeeExcessCost;
+        const currentCardPct = (cardFeePercentage * 100).toFixed(1);
+        moneyOnTableItems.push({ key: 'cardFee', label: `Taxa Cartão (${currentCardPct}%)`, value: formatMoney(cardFeeExcessCost), rawValue: cardFeeExcessCost, pct: `${((cardFeePercentage * 100) - 2.0).toFixed(1)}% acima`, color: '#A78BFA', pctOfRevenue: cardFeePercentage * 100, recovered: calcRecovered('cardFee', cardFeeExcessCost) });
+    }
+
+    // Items that were previously above threshold but are now resolved (threshold crossed in right direction)
+    const resolvedKeys = ['marketplace', 'fixedCosts', 'cmv', 'cardFee'];
+    const activeKeys = new Set(moneyOnTableItems.map(i => i.key));
+    let resolvedRecoveredTotal = 0;
+    resolvedKeys.forEach(key => {
+        const stored = motActions[key];
+        if (stored && stored.rawValue > 0 && !activeKeys.has(key)) {
+            resolvedRecoveredTotal += stored.rawValue;
+        }
+    });
+
+    const totalRecovered = moneyOnTableItems.reduce((s, i) => s + (i.recovered || 0), 0) + resolvedRecoveredTotal;
 
     // Break Even Point (Ponto de Equilíbrio)
     // BEP = Fixed Costs / Marge Contribution Percentage
@@ -573,7 +656,8 @@ export const DashboardProvider = ({ children }) => {
         revenue: {
             total: formatMoney(currentRevenue),
             month: currentMonthStr || "Mês Atual",
-            history: revenueHistory, 
+            history: revenueHistory,
+            timeline: revenueTimeline,
             annualTotal: formatMoney(totalAnnualRevenue),
             status: profit >= 0 ? "Positivo" : "Alerta",
             change: (() => {
@@ -673,17 +757,36 @@ export const DashboardProvider = ({ children }) => {
                 hasDailyData: hasDailyData,
                 base: {
                     value: basePercentage.toFixed(0),
+                    valueRaw: basePercentage,
                     status: basePercentage > 60 ? "Crítico" : (basePercentage > 55 ? "Alerta" : (basePercentage >= 45 ? "Saudável" : "Baixo")),
-                    range: "Saudável entre 45% e 55%"
-                }
+                    range: "Saudável entre 45% e 55%",
+                    breakdown: {
+                        custosFixos: fixedCostPercentage.toFixed(1),
+                        impostos: (percentTaxSimples * 100).toFixed(1),
+                        taxasCartao: (cardFeePercentage * 100).toFixed(1),
+                        marketplace: marketplaceFeePct.toFixed(1),
+                    }
+                },
+                taxPercent: ((percentTaxSimples + cardFeePercentage) * 100).toFixed(2)
             };
         })(),
+        cardComparison: {
+            hasData: cardComparisonItems.length > 0,
+            idealDebit: IDEAL_DEBIT_RATE,
+            idealCredit: IDEAL_CREDIT_RATE,
+            currentAvgPct: (cardFeePercentage * 100).toFixed(2),
+            excessCost: formatMoney(cardFeeExcessCost),
+            hasExcess: cardFeeExcessCost > 0,
+            items: cardComparisonItems,
+        },
         cards: {
             moneyOnTable: {
                 total: formatMoney(moneyOnTableTotal),
                 items: moneyOnTableItems,
                 hasData: currentRevenue > 0 && (marketplaceSalesData.length > 0 || fixedCostPercentage > 0 || hasCmvData),
-                percentage: currentRevenue > 0 && moneyOnTableTotal > 0 ? `${((moneyOnTableTotal / currentRevenue) * 100).toFixed(1)}%` : "0%"
+                percentage: currentRevenue > 0 && moneyOnTableTotal > 0 ? `${((moneyOnTableTotal / currentRevenue) * 100).toFixed(1)}%` : "0%",
+                recoveredTotal: formatMoney(totalRecovered),
+                hasRecovered: totalRecovered > 0,
             },
             technicalSheets: (() => {
                 // CMV Teórico médio: average of (custoTotal / precoVenda) across all fichas with price
@@ -746,7 +849,13 @@ export const DashboardProvider = ({ children }) => {
                         { label: 'Infraestrutura', value: `R$ ${formatMoney(Math.max(0, infraCosts))}` },
                         { label: 'CMV Estimado', value: `R$ ${formatMoney(cmvCost)}` },
                         { label: 'Admin e Mkt', value: `R$ ${formatMoney(adminMktTotal)}` },
-                    ]
+                    ],
+                    reserves: {
+                        employees: formatMoney(employeeReserves),
+                        depreciation: formatMoney(depreciationTotal),
+                        total: formatMoney(employeeReserves + depreciationTotal),
+                        hasData: employeeReserves > 0 || depreciationTotal > 0,
+                    }
                 };
             })(),
         },
@@ -772,16 +881,24 @@ export const DashboardProvider = ({ children }) => {
         },
         // DRE data for detailed view
         dre: {
+            hasData: currentRevenue > 0,
             receitaBruta: formatMoney(currentRevenue),
+            receitaBrutaRaw: currentRevenue,
             impostos: formatMoney(taxCostSimples),
+            impostoPct: currentRevenue > 0 ? ((taxCostSimples / currentRevenue) * 100).toFixed(1) : '0.0',
             taxasVenda: formatMoney(cardFeeCost + marketplaceCommissionCost),
+            taxasVendaPct: currentRevenue > 0 ? (((cardFeeCost + marketplaceCommissionCost) / currentRevenue) * 100).toFixed(1) : '0.0',
             receitaLiquida: formatMoney(receitaLiquida),
+            receitaLiquidaPct: currentRevenue > 0 ? ((receitaLiquida / currentRevenue) * 100).toFixed(1) : '0.0',
             cmv: formatMoney(cmvCost),
+            cmvPct: currentRevenue > 0 ? ((cmvCost / currentRevenue) * 100).toFixed(1) : '0.0',
             margemContribuicao: formatMoney(contributionMargin),
             margemContribuicaoPct: contributionMarginPercentageDisplay.toFixed(1),
             custosFixos: formatMoney(totalFixedCosts),
+            custosFixosPct: currentRevenue > 0 ? ((totalFixedCosts / currentRevenue) * 100).toFixed(1) : '0.0',
             lucroLiquido: formatMoney(profit),
-            lucroLiquidoPct: marginPercentage.toFixed(1)
+            lucroLiquidoPct: marginPercentage.toFixed(1),
+            isProfit: profit >= 0
         },
         // Keep static Tips & Comparison for now
         marketComparison: initialData.marketComparison,

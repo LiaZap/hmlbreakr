@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const MoneyOnTable = ({ data }) => {
+const MoneyOnTable = ({ data, onAcknowledge }) => {
   const [activeIdx, setActiveIdx] = useState(null);
 
   const items = data.items || [];
@@ -28,7 +28,7 @@ const MoneyOnTable = ({ data }) => {
       </div>
 
       {/* Main Value */}
-      <div className="flex items-baseline gap-1.5 mb-3">
+      <div className="flex items-baseline gap-1.5 mb-1">
         <span className="font-semibold text-[14px] md:text-[16px] text-[#FF9406]">R$</span>
         <span className="font-semibold text-[20px] md:text-[24px] text-white tracking-tight">{data.total}</span>
         {data.percentage && data.percentage !== "0%" && (
@@ -37,6 +37,17 @@ const MoneyOnTable = ({ data }) => {
           </div>
         )}
       </div>
+
+      {/* Valor Recuperado badge */}
+      {data.hasRecovered && (
+        <div className="flex items-center gap-1.5 mb-3">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+            <path d="M12 19V5M5 12l7-7 7 7" stroke="#00B37E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span className="text-[10px] font-semibold text-[#00B37E]">R$ {data.recoveredTotal} recuperado este mês</span>
+        </div>
+      )}
+      {!data.hasRecovered && <div className="mb-3" />}
 
       {items.length > 0 ? (
         <>
@@ -79,17 +90,32 @@ const MoneyOnTable = ({ data }) => {
             )}
           </div>
 
-          {/* Legend dots */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {/* Legend dots + actions */}
+          <div className="flex flex-col gap-1.5">
             {items.map((item, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-1.5 cursor-pointer"
+                className="flex items-center justify-between gap-2 cursor-pointer"
                 onMouseEnter={() => setActiveIdx(idx)}
                 onMouseLeave={() => setActiveIdx(null)}
               >
-                <div className="w-[6px] h-[6px] rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                <span className="text-[9px] text-[#999]">{item.label}</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="w-[6px] h-[6px] rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                  <span className="text-[9px] text-[#999] truncate">{item.label}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {item.recovered > 0 && (
+                    <span className="text-[8px] font-semibold text-[#00B37E]">↓ R$ {item.recovered.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  )}
+                  {onAcknowledge && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onAcknowledge(item.key, item.rawValue); }}
+                      className="text-[8px] px-1.5 py-0.5 rounded-full border border-white/10 text-[#777] hover:border-[#FF9406]/40 hover:text-[#FF9406] transition-colors"
+                    >
+                      Tratar
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

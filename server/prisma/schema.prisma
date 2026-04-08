@@ -7,16 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Agency {
+  id                     String    @id @default(uuid())
+  name                   String
+  hash                   String    @unique
+  email                  String    @unique
+  password               String
+  resetToken             String?
+  resetTokenAt           DateTime?
+  stripeCustomerId       String?
+  stripeSubscriptionId   String?
+  plan                   String    @default("basic") // basic | unlimited
+  active                 Boolean   @default(false)
+  clients                Client[]  @relation("AgencyClients")
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
 model Client {
-  id          String       @id @default(uuid())
-  name        String
-  hash        String       @unique
-  email       String?      @unique
-  password    String?
-  data        String // JSON string containing all dashboard data
-  teamMembers TeamMember[] @relation("ClientTeam")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id                     String       @id @default(uuid())
+  name                   String
+  hash                   String       @unique
+  email                  String?      @unique
+  password               String?
+  resetToken             String?
+  resetTokenAt           DateTime?
+  stripeCustomerId       String?
+  stripeSubscriptionId   String?
+  active                 Boolean      @default(true)
+  agencyId               String?
+  agency                 Agency?      @relation("AgencyClients", fields: [agencyId], references: [id])
+  data                   String
+  teamMembers            TeamMember[] @relation("ClientTeam")
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 }
 
 model TeamMember {

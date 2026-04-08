@@ -3,7 +3,8 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const router = express.Router();
 const prisma = new PrismaClient();
-const { sendWelcomeEmail, sendCredentialResetEmail } = require('./services/emailService');
+const { sendWelcomeEmail, sendCredentialResetEmail, sendPasswordResetEmail } = require('./services/emailService');
+const crypto = require('crypto');
 
 // ========================
 // ADMIN ROUTES
@@ -292,6 +293,95 @@ router.post('/client/login', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erro ao fazer login' });
+  }
+});
+
+// Self-registration: create new client account
+router.post('/auth/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
+    }
+    const existing = await prisma.client.findUnique({ where: { email } });
+    if (existing) {
+      return res.status(409).json({ error: 'Este email já está cadastrado' });
+    }
+    const hash = crypto.randomBytes(16).toString('hex');
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await prisma.client.create({
+      data: { name, hash, email, password: hashedPassword, data: '{}' }
+    });
+    try {
+      await sendWelcomeEmail({ to: email, clientName: name, hash });
+    } catch (err) {
+      console.error('Welcome email error:', err.message);
+    }
+    res.json({ success: true, hash });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao criar conta' });
+  }
+});
+
+// Forgot password: generate reset code and send email
+router.post('/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email é obrigatório' });
+
+    const client = await prisma.client.findUnique({ where: { email } });
+    // Always return success to avoid email enumeration
+    if (!client || !client.password) {
+      return res.json({ success: true });
+    }
+    const token = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
+    const expiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    await prisma.client.update({
+      where: { email },
+      data: { resetToken: token, resetTokenAt: expiry }
+    });
+    try {
+      await sendPasswordResetEmail({ to: email, clientName: client.name, token });
+    } catch (err) {
+      console.error('Reset email error:', err.message);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao processar solicitação' });
+  }
+});
+
+// Reset password: validate code and set new password
+router.post('/auth/reset-password', async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
+    }
+    const client = await prisma.client.findUnique({ where: { email } });
+    if (!client || client.resetToken !== token) {
+      return res.status(400).json({ error: 'Código inválido ou expirado' });
+    }
+    if (!client.resetTokenAt || new Date() > new Date(client.resetTokenAt)) {
+      return res.status(400).json({ error: 'Código expirado. Solicite um novo.' });
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.client.update({
+      where: { email },
+      data: { password: hashedPassword, resetToken: null, resetTokenAt: null }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao redefinir senha' });
   }
 });
 
@@ -615,6 +705,251 @@ router.post('/menu/upload', upload.single('file'), (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erro ao processar arquivo' });
+  }
+});
+
+// ========================
+// AGENCY ROUTES
+// ========================
+const { createClientCheckout, createAgencyCheckout, createPortalSession, stripe } = require('./services/stripeService');
+
+// Agency Signup
+router.post('/agency/signup', async (req, res) => {
+  try {
+    const { name, email, password, plan } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
+    if (password.length < 6) return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+    const existing = await prisma.agency.findUnique({ where: { email } });
+    if (existing) return res.status(409).json({ error: 'Este email já está cadastrado' });
+    const hash = crypto.randomBytes(16).toString('hex');
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const agency = await prisma.agency.create({
+      data: { name, hash, email, password: hashedPassword, plan: plan || 'basic', active: false }
+    });
+    res.json({ success: true, hash: agency.hash, agencyId: agency.id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao criar conta de agência' });
+  }
+});
+
+// Agency Login
+router.post('/agency/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    const agency = await prisma.agency.findUnique({ where: { email } });
+    if (!agency) return res.status(401).json({ error: 'Email ou senha incorretos' });
+    const valid = await bcrypt.compare(password, agency.password);
+    if (!valid) return res.status(401).json({ error: 'Email ou senha incorretos' });
+    res.json({ success: true, role: 'agency', hash: agency.hash, name: agency.name, active: agency.active });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao fazer login' });
+  }
+});
+
+// Agency Forgot Password
+router.post('/agency/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email é obrigatório' });
+    const agency = await prisma.agency.findUnique({ where: { email } });
+    if (!agency) return res.json({ success: true });
+    const token = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 30 * 60 * 1000);
+    await prisma.agency.update({ where: { email }, data: { resetToken: token, resetTokenAt: expiry } });
+    try {
+      const { sendPasswordResetEmail } = require('./services/emailService');
+      await sendPasswordResetEmail({ to: email, clientName: agency.name, token });
+    } catch (err) { console.error('Reset email error:', err.message); }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao processar solicitação' });
+  }
+});
+
+// Agency Reset Password
+router.post('/agency/reset-password', async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+    if (!email || !token || !newPassword) return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+    const agency = await prisma.agency.findUnique({ where: { email } });
+    if (!agency || agency.resetToken !== token) return res.status(400).json({ error: 'Código inválido ou expirado' });
+    if (!agency.resetTokenAt || new Date() > new Date(agency.resetTokenAt)) return res.status(400).json({ error: 'Código expirado. Solicite um novo.' });
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.agency.update({ where: { email }, data: { password: hashedPassword, resetToken: null, resetTokenAt: null } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao redefinir senha' });
+  }
+});
+
+// Load Agency data + clients
+router.get('/agency/:hash', async (req, res) => {
+  try {
+    const agency = await prisma.agency.findUnique({
+      where: { hash: req.params.hash },
+      include: {
+        clients: {
+          select: { id: true, name: true, hash: true, email: true, active: true, stripeSubscriptionId: true, data: true, createdAt: true, updatedAt: true }
+        }
+      }
+    });
+    if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
+    const { password: _, resetToken: __, resetTokenAt: ___, ...safeAgency } = agency;
+    res.json(safeAgency);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao carregar dados' });
+  }
+});
+
+// Add client to agency
+router.post('/agency/:hash/clients', async (req, res) => {
+  try {
+    const agency = await prisma.agency.findUnique({ where: { hash: req.params.hash } });
+    if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
+
+    // Check client limit for basic plan
+    if (agency.plan === 'basic') {
+      const count = await prisma.client.count({ where: { agencyId: agency.id } });
+      if (count >= 10) return res.status(403).json({ error: 'Limite de 10 clientes atingido no plano Basic. Faça upgrade para Ilimitado.' });
+    }
+
+    const { name, email } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+
+    const clientHash = crypto.randomBytes(16).toString('hex');
+    const client = await prisma.client.create({
+      data: { name, hash: clientHash, email: email || null, data: '{}', agencyId: agency.id }
+    });
+
+    if (email) {
+      try {
+        const { sendWelcomeEmail } = require('./services/emailService');
+        await sendWelcomeEmail({ to: email, clientName: name, hash: clientHash });
+      } catch (err) { console.error('Welcome email error:', err.message); }
+    }
+
+    res.json({ success: true, hash: clientHash, id: client.id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao adicionar cliente' });
+  }
+});
+
+// Remove client from agency
+router.delete('/agency/:hash/clients/:clientId', async (req, res) => {
+  try {
+    const agency = await prisma.agency.findUnique({ where: { hash: req.params.hash } });
+    if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
+    const client = await prisma.client.findFirst({ where: { id: req.params.clientId, agencyId: agency.id } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    await prisma.client.update({ where: { id: client.id }, data: { agencyId: null } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao remover cliente' });
+  }
+});
+
+// ========================
+// STRIPE ROUTES
+// ========================
+
+// Create checkout for client subscription
+router.post('/stripe/client-checkout', async (req, res) => {
+  try {
+    const { hash } = req.body;
+    if (!hash) return res.status(400).json({ error: 'Hash é obrigatório' });
+    const client = await prisma.client.findUnique({ where: { hash } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    const session = await createClientCheckout({ clientHash: hash, email: client.email || '', name: client.name });
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao criar checkout' });
+  }
+});
+
+// Create checkout for agency subscription
+router.post('/stripe/agency-checkout', async (req, res) => {
+  try {
+    const { hash, plan } = req.body;
+    if (!hash) return res.status(400).json({ error: 'Hash é obrigatório' });
+    const agency = await prisma.agency.findUnique({ where: { hash } });
+    if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
+    const session = await createAgencyCheckout({ agencyHash: hash, email: agency.email, plan: plan || agency.plan });
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao criar checkout' });
+  }
+});
+
+// Customer portal (manage subscription)
+router.post('/stripe/portal', async (req, res) => {
+  try {
+    const { hash, type } = req.body; // type: 'client' | 'agency'
+    let stripeCustomerId;
+    if (type === 'agency') {
+      const agency = await prisma.agency.findUnique({ where: { hash } });
+      stripeCustomerId = agency?.stripeCustomerId;
+    } else {
+      const client = await prisma.client.findUnique({ where: { hash } });
+      stripeCustomerId = client?.stripeCustomerId;
+    }
+    if (!stripeCustomerId) return res.status(400).json({ error: 'Nenhuma assinatura ativa encontrada' });
+    const APP_URL = process.env.APP_URL || 'https://app.breakr.com.br';
+    const session = await createPortalSession({ stripeCustomerId, returnUrl: type === 'agency' ? `${APP_URL}?agency=${hash}` : `${APP_URL}?hash=${hash}` });
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao abrir portal' });
+  }
+});
+
+// Stripe Webhook
+router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err) {
+    return res.status(400).json({ error: `Webhook error: ${err.message}` });
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const { type, clientHash, agencyHash, plan } = session.metadata || {};
+      if (type === 'client' && clientHash) {
+        await prisma.client.update({
+          where: { hash: clientHash },
+          data: { active: true, stripeCustomerId: session.customer, stripeSubscriptionId: session.subscription }
+        });
+      } else if (type === 'agency' && agencyHash) {
+        await prisma.agency.update({
+          where: { hash: agencyHash },
+          data: { active: true, plan: plan || 'basic', stripeCustomerId: session.customer, stripeSubscriptionId: session.subscription }
+        });
+      }
+    } else if (event.type === 'customer.subscription.deleted') {
+      const sub = event.data.object;
+      const clientByStripe = await prisma.client.findFirst({ where: { stripeSubscriptionId: sub.id } });
+      if (clientByStripe) await prisma.client.update({ where: { id: clientByStripe.id }, data: { active: false } });
+      const agencyByStripe = await prisma.agency.findFirst({ where: { stripeSubscriptionId: sub.id } });
+      if (agencyByStripe) await prisma.agency.update({ where: { id: agencyByStripe.id }, data: { active: false } });
+    }
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Webhook handler error:', error);
+    res.status(500).json({ error: 'Webhook handler failed' });
   }
 });
 

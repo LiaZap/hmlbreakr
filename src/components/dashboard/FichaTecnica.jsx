@@ -32,21 +32,23 @@ const convertUnit = (qty, fromUnit, toUnit) => {
 
 
 // ============ CARD: Ficha Técnica ============
-const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent }) => {
+const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent, taxPercent }) => {
   const pv = parseSafeNumber(item.precoVenda);
   const cmv = parseSafeNumber(item.custoTotal);
   const baseRaw = parseSafeNumber(basePercent);
   const hasValidBase = baseRaw > 0 && baseRaw <= 100;
   const base = hasValidBase ? baseRaw / 100 : 0;
+  const taxRate = parseSafeNumber(taxPercent) / 100;
+  const taxAmount = pv * taxRate;
 
-  // If valid base, show Lucro Líquido; otherwise show Margem de Contribuição
+  // If valid base, show Lucro Líquido (includes all costs); otherwise MC com impostos
   const displayPct = pv > 0 ? (hasValidBase
     ? (((pv - (pv * base)) - cmv) / pv) * 100
-    : ((pv - cmv) / pv) * 100
+    : ((pv - cmv - taxAmount) / pv) * 100
   ) : null;
   const displayRS = pv > 0 ? (hasValidBase
     ? (pv - (pv * base)) - cmv
-    : pv - cmv
+    : pv - cmv - taxAmount
   ) : null;
   const displayLabel = hasValidBase ? 'Lucro Líquido Estimado' : 'Margem de Contribuição';
   const [showTooltip, setShowTooltip] = useState(false);
@@ -86,7 +88,7 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent })
               <div className={`text-[12px] font-bold ${displayRS > 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
                 R$ {displayRS.toFixed(2).replace('.', ',')}
               </div>
-              <div className="text-[9px] text-[#555] mt-0.5">{hasValidBase ? `Base: ${baseRaw.toFixed(0)}% | ` : ''}CMV: R$ {cmv.toFixed(2).replace('.', ',')}</div>
+              <div className="text-[9px] text-[#555] mt-0.5">{hasValidBase ? `Base: ${baseRaw.toFixed(0)}% | ` : (taxRate > 0 ? `Impostos+Taxas: ${(taxRate*100).toFixed(1)}% | ` : '')}CMV: R$ {cmv.toFixed(2).replace('.', ',')}</div>
             </div>
           )}
         </div>
@@ -1202,7 +1204,8 @@ const FichaTecnica = () => {
     if (isEditing) {
       newFichas = fichas.map(f => f.id === fichaData.id ? fichaData : f);
     } else {
-      newFichas = [...fichas, fichaData];
+      newFichas = [fichaData, ...fichas];
+      setFichasPage(0);
     }
     
     // Build update payload — only include menuEngineering if this ficha has pricing data
@@ -1337,6 +1340,7 @@ const FichaTecnica = () => {
       ...ficha,
       id: newId,
       name: `Cópia de ${ficha.name}`,
+      ingredientes: ficha.ingredientes ? ficha.ingredientes.map(ing => ({ ...ing })) : [],
       precoVenda: '',
       vendasMes: '0',
       lastUpdated: Date.now()
@@ -1841,7 +1845,7 @@ const FichaTecnica = () => {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {pageItems.map((item) => (
-                        <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} />
+                        <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
                       ))}
                     </div>
                     {totalPages > 1 && (

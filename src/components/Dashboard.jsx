@@ -17,6 +17,10 @@ import RankingGeralIcon from './dashboard/RankingGeralIcon';
 import MatrizPreco from './dashboard/MatrizPreco';
 import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
+import DRE from './dashboard/DRE';
+import BaseModal from './dashboard/BaseModal';
+import CardRateComparison from './dashboard/CardRateComparison';
+import InfoTooltip from './dashboard/InfoTooltip';
 import MobileNav from './dashboard/MobileNav';
 import OnboardingForm from './OnboardingForm';
 import MobileOnboarding from './mobile/MobileOnboarding';
@@ -27,6 +31,7 @@ const Dashboard = () => {
   const [activePage, setActivePage] = useState('home');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showDailyRevenue, setShowDailyRevenue] = useState(false);
+  const [showBaseModal, setShowBaseModal] = useState(false);
 
   const handleNavigate = (page) => {
     if (page === 'editOnboarding') {
@@ -138,7 +143,13 @@ const Dashboard = () => {
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex flex-col gap-[2px]">
-                <span className="font-semibold text-[11px] text-[#CACACA]">Ponto de Equilíbrio</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-[11px] text-[#CACACA]">Ponto de Equilíbrio</span>
+                  <InfoTooltip
+                    position="bottom-right"
+                    content="Faturamento mínimo mensal para cobrir todos os custos fixos e variáveis. Abaixo desse valor = prejuízo. Acima = lucro real."
+                  />
+                </div>
                 <span className="font-normal text-[10px] text-[#595959]">Quando o lucro aparece</span>
               </div>
               <div className="flex items-center gap-2">
@@ -152,17 +163,32 @@ const Dashboard = () => {
                     <path d="M12 5v14M5 12h14"/>
                   </svg>
                 </button>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C4C4C4" strokeWidth="1.5">
-                  <rect x="3" y="4" width="18" height="18" rx="2" />
-                  <path d="M16 2v4M8 2v4M3 10h18" />
-                </svg>
-                <span className="text-[11px] text-[#999] font-medium">{dashboardData.breakEven.estimatedDate}</span>
-                <span className={`w-2 h-2 rounded-full ${dashboardData.breakEven.reachedBreakEven ? 'bg-[#E2FD89]' : 'bg-[#FD8989]'}`} />
+                <InfoTooltip
+                  position="bottom-left"
+                  content={`Previsão de quando você atinge o ponto de equilíbrio neste mês. ${dashboardData.breakEven.reachedBreakEven ? 'Você já atingiu ou deve atingir a meta este mês!' : 'Ainda não atingiu a meta — acompanhe o faturamento diário.'}`}
+                >
+                  <div className="flex items-center gap-1 cursor-pointer">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C4C4C4" strokeWidth="1.5">
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <path d="M16 2v4M8 2v4M3 10h18" />
+                    </svg>
+                    <span className="text-[11px] text-[#999] font-medium">{dashboardData.breakEven.estimatedDate}</span>
+                    <span className={`w-2 h-2 rounded-full ${dashboardData.breakEven.reachedBreakEven ? 'bg-[#E2FD89]' : 'bg-[#FD8989]'}`} />
+                  </div>
+                </InfoTooltip>
               </div>
             </div>
 
             {/* Gauge Chart */}
-            <div className="w-full mb-2">
+            <div className="w-full mb-2 relative">
+              {dashboardData.breakEven.hasCmvData && (
+                <div className="absolute top-0 right-0 z-10">
+                  <InfoTooltip
+                    position="bottom-left"
+                    content={`${dashboardData.breakEven.percentage}% da meta atingida. Você faturou R$ ${dashboardData.breakEven.revenueAccumulated} de R$ ${dashboardData.breakEven.current} necessários. A fórmula é: Custos Fixos ÷ Margem de Contribuição.`}
+                  />
+                </div>
+              )}
               {dashboardData.breakEven.hasCmvData ? (
                 <BreakEvenGraphic
                   percentage={dashboardData.breakEven.percentage}
@@ -240,7 +266,7 @@ const Dashboard = () => {
             </div>
 
             {/* Base Info Box */}
-            <div className="p-4 bg-[#FF9406] rounded-[14px] flex flex-col items-center justify-center text-center">
+            <div className="p-4 bg-[#FF9406] rounded-[14px] flex flex-col items-center justify-center text-center cursor-pointer hover:brightness-110 transition-all active:scale-[0.98]" onClick={() => setShowBaseModal(true)}>
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex items-center gap-1">
                   <span className="font-bold text-[11px] text-black">Base</span>
@@ -248,6 +274,7 @@ const Dashboard = () => {
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M12 16v-4M12 8h.01"/>
                   </svg>
+                  <span className="text-[9px] text-black/50 font-medium">Toque para detalhes</span>
                 </div>
                 <span className="px-2.5 py-0.5 bg-black/15 rounded-full text-[9px] font-medium text-black flex items-center gap-1">
                   {dashboardData.breakEven.base.status}
@@ -270,10 +297,23 @@ const Dashboard = () => {
       {/* BOTTOM ROW - Cards (full-width bg) */}
       <div className="pl-3 md:pl-[85px] pr-3 md:pr-6 py-6 w-full">
         <div className="w-full px-3 md:px-0 2xl:px-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <MoneyOnTable data={dashboardData.cards.moneyOnTable} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+            <MoneyOnTable
+              data={dashboardData.cards.moneyOnTable}
+              onAcknowledge={(key, rawValue) => {
+                const formData = dashboardData.formData || {};
+                const motActions = { ...(formData.mot_actions || {}), [key]: { rawValue, date: new Date().toISOString().slice(0, 10) } };
+                updateDashboardData({ ...formData, mot_actions: motActions });
+              }}
+            />
             <TechnicalSheets data={dashboardData.cards.technicalSheets} />
             <CostStructure data={dashboardData.cards.costStructure} />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <DRE data={dashboardData.dre} />
+            </div>
+            <CardRateComparison data={dashboardData.cardComparison} />
           </div>
         </div>
       </div>
@@ -285,6 +325,11 @@ const Dashboard = () => {
 
       {/* Bottom spacing for mobile nav */}
       <div className="h-[70px] md:hidden" />
+
+      {/* Base Modal */}
+      {showBaseModal && (
+        <BaseModal base={dashboardData.breakEven?.base} onClose={() => setShowBaseModal(false)} />
+      )}
 
       {/* Daily Revenue Modal */}
       <DailyRevenueModal
