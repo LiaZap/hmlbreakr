@@ -188,22 +188,22 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-[420px] px-6 py-8 sm:p-10 flex flex-col items-center my-auto"
+        className="relative z-10 w-full max-w-[420px] mx-4 my-8 bg-[#141416]/90 backdrop-blur-xl border border-[#2A2A2C]/50 rounded-[24px] px-6 py-8 sm:px-10 sm:py-10 flex flex-col items-center"
       >
         {/* Logo — tap 5x to reveal Admin tab */}
-        <div className="relative mb-8 cursor-pointer select-none" onClick={() => setLogoClicks(c => c + 1)}>
+        <div className="relative mb-6 cursor-pointer select-none" onClick={() => setLogoClicks(c => c + 1)}>
           <div className="absolute inset-0 blur-[20px] opacity-10 rounded-full" style={{ background: accentColor }} />
-          <div className="relative w-[72px] h-[72px] bg-[#1E1E1E] border border-[#2A2A2C] rounded-[24px] flex items-center justify-center shadow-xl">
-            <div className="w-[48px] h-[48px] bg-black rounded-[14px] flex items-center justify-center">
-              <img src={boltIcon} alt="Breakr" className="w-[24px]" />
+          <div className="relative w-[64px] h-[64px] bg-[#1E1E1E] border border-[#2A2A2C] rounded-[20px] flex items-center justify-center shadow-xl">
+            <div className="w-[42px] h-[42px] bg-black rounded-[12px] flex items-center justify-center">
+              <img src={boltIcon} alt="Breakr" className="w-[22px]" />
             </div>
           </div>
         </div>
 
         {/* Title */}
         <AnimatePresence mode="wait">
-          <motion.div key={tab + '-title'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }} className="text-center mb-6">
-            <h1 className="text-[26px] font-bold mb-2 tracking-tight">{heading}</h1>
+          <motion.div key={tab + '-title'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }} className="text-center mb-5">
+            <h1 className="text-[24px] font-bold mb-1.5 tracking-tight">{heading}</h1>
             <p className="text-[#868686] text-[13px] leading-relaxed max-w-[280px] mx-auto">{sub}</p>
           </motion.div>
         </AnimatePresence>
