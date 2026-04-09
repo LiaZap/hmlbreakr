@@ -107,24 +107,77 @@ const AgencyLoginTab = ({ onAgencyLogin }) => {
   );
 };
 
+// ── Tab: Admin Login (hidden) ─────────────────────────────────────
+const AdminLoginTab = ({ onLogin, onAdminLogin }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) { setError('Preencha todos os campos.'); return; }
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`${API_URL}/api/client/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Credenciais incorretas'); return; }
+      if (data.role === 'admin' && onAdminLogin) {
+        if (data.name) sessionStorage.setItem('breaker-admin-name', data.name);
+        onAdminLogin(data.adminRole || 'admin');
+      } else {
+        onLogin(data.hash);
+      }
+    } catch { setError('Erro de conexão.'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <div>
+        <label className="block text-[12px] font-semibold text-[#666] mb-2 uppercase tracking-wider pl-1">Email</label>
+        <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(''); }}
+          className={inputClass(!!error)} placeholder="admin@breakr.com.br" autoFocus />
+      </div>
+      <div>
+        <label className="block text-[12px] font-semibold text-[#666] mb-2 uppercase tracking-wider pl-1">Senha</label>
+        <input type="password" value={password} onChange={e => { setPassword(e.target.value); setError(''); }}
+          className={inputClass(!!error)} placeholder="Senha admin" />
+      </div>
+      <ErrorMsg msg={error} />
+      <button type="submit" disabled={loading}
+        className="w-full bg-[#EF4444] hover:bg-[#DC2626] disabled:opacity-50 text-white font-bold rounded-[16px] py-4 mt-1 transition-all active:scale-[0.98]">
+        {loading ? <div className="flex items-center justify-center gap-2"><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /></div> : 'Entrar como Admin'}
+      </button>
+    </form>
+  );
+};
+
 // ── Main Component ────────────────────────────────────────────────
 const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
   const [tab, setTab] = useState('login');
+  const [logoClicks, setLogoClicks] = useState(0);
+  const showAdmin = logoClicks >= 5;
 
   const mainTabs = [
     { id: 'login', label: 'Entrar' },
     { id: 'signup', label: 'Criar Conta' },
     { id: 'agency', label: 'Agência' },
+    ...(showAdmin ? [{ id: 'admin', label: 'Admin' }] : []),
   ];
 
   const titles = {
     login: { heading: 'Acesse seu Painel', sub: 'Entre com seu email e senha para acessar o dashboard.' },
     signup: { heading: 'Crie sua conta', sub: 'Cadastre seu restaurante e comece a ver seus números de verdade.' },
     agency: { heading: 'Painel da Agência', sub: 'Acesse o painel para gerenciar seus clientes.' },
+    admin: { heading: 'Painel Admin', sub: 'Acesso restrito à equipe Breakr.' },
   };
 
-  const { heading, sub } = titles[tab];
-  const accentColor = tab === 'agency' ? '#A78BFA' : '#F5A623';
+  const { heading, sub } = titles[tab] || titles.login;
+  const accentColor = tab === 'agency' ? '#A78BFA' : tab === 'admin' ? '#EF4444' : '#F5A623';
 
   return (
     <div className="relative min-h-screen bg-black flex items-center justify-center font-jakarta text-white overflow-hidden">
@@ -137,8 +190,8 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
         transition={{ duration: 0.6, ease: 'easeOut' }}
         className="relative z-10 w-full max-w-[420px] px-6 py-8 sm:p-10 flex flex-col items-center"
       >
-        {/* Logo */}
-        <div className="relative mb-8">
+        {/* Logo — tap 5x to reveal Admin tab */}
+        <div className="relative mb-8 cursor-pointer select-none" onClick={() => setLogoClicks(c => c + 1)}>
           <div className="absolute inset-0 blur-[20px] opacity-10 rounded-full" style={{ background: accentColor }} />
           <div className="relative w-[72px] h-[72px] bg-[#1E1E1E] border border-[#2A2A2C] rounded-[24px] flex items-center justify-center shadow-xl">
             <div className="w-[48px] h-[48px] bg-black rounded-[14px] flex items-center justify-center">
@@ -161,7 +214,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`flex-1 py-2.5 rounded-[10px] text-[12px] font-semibold transition-all ${
                 tab === t.id
-                  ? t.id === 'agency' ? 'bg-[#A78BFA] text-black' : 'bg-[#F5A623] text-black'
+                  ? t.id === 'agency' ? 'bg-[#A78BFA] text-black' : t.id === 'admin' ? 'bg-[#EF4444] text-white' : 'bg-[#F5A623] text-black'
                   : 'text-[#666] hover:text-white'
               }`}>
               {t.label}
@@ -190,6 +243,10 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
 
               {tab === 'agency' && (
                 <AgencyLoginTab onAgencyLogin={onAgencyLogin} />
+              )}
+
+              {tab === 'admin' && (
+                <AdminLoginTab onLogin={onLogin} onAdminLogin={onAdminLogin} />
               )}
 
             </motion.div>

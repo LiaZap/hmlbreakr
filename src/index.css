@@ -17,3 +17,63 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Clerk dark theme overrides ── */
+.cl-formFieldInput,
+.cl-formFieldInput:focus,
+.cl-phoneNumberInput,
+.cl-otpCodeFieldInput {
+  background: #1E1E1E !important;
+  border: 1px solid #2A2A2C !important;
+  color: #ffffff !important;
+  border-radius: 14px !important;
+}
+.cl-formFieldInput:focus {
+  border-color: #F5A623 !important;
+}
+.cl-socialButtonsBlockButton {
+  background: #1E1E1E !important;
+  border: 1px solid #2A2A2C !important;
+  color: #ffffff !important;
+}
+.cl-socialButtonsBlockButton:hover {
+  background: #252527 !important;
+}
+.cl-dividerLine {
+  background: #2A2A2C !important;
+}
+.cl-dividerText {
+  color: #555 !important;
+}
+.cl-formFieldLabel {
+  color: #868686 !important;
+}
+.cl-card {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.cl-headerTitle,
+.cl-headerSubtitle {
+  display: none !important;
+}
+.cl-footer {
+  display: none !important;
+}
+.cl-formButtonPrimary {
+  background: #F5A623 !important;
+  color: #000000 !important;
+  font-weight: 700 !important;
+  border-radius: 14px !important;
+}
+.cl-formButtonPrimary:hover {
+  background: #E5961E !important;
+}
+.cl-identityPreviewEditButton {
+  color: #F5A623 !important;
+}
+.cl-footerActionLink {
+  color: #F5A623 !important;
+}
+.cl-internal-b3fm6y {
+  background: transparent !important;
+}
