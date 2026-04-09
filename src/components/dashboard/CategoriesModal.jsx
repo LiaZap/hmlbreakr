@@ -7,7 +7,7 @@ const CategoriesModal = ({ onClose }) => {
   const [newCategory, setNewCategory] = useState('');
 
   const categories = dashboardData.operational?.categories || { insumos: [], fichas: [] };
-  const currentList = activeTab === 'insumos' ? categories.insumos : categories.fichas;
+  const currentList = (activeTab === 'insumos' ? categories.insumos : categories.fichas) || [];
 
   const handleAddCategory = () => {
     if (!newCategory.trim()) return;

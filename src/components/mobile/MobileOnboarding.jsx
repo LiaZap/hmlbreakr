@@ -153,7 +153,7 @@ const MobileOnboarding = ({ onClose, onComplete, isEditing }) => {
   // Navigate back
   const handleBack = () => {
     if (showRegistration) {
-      setShowRegistration(false);
+      // Registration is mandatory — cannot go back to skip it
       return;
     }
     if (currentStepIndex > 0) {

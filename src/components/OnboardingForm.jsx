@@ -1050,12 +1050,9 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                             {regLoading ? 'Criando...' : 'Criar Acesso e Continuar'}
                         </span>
                     </button>
-                    <button
-                        onClick={() => setShowRegistration(false)}
-                        className="font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-white/50 hover:text-white transition-colors px-4"
-                    >
-                        Voltar
-                    </button>
+                    <p className="text-[12px] text-white/30 px-2">
+                        Necessário para não perder seus dados
+                    </p>
                 </div>
             </div>
         </div>

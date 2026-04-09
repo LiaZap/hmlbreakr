@@ -574,7 +574,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const addedIds = new Set(addedInsumos.map(i => i.id));
   const filteredInsumos = availableInsumos.filter(i =>
     !addedIds.has(i.id) &&
-    (searchInsumo === '' || i.name.toLowerCase().includes(searchInsumo.toLowerCase()) || i.category.toLowerCase().includes(searchInsumo.toLowerCase()))
+    (searchInsumo === '' || i.name.toLowerCase().includes(searchInsumo.toLowerCase()) || (i.category || '').toLowerCase().includes(searchInsumo.toLowerCase()))
   );
 
   const handleAddInsumo = (insumo) => {
