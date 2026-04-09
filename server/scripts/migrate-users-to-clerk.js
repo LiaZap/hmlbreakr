@@ -58,13 +58,15 @@ async function migrate() {
         console.log(`🔗 ${client.email} — já existe no Clerk, linkando...`);
       } else {
         // Criar no Clerk com a senha bcrypt existente
+        // Clerk aceita bcrypt hashes com $2a$ ou $2b$ prefix
+        const digest = client.password;
+
         clerkUser = await clerk.users.createUser({
           emailAddress: [client.email],
-          firstName: client.name?.split(' ')[0] || '',
+          firstName: client.name?.split(' ')[0] || 'Cliente',
           lastName: client.name?.split(' ').slice(1).join(' ') || '',
-          passwordDigest: client.password,
+          passwordDigest: digest,
           passwordHasher: 'bcrypt',
-          skipPasswordChecks: true,
         });
         console.log(`✅ ${client.email} — criado no Clerk`);
       }
@@ -77,7 +79,9 @@ async function migrate() {
 
       success++;
     } catch (err) {
-      console.error(`❌ ${client.email} — ${err.message}`);
+      // Log full error details from Clerk API
+      const details = err.errors ? JSON.stringify(err.errors, null, 2) : err.message;
+      console.error(`❌ ${client.email} — ${details}`);
       errors++;
     }
   }
