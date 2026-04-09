@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import SplashScreen from './components/SplashScreen';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -11,44 +12,16 @@ import { useDashboard } from './context/DashboardContext';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
-// ── Auth Bridge: works with or without Clerk ──────────────────────
-const AuthContext = createContext({ isLoaded: true, isSignedIn: false, getToken: async () => null });
-export const useAppAuth = () => useContext(AuthContext);
-
-// When Clerk IS available, this wrapper reads useAuth and feeds it into our context
-function ClerkAuthBridge({ children }) {
-  const { useAuth } = require('@clerk/clerk-react');
-  const auth = useAuth();
-  return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
-}
-
-// When Clerk is NOT available, children use the default context (isLoaded: true, isSignedIn: false)
-export function AuthBridge({ children }) {
-  const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-  if (clerkEnabled) return <ClerkAuthBridge>{children}</ClerkAuthBridge>;
-  return children;
-}
-
-// ── Main App ──────────────────────────────────────────────────────
 function App() {
   const { dashboardData, clientDataError, clientDataLoaded } = useDashboard();
-  const { isLoaded: clerkLoaded, isSignedIn, getToken } = useAppAuth();
+  const { isLoaded: clerkLoaded, isSignedIn, getToken } = useAuth();
   const [currentPage, setCurrentPage] = useState('loading');
   const [splashDone, setSplashDone] = useState(false);
   const [agencyHash, setAgencyHash] = useState(null);
+  const [routingDone, setRoutingDone] = useState(false);
 
-  // Safety: if Clerk doesn't load within 4s, show login anyway
-  useEffect(() => {
-    if (clerkLoaded || currentPage !== 'loading') return;
-    const timer = setTimeout(() => {
-      console.warn('Clerk load timeout — falling back to login');
-      routeTo(false, false);
-    }, 4000);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clerkLoaded, currentPage]);
-
-  const routeTo = (clerkReady, signedIn) => {
+  const doRouting = (signedIn) => {
+    if (routingDone) return;
     const params = new URLSearchParams(window.location.search);
     const hash = params.get('hash');
     const agency = params.get('agency');
@@ -68,21 +41,33 @@ function App() {
     } else if (agencySession) {
       setAgencyHash(agencySession);
       setCurrentPage('agency-panel');
-    } else if (clerkReady && signedIn) {
+    } else if (signedIn) {
       setCurrentPage('resolving-clerk');
     } else {
       setCurrentPage('client-login');
     }
+    setRoutingDone(true);
   };
 
-  // Route when Clerk loads
+  // When Clerk loads, route normally
   useEffect(() => {
-    if (!clerkLoaded) return;
-    routeTo(true, isSignedIn);
+    if (clerkLoaded) doRouting(isSignedIn);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clerkLoaded]);
 
-  // When Clerk sign-in happens while on login page
+  // Safety timeout: if Clerk doesn't load within 3s, route without it
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!routingDone) {
+        console.warn('Clerk timeout — routing without auth');
+        doRouting(false);
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When user signs in via Clerk while on the login page
   useEffect(() => {
     if (!clerkLoaded || !isSignedIn) return;
     if (currentPage === 'client-login' || currentPage === 'resolving-clerk') {
@@ -116,25 +101,17 @@ function App() {
     }
   }, [clientDataError, currentPage]);
 
-  const handleSplashComplete = () => {
-    setSplashDone(true);
-  };
+  const handleSplashComplete = () => setSplashDone(true);
 
   useEffect(() => {
     if (splashDone && clientDataLoaded && currentPage !== 'landing') {
       const fd = dashboardData?.formData;
       const finished = fd?.onboarding_completed || (fd?.revenue_history && fd.revenue_history.length > 0);
-      if (finished) {
-        setCurrentPage('dashboard');
-      } else {
-        setCurrentPage('landing');
-      }
+      setCurrentPage(finished ? 'dashboard' : 'landing');
     }
   }, [splashDone, clientDataLoaded, dashboardData]);
 
-  const handleOnboardingComplete = () => {
-    setCurrentPage('dashboard');
-  };
+  const handleOnboardingComplete = () => setCurrentPage('dashboard');
 
   const handleClientLogin = (hash) => {
     window.location.href = `${window.location.pathname}?hash=${hash}`;
@@ -161,6 +138,7 @@ function App() {
     setCurrentPage('client-login');
   };
 
+  // Loading spinner
   if (currentPage === 'loading' || currentPage === 'resolving-clerk') {
     return (
       <div className="fixed inset-0 bg-[#1D1D1D] flex items-center justify-center">
@@ -172,28 +150,16 @@ function App() {
   return (
     <>
       {currentPage === 'demo' && <DemoPage />}
-
       {currentPage === 'client-login' && (
         <ClientLogin onLogin={handleClientLogin} onAdminLogin={handleAdminLogin} onAgencyLogin={handleAgencyLogin} />
       )}
-
       {currentPage === 'agency-panel' && agencyHash && (
         <AgencyPanel agencyHash={agencyHash} onLogout={handleAgencyLogout} />
       )}
-
-      {currentPage === 'admin-panel' && (
-        <AdminPanel />
-      )}
-
-      {currentPage === 'splash' && (
-        <SplashScreen onComplete={handleSplashComplete} />
-      )}
-      {currentPage === 'landing' && (
-        <LandingPage onComplete={handleOnboardingComplete} />
-      )}
-      {currentPage === 'dashboard' && (
-        <Dashboard />
-      )}
+      {currentPage === 'admin-panel' && <AdminPanel />}
+      {currentPage === 'splash' && <SplashScreen onComplete={handleSplashComplete} />}
+      {currentPage === 'landing' && <LandingPage onComplete={handleOnboardingComplete} />}
+      {currentPage === 'dashboard' && <Dashboard />}
     </>
   );
 }
