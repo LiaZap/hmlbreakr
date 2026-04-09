@@ -180,7 +180,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
   const accentColor = tab === 'agency' ? '#A78BFA' : tab === 'admin' ? '#EF4444' : '#F5A623';
 
   return (
-    <div className="relative min-h-screen bg-black flex items-center justify-center font-jakarta text-white overflow-hidden">
+    <div className="relative min-h-screen bg-black flex items-center justify-center font-jakarta text-white overflow-y-auto">
       <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover" src="/login-bg.mp4" />
       <div className="absolute inset-0 bg-black/60" />
 
@@ -188,7 +188,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-[420px] px-6 py-8 sm:p-10 flex flex-col items-center"
+        className="relative z-10 w-full max-w-[420px] px-6 py-8 sm:p-10 flex flex-col items-center my-auto"
       >
         {/* Logo — tap 5x to reveal Admin tab */}
         <div className="relative mb-8 cursor-pointer select-none" onClick={() => setLogoClicks(c => c + 1)}>
