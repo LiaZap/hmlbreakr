@@ -199,7 +199,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
         </div>
 
         {/* Tab Content */}
-        <div className="w-full">
+        <div className="w-full overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div key={tab} initial={{ opacity: 0, x: tab === 'signup' ? 20 : tab === 'agency' ? 20 : -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
 

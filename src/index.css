@@ -19,16 +19,18 @@ body {
 }
 
 /* ── Clerk layout: keep form inside parent container ── */
-.cl-rootBox {
-  width: 100% !important;
-}
-.cl-card {
-  width: 100% !important;
-  margin: 0 !important;
-}
+.cl-rootBox,
 .cl-signIn-root,
-.cl-signUp-root {
+.cl-signUp-root,
+.cl-card,
+[class*="cl-cardBox"],
+[class*="cl-signIn-root"],
+[class*="cl-signUp-root"] {
   width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
 }
 
 /* ── Clerk dark theme overrides ── */
