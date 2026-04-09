@@ -80,14 +80,20 @@ body {
 [class*="cl-footer"] {
   display: none !important;
 }
-[class*="cl-formButtonPrimary"] {
+[class*="cl-formButtonPrimary"],
+button[class*="cl-formButtonPrimary"],
+.cl-formButtonPrimary,
+.cl-rootBox button[data-localization-key] {
   background: #F5A623 !important;
   background-color: #F5A623 !important;
   color: #000000 !important;
   font-weight: 700 !important;
   border-radius: 14px !important;
+  height: 52px !important;
+  font-size: 15px !important;
 }
-[class*="cl-formButtonPrimary"]:hover {
+[class*="cl-formButtonPrimary"]:hover,
+button[class*="cl-formButtonPrimary"]:hover {
   background: #E5961E !important;
   background-color: #E5961E !important;
 }
