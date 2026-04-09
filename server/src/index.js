@@ -15,8 +15,22 @@ const PORT = process.env.PORT || 3001;
 // Trust proxy (required behind Easypanel/Traefik reverse proxy)
 app.set('trust proxy', 1);
 
-// Security Middleware
-app.use(helmet());
+// Security Middleware — allow Clerk SDK scripts and connections
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com", "'unsafe-inline'"],
+      scriptSrcElem: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com", "'unsafe-inline'"],
+      connectSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com", "https://api.clerk.com"],
+      imgSrc: ["'self'", "data:", "https://*.clerk.com", "https://img.clerk.com"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      frameSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com"],
+      workerSrc: ["'self'", "blob:"],
+      fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+    },
+  },
+}));
 
 // Rate Limiting
 const limiter = rateLimit({
