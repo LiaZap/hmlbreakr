@@ -1,6 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import SplashScreen from './components/SplashScreen';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -12,16 +11,44 @@ import { useDashboard } from './context/DashboardContext';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
+// ── Auth Bridge: works with or without Clerk ──────────────────────
+const AuthContext = createContext({ isLoaded: true, isSignedIn: false, getToken: async () => null });
+export const useAppAuth = () => useContext(AuthContext);
+
+// When Clerk IS available, this wrapper reads useAuth and feeds it into our context
+function ClerkAuthBridge({ children }) {
+  const { useAuth } = require('@clerk/clerk-react');
+  const auth = useAuth();
+  return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
+}
+
+// When Clerk is NOT available, children use the default context (isLoaded: true, isSignedIn: false)
+export function AuthBridge({ children }) {
+  const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+  if (clerkEnabled) return <ClerkAuthBridge>{children}</ClerkAuthBridge>;
+  return children;
+}
+
+// ── Main App ──────────────────────────────────────────────────────
 function App() {
   const { dashboardData, clientDataError, clientDataLoaded } = useDashboard();
-  const { isLoaded: clerkLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded: clerkLoaded, isSignedIn, getToken } = useAppAuth();
   const [currentPage, setCurrentPage] = useState('loading');
   const [splashDone, setSplashDone] = useState(false);
   const [agencyHash, setAgencyHash] = useState(null);
 
+  // Safety: if Clerk doesn't load within 4s, show login anyway
   useEffect(() => {
-    if (!clerkLoaded) return;
+    if (clerkLoaded || currentPage !== 'loading') return;
+    const timer = setTimeout(() => {
+      console.warn('Clerk load timeout — falling back to login');
+      routeTo(false, false);
+    }, 4000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clerkLoaded, currentPage]);
 
+  const routeTo = (clerkReady, signedIn) => {
     const params = new URLSearchParams(window.location.search);
     const hash = params.get('hash');
     const agency = params.get('agency');
@@ -41,16 +68,21 @@ function App() {
     } else if (agencySession) {
       setAgencyHash(agencySession);
       setCurrentPage('agency-panel');
-    } else if (isSignedIn) {
-      // Clerk user is signed in — resolve their hash
+    } else if (clerkReady && signedIn) {
       setCurrentPage('resolving-clerk');
     } else {
       setCurrentPage('client-login');
     }
+  };
+
+  // Route when Clerk loads
+  useEffect(() => {
+    if (!clerkLoaded) return;
+    routeTo(true, isSignedIn);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clerkLoaded]);
 
-  // When Clerk sign-in happens while already on the login page
+  // When Clerk sign-in happens while on login page
   useEffect(() => {
     if (!clerkLoaded || !isSignedIn) return;
     if (currentPage === 'client-login' || currentPage === 'resolving-clerk') {
@@ -62,6 +94,7 @@ function App() {
   const resolveClerkHash = async () => {
     try {
       const token = await getToken();
+      if (!token) { setCurrentPage('client-login'); return; }
       const res = await fetch(`${API_URL}/api/clerk/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });

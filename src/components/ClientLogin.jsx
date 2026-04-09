@@ -1,9 +1,17 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SignIn, SignUp } from '@clerk/clerk-react';
 import boltIcon from '../assets/bolt.svg';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
+const CLERK_ENABLED = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+// Lazy-load Clerk components only when available
+let SignIn, SignUp;
+if (CLERK_ENABLED) {
+  const clerk = require('@clerk/clerk-react');
+  SignIn = clerk.SignIn;
+  SignUp = clerk.SignUp;
+}
 
 const inputClass = (hasError) =>
   `w-full bg-[#161616] border ${hasError ? 'border-red-500/50' : 'border-[#2A2A2C]'} rounded-[16px] px-5 py-4 text-[15px] text-white outline-none focus:border-[#F5A623] focus:bg-[#1A1A1A] transition-all placeholder-[#444]`;
@@ -179,7 +187,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
           <AnimatePresence mode="wait">
             <motion.div key={tab} initial={{ opacity: 0, x: tab === 'signup' ? 20 : tab === 'agency' ? 20 : -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
 
-              {tab === 'login' && (
+              {tab === 'login' && CLERK_ENABLED && SignIn && (
                 <SignIn
                   routing="virtual"
                   appearance={clerkAppearance}
@@ -187,12 +195,26 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
                 />
               )}
 
-              {tab === 'signup' && (
+              {tab === 'login' && !CLERK_ENABLED && (
+                <div className="text-center py-8 text-[#868686] text-[13px]">
+                  <p>Sistema de login em configuração.</p>
+                  <p className="mt-2">Se você tem um link de acesso, use-o diretamente.</p>
+                </div>
+              )}
+
+              {tab === 'signup' && CLERK_ENABLED && SignUp && (
                 <SignUp
                   routing="virtual"
                   appearance={clerkAppearance}
                   signInUrl={undefined}
                 />
+              )}
+
+              {tab === 'signup' && !CLERK_ENABLED && (
+                <div className="text-center py-8 text-[#868686] text-[13px]">
+                  <p>Cadastro em configuração.</p>
+                  <p className="mt-2">Entre em contato para criar sua conta.</p>
+                </div>
               )}
 
               {tab === 'agency' && (
