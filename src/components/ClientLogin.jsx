@@ -21,18 +21,8 @@ const ErrorMsg = ({ msg }) => (
   </AnimatePresence>
 );
 
-// Clerk appearance config — dark theme matching the app
+// Clerk appearance overrides for login page (globals set in ClerkProvider)
 const clerkAppearance = {
-  variables: {
-    colorPrimary: '#F5A623',
-    colorBackground: '#111111',
-    colorText: '#ffffff',
-    colorTextSecondary: '#868686',
-    colorInputBackground: '#1E1E1E',
-    colorInputText: '#ffffff',
-    colorDanger: '#EF4444',
-    borderRadius: '12px',
-  },
   elements: {
     card: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 },
     headerTitle: { display: 'none' },
@@ -44,14 +34,16 @@ const clerkAppearance = {
       borderRadius: '14px', height: '52px', fontSize: '15px',
     },
     footerActionLink: { color: '#F5A623' },
-    formFieldInput: { background: '#1E1E1E', border: '1px solid #2A2A2C', color: '#ffffff', borderRadius: '12px' },
-    formFieldLabel: { color: '#868686', fontSize: '12px' },
+    formFieldInput: { background: '#1E1E1E', border: '1px solid #2A2A2C', color: '#ffffff', borderRadius: '14px', height: '48px' },
+    formFieldLabel: { color: '#868686', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' },
     dividerLine: { background: '#2A2A2C' },
     dividerText: { color: '#555' },
     identityPreviewText: { color: '#ffffff' },
+    identityPreviewEditButton: { color: '#F5A623' },
     otpCodeFieldInput: { background: '#1E1E1E', border: '1px solid #2A2A2C', color: '#ffffff' },
-    footer: { background: 'transparent' },
-    footerAction: { background: 'transparent' },
+    footer: { display: 'none' },
+    formFieldInputShowPasswordButton: { color: '#868686' },
+    alertText: { color: '#EF4444' },
   }
 };
 
