@@ -249,6 +249,22 @@ router.post('/client/register', async (req, res) => {
       data: { email, password: hashedPassword }
     });
 
+    // Also create Clerk user so the client can sign in via Clerk login page
+    if (process.env.CLERK_SECRET_KEY) {
+      try {
+        const { createClerkClient } = require('@clerk/backend');
+        const clerkSdk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+        const clerkUser = await clerkSdk.users.createUser({
+          emailAddress: [email],
+          password
+        });
+        await prisma.client.update({ where: { hash }, data: { clerkUserId: clerkUser.id } });
+      } catch (clerkErr) {
+        // If user already exists in Clerk, try to find and link them
+        console.error('Clerk create user error (non-fatal):', clerkErr.message);
+      }
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -953,6 +969,70 @@ router.post('/asaas/webhook', express.json(), async (req, res) => {
   } catch (error) {
     console.error('Asaas webhook error:', error);
     res.status(500).json({ error: 'Webhook handler failed' });
+  }
+});
+
+// ========================
+// CLERK AUTH ROUTES
+// ========================
+
+const { createClerkClient, verifyToken: clerkVerifyToken } = require('@clerk/backend');
+
+const getClerkClient = () => createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+
+async function verifyClerkToken(req) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) throw new Error('No token provided');
+  const payload = await clerkVerifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+  return payload;
+}
+
+// GET /api/clerk/me — returns the client hash for the authenticated Clerk user
+// Handles: existing linked users, email-based migration, and new user creation
+router.get('/clerk/me', async (req, res) => {
+  try {
+    const payload = await verifyClerkToken(req);
+    const clerkUserId = payload.sub;
+
+    const clerkSdk = getClerkClient();
+    const clerkUser = await clerkSdk.users.getUser(clerkUserId);
+    const email = clerkUser.emailAddresses?.[0]?.emailAddress || null;
+    const fullName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || email?.split('@')[0] || 'Novo Cliente';
+
+    // 1. Look up by clerkUserId (already linked)
+    let client = await prisma.client.findUnique({ where: { clerkUserId } });
+
+    // 2. Migration: match by email and auto-link
+    if (!client && email) {
+      client = await prisma.client.findUnique({ where: { email } });
+      if (client) {
+        await prisma.client.update({ where: { id: client.id }, data: { clerkUserId } });
+      }
+    }
+
+    // 3. New user: create a fresh client record
+    if (!client) {
+      const hash = crypto.randomBytes(16).toString('hex');
+      const initialData = {
+        restaurant: { name: fullName, category: 'Gastronomia' },
+        user: { name: 'Proprietário', role: 'Proprietário da Conta' },
+        operational: { fichas: [], insumos: [] }
+      };
+      client = await prisma.client.create({
+        data: {
+          name: fullName,
+          hash,
+          email,
+          clerkUserId,
+          data: JSON.stringify(initialData)
+        }
+      });
+    }
+
+    res.json({ hash: client.hash, name: client.name });
+  } catch (error) {
+    console.error('Clerk /me error:', error.message);
+    res.status(401).json({ error: 'Token inválido ou expirado' });
   }
 });
 
