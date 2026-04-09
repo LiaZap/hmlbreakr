@@ -21,31 +21,7 @@ const ErrorMsg = ({ msg }) => (
   </AnimatePresence>
 );
 
-// Clerk appearance overrides for login page (globals set in ClerkProvider)
-const clerkAppearance = {
-  elements: {
-    card: { background: 'transparent', boxShadow: 'none', border: 'none', padding: 0 },
-    headerTitle: { display: 'none' },
-    headerSubtitle: { display: 'none' },
-    header: { display: 'none' },
-    socialButtonsBlockButton: { border: '1px solid #2A2A2C', background: '#1E1E1E', color: '#ffffff' },
-    formButtonPrimary: {
-      background: '#F5A623', color: '#000000', fontWeight: '700',
-      borderRadius: '14px', height: '52px', fontSize: '15px',
-    },
-    footerActionLink: { color: '#F5A623' },
-    formFieldInput: { background: '#1E1E1E', border: '1px solid #2A2A2C', color: '#ffffff', borderRadius: '14px', height: '48px' },
-    formFieldLabel: { color: '#868686', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' },
-    dividerLine: { background: '#2A2A2C' },
-    dividerText: { color: '#555' },
-    identityPreviewText: { color: '#ffffff' },
-    identityPreviewEditButton: { color: '#F5A623' },
-    otpCodeFieldInput: { background: '#1E1E1E', border: '1px solid #2A2A2C', color: '#ffffff' },
-    footer: { display: 'none' },
-    formFieldInputShowPasswordButton: { color: '#868686' },
-    alertText: { color: '#EF4444' },
-  }
-};
+// No local appearance — all styling handled by ClerkProvider in main.jsx
 
 // ── Tab: Login Agência ────────────────────────────────────────────
 const AgencyLoginTab = ({ onAgencyLogin }) => {
@@ -230,14 +206,14 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
               {tab === 'login' && (
                 <SignIn
                   routing="virtual"
-                  appearance={clerkAppearance}
+                  appearance={undefined}
                 />
               )}
 
               {tab === 'signup' && (
                 <SignUp
                   routing="virtual"
-                  appearance={clerkAppearance}
+                  appearance={undefined}
                 />
               )}
 
