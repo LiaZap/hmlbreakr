@@ -32,61 +32,80 @@ body {
 }
 
 /* ── Clerk dark theme overrides ── */
-.cl-formFieldInput,
-.cl-formFieldInput:focus,
-.cl-phoneNumberInput,
-.cl-otpCodeFieldInput {
+/* Use attribute selectors to override Clerk's inline styles */
+[class*="cl-formFieldInput"],
+[class*="cl-formFieldInput"] input,
+[class*="cl-phoneNumberInput"],
+[class*="cl-otpCodeField"] input {
   background: #1E1E1E !important;
+  background-color: #1E1E1E !important;
   border: 1px solid #2A2A2C !important;
   color: #ffffff !important;
   border-radius: 14px !important;
 }
-.cl-formFieldInput:focus {
+[class*="cl-formFieldInput"]:focus,
+[class*="cl-formFieldInput"]:focus-within {
   border-color: #F5A623 !important;
 }
-.cl-socialButtonsBlockButton {
+[class*="cl-socialButtonsBlockButton"] {
   background: #1E1E1E !important;
+  background-color: #1E1E1E !important;
   border: 1px solid #2A2A2C !important;
   color: #ffffff !important;
 }
-.cl-socialButtonsBlockButton:hover {
+[class*="cl-socialButtonsBlockButton"]:hover {
   background: #252527 !important;
+  background-color: #252527 !important;
 }
-.cl-dividerLine {
+[class*="cl-dividerLine"] {
   background: #2A2A2C !important;
 }
-.cl-dividerText {
+[class*="cl-dividerText"] {
   color: #555 !important;
 }
-.cl-formFieldLabel {
+[class*="cl-formFieldLabel"] {
   color: #868686 !important;
 }
-.cl-card {
+[class*="cl-card"] {
   background: transparent !important;
+  background-color: transparent !important;
   box-shadow: none !important;
+  border: none !important;
 }
-.cl-headerTitle,
-.cl-headerSubtitle {
+[class*="cl-headerTitle"],
+[class*="cl-headerSubtitle"],
+[class*="cl-header"] {
   display: none !important;
 }
-.cl-footer {
+[class*="cl-footer"] {
   display: none !important;
 }
-.cl-formButtonPrimary {
+[class*="cl-formButtonPrimary"] {
   background: #F5A623 !important;
+  background-color: #F5A623 !important;
   color: #000000 !important;
   font-weight: 700 !important;
   border-radius: 14px !important;
 }
-.cl-formButtonPrimary:hover {
+[class*="cl-formButtonPrimary"]:hover {
   background: #E5961E !important;
+  background-color: #E5961E !important;
 }
-.cl-identityPreviewEditButton {
+[class*="cl-identityPreview"] [class*="EditButton"] {
   color: #F5A623 !important;
 }
-.cl-footerActionLink {
+[class*="cl-footerActionLink"] {
   color: #F5A623 !important;
 }
-.cl-internal-b3fm6y {
+/* Alternative link color */
+[class*="cl-formFieldAction"] {
+  color: #F5A623 !important;
+}
+/* Force all Clerk inner backgrounds transparent */
+[class*="cl-internal"],
+[class*="cl-main"],
+[class*="cl-signIn-root"],
+[class*="cl-signUp-root"] {
   background: transparent !important;
+  background-color: transparent !important;
 }
