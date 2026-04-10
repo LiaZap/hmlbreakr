@@ -587,16 +587,23 @@ export const DashboardProvider = ({ children }) => {
     let moneyOnTableTotal = 0;
     const moneyOnTableItems = [];
 
-    // Combine all marketplaces into one item using average percentage
-    let mpExcessTotal = 0;
-    const mpAboveThreshold = [];
-    marketplaceSalesData.forEach(mp => {
-        if (mp.salesPct > 23 && currentRevenue > 0) {
-            const excess = ((mp.salesPct - 23) / 100) * currentRevenue;
-            mpExcessTotal += excess;
-            mpAboveThreshold.push(mp);
-        }
-    });
+    // Marketplace "Dinheiro na Mesa" = comissão paga (faturamento × %vendido × taxa)
+    let mpCommissionTotal = 0;
+    let mpWeightedPct = 0; // ponderado para label
+    let mpTotalSalesPct = 0;
+    if (formData.fees_marketplaces && Array.isArray(formData.fees_marketplaces)) {
+        formData.fees_marketplaces.forEach(m => {
+            const salesPct = parseFloat(String(m.sales_percentage || '0').replace(',', '.').replace('%', '')) || 0;
+            const commission = parseFloat(String(m.commission || '0').replace(',', '.').replace('%', '')) || 0;
+            if (salesPct > 0 && commission > 0 && currentRevenue > 0) {
+                const commissionValue = currentRevenue * (salesPct / 100) * (commission / 100);
+                mpCommissionTotal += commissionValue;
+                mpWeightedPct += commission * salesPct; // para média ponderada
+                mpTotalSalesPct += salesPct;
+            }
+        });
+    }
+    const mpAvgCommission = mpTotalSalesPct > 0 ? (mpWeightedPct / mpTotalSalesPct) : 0;
     // mot_actions: previously acknowledged excess values { [key]: { rawValue, date } }
     const motActions = formData.mot_actions || {};
 
@@ -606,10 +613,19 @@ export const DashboardProvider = ({ children }) => {
         return stored.rawValue - currentExcess;
     };
 
-    if (mpAboveThreshold.length > 0) {
-        moneyOnTableTotal += mpExcessTotal;
-        const avgPct = mpAboveThreshold.reduce((s, m) => s + m.salesPct, 0) / mpAboveThreshold.length;
-        moneyOnTableItems.push({ key: 'marketplace', label: `Marketplaces (${avgPct.toFixed(0)}%)`, value: formatMoney(mpExcessTotal), rawValue: mpExcessTotal, pct: `${(avgPct - 23).toFixed(1)}% acima`, color: '#FF4560', pctOfRevenue: avgPct, recovered: calcRecovered('marketplace', mpExcessTotal) });
+    if (mpCommissionTotal > 0) {
+        moneyOnTableTotal += mpCommissionTotal;
+        const mpPctOfRevenue = currentRevenue > 0 ? (mpCommissionTotal / currentRevenue) * 100 : 0;
+        moneyOnTableItems.push({
+            key: 'marketplace',
+            label: `Marketplaces (${mpTotalSalesPct.toFixed(0)}%)`,
+            value: formatMoney(mpCommissionTotal),
+            rawValue: mpCommissionTotal,
+            pct: `taxa ${mpAvgCommission.toFixed(1)}%`,
+            color: '#FF4560',
+            pctOfRevenue: mpPctOfRevenue,
+            recovered: calcRecovered('marketplace', mpCommissionTotal)
+        });
     }
     if (fixedCostPercentage > 33 && currentRevenue > 0) {
         const excess = ((fixedCostPercentage - 33) / 100) * currentRevenue;
