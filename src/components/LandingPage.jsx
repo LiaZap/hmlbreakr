@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useClerk } from '@clerk/clerk-react';
 import boltIcon from '../assets/bolt.svg';
 import lockIcon from '../assets/lock.svg';
 import OnboardingForm from './OnboardingForm';
@@ -13,6 +14,12 @@ const LandingPage = ({ onComplete }) => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { dashboardData } = useDashboard();
   const { restaurant, user } = dashboardData;
+  const { signOut } = useClerk();
+
+  const handleLogout = async () => {
+    try { await signOut(); } catch {}
+    window.location.href = window.location.pathname;
+  };
 
   return (
     <div className="relative w-full min-h-screen bg-background font-jakarta text-white select-none overflow-hidden">
@@ -55,22 +62,28 @@ const LandingPage = ({ onComplete }) => {
           </div>
         </div>
 
-        {/* Right - User Profile */}
-        {(user.name && user.name !== "Usuário") && (
-            <div className="absolute right-4 md:right-[55px] top-[12px] md:top-[28px] flex items-center gap-2 md:gap-[11px]">
-            <div className="w-[36px] h-[36px] md:w-[46px] md:h-[46px] rounded-full bg-[#FDD688] flex items-center justify-center overflow-hidden">
+        {/* Right - User Profile + Logout */}
+        <div className="absolute right-4 md:right-[55px] top-[12px] md:top-[28px] flex items-center gap-3 md:gap-4">
+          {(user.name && user.name !== "Usuário") && (
+            <div className="flex items-center gap-2 md:gap-[11px]">
+              <div className="w-[36px] h-[36px] md:w-[46px] md:h-[46px] rounded-full bg-[#FDD688] flex items-center justify-center overflow-hidden">
                 {user.photo ? (
                   <img src={user.photo} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
                   <span className="font-semibold text-[12px] md:text-[14px] text-black">{user.initials}</span>
                 )}
-            </div>
-            <div className="hidden sm:block">
+              </div>
+              <div className="hidden sm:block">
                 <div className="font-medium text-[14px] text-white">{user.name}</div>
                 <div className="font-medium text-[10px] text-[#A0A0A0]">{user.role}</div>
+              </div>
             </div>
-            </div>
-        )}
+          )}
+          <button onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-2 rounded-[10px] bg-[#1E1E1E] border border-[#2A2A2C] hover:bg-[#252527] transition-colors" title="Sair">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H15M10 17L15 12M15 12L10 7M15 12H3" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span className="text-[11px] text-[#868686] font-medium hidden sm:inline">Sair</span>
+          </button>
+        </div>
       </div>
 
       {/* MAIN CONTENT - Responsive Grid */}
