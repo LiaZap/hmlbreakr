@@ -181,25 +181,37 @@ const AdminPanel = () => {
       if (!d) return 0;
       if (d.onboarding_completed) return 100;
 
-      // Use tracked step progress (saved by OnboardingForm/MobileOnboarding)
-      if (d._onboardingStep && d._onboardingTotal) {
-        return Math.min(Math.round((d._onboardingStep / d._onboardingTotal) * 100), 99);
-      }
-
-      // Fallback: count filled steps for older clients
+      // Verifica se o campo tem dados reais (ignora vazios, objetos sem valores, etc.)
       const hasData = (v) => {
-        if (v === null || v === undefined || v === '' || v === false) return false;
-        if (Array.isArray(v)) return v.length > 0;
-        if (typeof v === 'object') return Object.keys(v).some(k => !k.startsWith('_') && hasData(v[k]));
+        if (v === null || v === undefined || v === '' || v === false || v === 0) return false;
+        if (Array.isArray(v)) return v.some(item => hasData(item));
+        if (typeof v === 'object') return Object.entries(v).some(([k, val]) => !k.startsWith('_') && hasData(val));
         return true;
       };
-      const stepKeys = ['user_info','identity','partners','employees','benefits',
-        'location_costs','utilities','recurring_services','operational_fixed',
-        'monthly_services','equipment','admin_systems','vehicles',
-        'marketing_structure','fees_marketplaces','fees_cards',
-        'other_fixed_costs','revenue_history'];
-      const filled = stepKeys.filter(k => hasData(d[k])).length;
-      return Math.round((filled / stepKeys.length) * 100);
+
+      // Cada etapa do onboarding com peso igual (1/17 cada ≈ 5.9%)
+      const steps = [
+        { key: 'user_info',           check: () => hasData(d.user_info?.user_name) },
+        { key: 'identity',            check: () => hasData(d.identity?.restaurant_name) || hasData(d.identity?.tax_regime) },
+        { key: 'partners',            check: () => Array.isArray(d.partners) && d.partners.some(p => hasData(p?.name)) },
+        { key: 'employees',           check: () => Array.isArray(d.employees) && d.employees.some(e => hasData(e?.name)) },
+        { key: 'benefits',            check: () => hasData(d.benefits) },
+        { key: 'location_costs',      check: () => hasData(d.location_costs?.rent) || hasData(d.location_costs?.own) || hasData(d.location_costs?.rent_value) },
+        { key: 'utilities',           check: () => hasData(d.utilities?.energy) || hasData(d.utilities?.water) },
+        { key: 'recurring_services',  check: () => hasData(d.recurring_services) },
+        { key: 'operational_fixed',   check: () => hasData(d.operational_fixed) },
+        { key: 'monthly_services',    check: () => hasData(d.monthly_services) },
+        { key: 'equipment',           check: () => Array.isArray(d.equipment) ? d.equipment.some(e => hasData(e?.name)) : hasData(d.equipment) },
+        { key: 'admin_systems',       check: () => hasData(d.admin_systems) },
+        { key: 'vehicles',            check: () => hasData(d.vehicles) },
+        { key: 'marketing_structure', check: () => hasData(d.marketing_structure) },
+        { key: 'fees_marketplaces',   check: () => hasData(d.fees_marketplaces) },
+        { key: 'fees_cards',          check: () => Array.isArray(d.fees_cards) ? d.fees_cards.some(f => hasData(f?.name || f?.brand)) : hasData(d.fees_cards) },
+        { key: 'other_fixed_costs',   check: () => hasData(d.other_fixed_costs) },
+        { key: 'revenue_history',     check: () => hasData(d.revenue_history?.months) && d.revenue_history.months.length >= 1 },
+      ];
+      const filled = steps.filter(s => { try { return s.check(); } catch { return false; } }).length;
+      return Math.round((filled / steps.length) * 100);
     } catch { return 0; }
   };
 

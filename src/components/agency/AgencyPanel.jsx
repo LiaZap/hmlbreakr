@@ -16,25 +16,35 @@ const getOnboardingProgress = (clientData) => {
   if (!d) return 0;
   if (d.onboarding_completed) return 100;
 
-  // Use tracked step progress (saved by OnboardingForm/MobileOnboarding)
-  if (d._onboardingStep && d._onboardingTotal) {
-    return Math.min(Math.round((d._onboardingStep / d._onboardingTotal) * 100), 99);
-  }
-
-  // Fallback: count filled steps for older clients
   const hasData = (v) => {
-    if (v === null || v === undefined || v === '' || v === false) return false;
-    if (Array.isArray(v)) return v.length > 0;
-    if (typeof v === 'object') return Object.keys(v).some(k => !k.startsWith('_') && hasData(v[k]));
+    if (v === null || v === undefined || v === '' || v === false || v === 0) return false;
+    if (Array.isArray(v)) return v.some(item => hasData(item));
+    if (typeof v === 'object') return Object.entries(v).some(([k, val]) => !k.startsWith('_') && hasData(val));
     return true;
   };
-  const stepKeys = ['user_info','identity','partners','employees','benefits',
-    'location_costs','utilities','recurring_services','operational_fixed',
-    'monthly_services','equipment','admin_systems','vehicles',
-    'marketing_structure','fees_marketplaces','fees_cards',
-    'other_fixed_costs','revenue_history'];
-  const filled = stepKeys.filter(k => hasData(d[k])).length;
-  return Math.round((filled / stepKeys.length) * 100);
+
+  const steps = [
+    { check: () => hasData(d.user_info?.user_name) },
+    { check: () => hasData(d.identity?.restaurant_name) || hasData(d.identity?.tax_regime) },
+    { check: () => Array.isArray(d.partners) && d.partners.some(p => hasData(p?.name)) },
+    { check: () => Array.isArray(d.employees) && d.employees.some(e => hasData(e?.name)) },
+    { check: () => hasData(d.benefits) },
+    { check: () => hasData(d.location_costs?.rent) || hasData(d.location_costs?.own) || hasData(d.location_costs?.rent_value) },
+    { check: () => hasData(d.utilities?.energy) || hasData(d.utilities?.water) },
+    { check: () => hasData(d.recurring_services) },
+    { check: () => hasData(d.operational_fixed) },
+    { check: () => hasData(d.monthly_services) },
+    { check: () => Array.isArray(d.equipment) ? d.equipment.some(e => hasData(e?.name)) : hasData(d.equipment) },
+    { check: () => hasData(d.admin_systems) },
+    { check: () => hasData(d.vehicles) },
+    { check: () => hasData(d.marketing_structure) },
+    { check: () => hasData(d.fees_marketplaces) },
+    { check: () => Array.isArray(d.fees_cards) ? d.fees_cards.some(f => hasData(f?.name || f?.brand)) : hasData(d.fees_cards) },
+    { check: () => hasData(d.other_fixed_costs) },
+    { check: () => hasData(d.revenue_history?.months) && d.revenue_history.months.length >= 1 },
+  ];
+  const filled = steps.filter(s => { try { return s.check(); } catch { return false; } }).length;
+  return Math.round((filled / steps.length) * 100);
 };
 
 const planLabel = { basic: 'Básico', unlimited: 'Ilimitado' };
