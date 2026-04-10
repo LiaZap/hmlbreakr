@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useClerk } from '@clerk/clerk-react';
 import ProfileModal from './ProfileModal';
 import { useDashboard } from '../../context/DashboardContext';
 
@@ -15,7 +16,10 @@ const DashboardHeader = ({ data }) => {
   const adminName = adminRole === 'super_admin' ? 'Gustavo Costa' : (sessionStorage.getItem('breaker-admin-name') || 'Admin');
   const isAdminViewing = !!adminSession;
 
-  const handleLogout = () => {
+  const { signOut } = useClerk();
+
+  const handleLogout = async () => {
+    try { await signOut(); } catch {}
     window.location.href = window.location.pathname;
   };
 
