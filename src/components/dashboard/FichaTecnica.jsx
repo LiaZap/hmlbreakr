@@ -513,10 +513,13 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   // pricePerUnit = price / packageQty  (e.g., R$10/100 = R$0.10/gr)
   // cost = usageInPurchaseUnit × pricePerUnit
   const calcInsumoCost = (i) => {
-    const priceForPackage = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
-    // grossQty is the package size (e.g., 100 for "100gr @ R$10"). Dividing gives price-per-unit.
-    const packageQty = parseSafeNumber(i.grossQty || i.defaultQty) || 1;
-    const pricePerUnit = priceForPackage / packageQty;
+    // 'price' from EditarInsumoModal = preço POR UNIDADE (e.g., R$1,05/un or R$33,00/kg)
+    // 'custo' = "R$ X,XX" formatted total — may be same as price or total
+    // 'grossQty'/'defaultQty' = quantity purchased (reference only, NOT package divisor)
+    //
+    // Price is ALWAYS per-unit as entered in "Preço por {unit}" field.
+    // So: cost = usageQty (converted to purchase unit) × pricePerUnit
+    const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
     const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
     const usageQty = parseSafeNumber(i.qty);
     const usageUnit = i.usageUnit || i.unit || 'gr';
@@ -1278,9 +1281,8 @@ const FichaTecnica = () => {
         );
 
         const custoInsumos = newIngredients.reduce((sum, i) => {
-          const priceForPackage = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
-          const packageQty = parseSafeNumber(i.grossQty || i.defaultQty) || 1;
-          const pricePerUnit = priceForPackage / packageQty;
+          // price = preço por unidade (como digitado no "Preço por {unit}")
+          const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
           const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
           const usageQty = parseSafeNumber(i.qty);
           const usageUnit = i.usageUnit || i.unit || 'gr';
