@@ -12,19 +12,22 @@ const parseClientData = (raw) => {
 
 const getOnboardingProgress = (clientData) => {
   const raw = parseClientData(clientData);
-  // formData is nested inside dashboardData — if missing, user hasn't started
   const d = raw.formData;
   if (!d) return 0;
   if (d.onboarding_completed) return 100;
 
-  // Helper: check if value has real data
+  // Use tracked step progress (saved by OnboardingForm/MobileOnboarding)
+  if (d._onboardingStep && d._onboardingTotal) {
+    return Math.min(Math.round((d._onboardingStep / d._onboardingTotal) * 100), 99);
+  }
+
+  // Fallback: count filled steps for older clients
   const hasData = (v) => {
     if (v === null || v === undefined || v === '' || v === false) return false;
     if (Array.isArray(v)) return v.length > 0;
-    if (typeof v === 'object') return Object.keys(v).some(k => hasData(v[k]));
+    if (typeof v === 'object') return Object.keys(v).some(k => !k.startsWith('_') && hasData(v[k]));
     return true;
   };
-
   const stepKeys = ['user_info','identity','partners','employees','benefits',
     'location_costs','utilities','recurring_services','operational_fixed',
     'monthly_services','equipment','admin_systems','vehicles',

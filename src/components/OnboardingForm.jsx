@@ -309,14 +309,20 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
   };
 
   const handleContinue = () => {
+    // Track progress: save which step was just completed + total steps
+    const updatedFormData = {
+      ...formData,
+      _onboardingStep: currentStepIndex + 1, // steps completed (1-based)
+      _onboardingTotal: totalSteps,
+    };
     // Auto-save on every step advance so user doesn't lose progress
-    updateDashboardData(formData);
+    updateDashboardData(updatedFormData);
     if (currentStepIndex < totalSteps - 1) {
       setDirection(1);
       setCurrentStepIndex(prev => prev + 1);
     } else {
       // Last step — mark onboarding complete and close
-      const completedFormData = { ...formData, onboarding_completed: true };
+      const completedFormData = { ...updatedFormData, onboarding_completed: true };
       updateDashboardData(completedFormData);
       if (onComplete) onComplete(completedFormData);
     }
