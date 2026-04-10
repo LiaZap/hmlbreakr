@@ -447,7 +447,8 @@ router.get('/client/:hash', async (req, res) => {
     }
 
     // Include credential status and profile data for frontend
-    dashboardData._hasCredentials = !!(client.email && client.password);
+    // Clerk users (with clerkUserId) are considered authenticated — no need for local password
+    dashboardData._hasCredentials = !!(client.email && client.password) || !!client.clerkUserId;
     dashboardData._clientEmail = client.email || null;
     dashboardData._profile = dashboardData.profile || {};
 
