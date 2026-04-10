@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useAuth, useClerk } from '@clerk/clerk-react';
 import SplashScreen from './components/SplashScreen';
 import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
@@ -15,10 +15,12 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 function App() {
   const { dashboardData, clientDataError, clientDataLoaded } = useDashboard();
   const { isLoaded: clerkLoaded, isSignedIn, getToken } = useAuth();
+  const { signOut } = useClerk();
   const [currentPage, setCurrentPage] = useState('loading');
   const [splashDone, setSplashDone] = useState(false);
   const [agencyHash, setAgencyHash] = useState(null);
   const [routingDone, setRoutingDone] = useState(false);
+  const clerkResolveFailed = useRef(false);
 
   const doRouting = (signedIn) => {
     if (routingDone) return;
@@ -69,17 +71,25 @@ function App() {
 
   // When user signs in via Clerk while on the login page
   useEffect(() => {
-    if (!clerkLoaded || !isSignedIn) return;
+    if (!clerkLoaded || !isSignedIn || clerkResolveFailed.current) return;
     if (currentPage === 'client-login' || currentPage === 'resolving-clerk') {
       resolveClerkHash();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clerkLoaded, isSignedIn]);
+  }, [clerkLoaded, isSignedIn, currentPage]);
 
   const resolveClerkHash = async () => {
+    if (clerkResolveFailed.current) return;
+    setCurrentPage('resolving-clerk');
     try {
       const token = await getToken();
-      if (!token) { setCurrentPage('client-login'); return; }
+      if (!token) {
+        console.error('Clerk: no token available');
+        clerkResolveFailed.current = true;
+        await signOut();
+        setCurrentPage('client-login');
+        return;
+      }
       const res = await fetch(`${API_URL}/api/clerk/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -87,9 +97,16 @@ function App() {
         const { hash } = await res.json();
         window.location.href = `${window.location.pathname}?hash=${hash}`;
       } else {
+        const errData = await res.json().catch(() => ({}));
+        console.error('Clerk /me failed:', res.status, errData);
+        clerkResolveFailed.current = true;
+        await signOut();
         setCurrentPage('client-login');
       }
-    } catch {
+    } catch (err) {
+      console.error('Clerk resolve error:', err);
+      clerkResolveFailed.current = true;
+      await signOut();
       setCurrentPage('client-login');
     }
   };
