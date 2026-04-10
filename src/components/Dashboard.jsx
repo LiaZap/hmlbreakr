@@ -309,12 +309,7 @@ const Dashboard = () => {
             <TechnicalSheets data={dashboardData.cards.technicalSheets} />
             <CostStructure data={dashboardData.cards.costStructure} />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              <DRE data={dashboardData.dre} />
-            </div>
-            <CardRateComparison data={dashboardData.cardComparison} />
-          </div>
+          {/* DRE e Taxa Cartão removidos do dashboard para evitar rolagem */}
         </div>
       </div>
       </>
