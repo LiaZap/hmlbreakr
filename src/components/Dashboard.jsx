@@ -42,7 +42,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="relative w-full min-h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-x-hidden overflow-y-auto">
+    <div className="relative w-full h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-hidden">
       
       <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
 
@@ -295,9 +295,9 @@ const Dashboard = () => {
       </div>
 
       {/* BOTTOM ROW - Cards (full-width bg) */}
-      <div className="pl-3 md:pl-[85px] pr-3 md:pr-6 py-6 w-full">
+      <div className="pl-3 md:pl-[85px] pr-3 md:pr-6 py-3 md:py-4 w-full">
         <div className="w-full px-3 md:px-0 2xl:px-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             <MoneyOnTable
               data={dashboardData.cards.moneyOnTable}
               onAcknowledge={(key, rawValue) => {
