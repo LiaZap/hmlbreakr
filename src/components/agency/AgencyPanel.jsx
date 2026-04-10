@@ -11,22 +11,26 @@ const parseClientData = (raw) => {
 };
 
 const getOnboardingProgress = (clientData) => {
-  const d = parseClientData(clientData);
+  const raw = parseClientData(clientData);
+  // formData is nested inside dashboardData — if missing, user hasn't started
+  const d = raw.formData;
+  if (!d) return 0;
   if (d.onboarding_completed) return 100;
-  if (d.revenue_history && d.revenue_history.length > 0) return 100;
-  // count filled step keys
+
+  // Helper: check if value has real data
+  const hasData = (v) => {
+    if (v === null || v === undefined || v === '' || v === false) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === 'object') return Object.keys(v).some(k => hasData(v[k]));
+    return true;
+  };
+
   const stepKeys = ['user_info','identity','partners','employees','benefits',
     'location_costs','utilities','recurring_services','operational_fixed',
     'monthly_services','equipment','admin_systems','vehicles',
     'marketing_structure','fees_marketplaces','fees_cards',
     'other_fixed_costs','revenue_history'];
-  const filled = stepKeys.filter(k => {
-    const v = d[k];
-    if (!v) return false;
-    if (Array.isArray(v)) return v.length > 0;
-    if (typeof v === 'object') return Object.keys(v).length > 0;
-    return !!v;
-  }).length;
+  const filled = stepKeys.filter(k => hasData(d[k])).length;
   return Math.round((filled / stepKeys.length) * 100);
 };
 

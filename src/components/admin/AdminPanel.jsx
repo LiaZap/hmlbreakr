@@ -177,26 +177,36 @@ const AdminPanel = () => {
     try {
       const raw = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
       if (!raw) return 0;
-      // formData is nested inside dashboardData
-      const d = raw.formData || raw;
+      // formData is nested inside dashboardData — if missing, user hasn't started onboarding
+      const d = raw.formData;
+      if (!d) return 0;
       if (d.onboarding_completed) return 100;
+
+      // Helper: check if value has real data (not empty object/array/string)
+      const hasData = (v) => {
+        if (v === null || v === undefined || v === '' || v === false) return false;
+        if (Array.isArray(v)) return v.length > 0;
+        if (typeof v === 'object') return Object.keys(v).some(k => hasData(v[k]));
+        return true;
+      };
+
       const steps = [
-        { check: () => d.user_info?.name },
-        { check: () => d.identity?.tax_regime },
-        { check: () => d.partners && (Array.isArray(d.partners) ? d.partners.length > 0 : d.partners.name) },
-        { check: () => d.employees && (Array.isArray(d.employees) ? d.employees.length > 0 : true) },
-        { check: () => d.location_costs?.rent || d.location_costs?.own },
-        { check: () => d.utilities?.energy || d.utilities?.water },
-        { check: () => d.recurring_services },
-        { check: () => d.operational_fixed },
-        { check: () => d.monthly_services },
-        { check: () => d.equipment && (Array.isArray(d.equipment) ? d.equipment.length > 0 : true) },
-        { check: () => d.admin_systems },
-        { check: () => d.vehicles },
-        { check: () => d.marketing_structure },
-        { check: () => d.fees_marketplaces },
-        { check: () => d.fees_cards && (Array.isArray(d.fees_cards) ? d.fees_cards.length > 0 : true) },
-        { check: () => d.other_fixed_costs },
+        { check: () => hasData(d.user_info?.name) },
+        { check: () => hasData(d.identity?.tax_regime) },
+        { check: () => Array.isArray(d.partners) && d.partners.length > 0 && hasData(d.partners[0]?.name) },
+        { check: () => hasData(d.employees?.count) || (Array.isArray(d.employees) && d.employees.length > 0) },
+        { check: () => hasData(d.location_costs?.rent) || hasData(d.location_costs?.own) },
+        { check: () => hasData(d.utilities?.energy) || hasData(d.utilities?.water) },
+        { check: () => hasData(d.recurring_services) },
+        { check: () => hasData(d.operational_fixed) },
+        { check: () => hasData(d.monthly_services) },
+        { check: () => Array.isArray(d.equipment) ? d.equipment.length > 0 : hasData(d.equipment) },
+        { check: () => hasData(d.admin_systems) },
+        { check: () => hasData(d.vehicles) },
+        { check: () => hasData(d.marketing_structure) },
+        { check: () => hasData(d.fees_marketplaces) },
+        { check: () => Array.isArray(d.fees_cards) ? d.fees_cards.length > 0 : hasData(d.fees_cards) },
+        { check: () => hasData(d.other_fixed_costs) },
         { check: () => d.revenue_history?.months?.length >= 3 },
       ];
       const completed = steps.filter(s => { try { return s.check(); } catch { return false; } }).length;
