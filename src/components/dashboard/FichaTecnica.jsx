@@ -509,9 +509,8 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   };
 
   // Calculate ingredient cost:
-  // price = total cost for the whole package (e.g., R$10 for 100gr, R$33 for 1kg)
-  // pricePerUnit = price / packageQty  (e.g., R$10/100 = R$0.10/gr)
-  // cost = usageInPurchaseUnit × pricePerUnit
+  // price = cost PER UNIT as entered in "Preço por {unit}" field (e.g., R$1.05/un, R$33/kg)
+  // cost = usageQty (converted to purchase unit) × pricePerUnit
   const calcInsumoCost = (i) => {
     // 'price' from EditarInsumoModal = preço POR UNIDADE (e.g., R$1,05/un or R$33,00/kg)
     // 'custo' = "R$ X,XX" formatted total — may be same as price or total
