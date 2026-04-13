@@ -580,7 +580,8 @@ export const DashboardProvider = ({ children }) => {
             marketplaceFeePct += (commission * salesPct) / 100;
         });
     }
-    const basePercentage = fixedCostPercentage + (percentTaxSimples * 100) + (cardFeePercentage * 100) + marketplaceFeePct;
+    // BASE = Custos Fixos + Impostos + Taxas de Cartão (marketplace NÃO entra na base)
+    const basePercentage = fixedCostPercentage + (percentTaxSimples * 100) + (cardFeePercentage * 100);
 
     // "Dinheiro na Mesa" calculation:
     // Sum excess % above thresholds: iFood>23%, CF>33%, CMV>30%
@@ -782,7 +783,6 @@ export const DashboardProvider = ({ children }) => {
                         custosFixos: fixedCostPercentage.toFixed(1),
                         impostos: (percentTaxSimples * 100).toFixed(1),
                         taxasCartao: (cardFeePercentage * 100).toFixed(1),
-                        marketplace: marketplaceFeePct.toFixed(1),
                     }
                 },
                 taxPercent: ((percentTaxSimples + cardFeePercentage) * 100).toFixed(2)

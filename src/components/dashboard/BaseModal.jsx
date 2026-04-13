@@ -16,7 +16,6 @@ const BaseModal = ({ base, onClose }) => {
     { label: 'Custos Fixos', value: bd.custosFixos, color: '#F5A623' },
     { label: 'Impostos', value: bd.impostos, color: '#868686' },
     { label: 'Taxas de Cartão', value: bd.taxasCartao, color: '#868686' },
-    { label: 'Marketplace', value: bd.marketplace, color: '#868686' },
   ];
 
   return (
@@ -61,7 +60,7 @@ const BaseModal = ({ base, onClose }) => {
           <div className="text-[10px] text-[#555] font-semibold uppercase tracking-wider mb-2">Como é formada</div>
           <div className="text-[11px] text-[#868686] mb-3 leading-relaxed">
             <span className="text-white font-semibold">BASE = </span>
-            Custos Fixos + Impostos + Taxas de Cartão + Marketplace
+            Custos Fixos + Impostos + Taxas de Cartão
           </div>
           <div className="flex flex-col gap-2">
             {breakdownItems.map((item, idx) => {
