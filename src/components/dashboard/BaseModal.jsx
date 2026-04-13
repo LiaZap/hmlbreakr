@@ -4,14 +4,6 @@ const BaseModal = ({ base, onClose }) => {
   const baseValue = parseFloat(base.valueRaw || base.value) || 0;
   const bd = base.breakdown || {};
 
-  // Lucro targets: Lucro% = 100% - BASE% - CMV%  →  CMV% = 100% - BASE% - Lucro%
-  const lucroTargets = [
-    { lucro: 10, label: 'Mínimo aceitável', color: '#FF4560', bg: '#FF4560/10' },
-    { lucro: 15, label: 'Bom', color: '#F5A623', bg: '#F5A623/10' },
-    { lucro: 20, label: 'Saudável', color: '#00B37E', bg: '#00B37E/10' },
-    { lucro: 25, label: 'Ótimo', color: '#00B37E', bg: '#00B37E/15' },
-  ];
-
   const breakdownItems = [
     { label: 'Custos Fixos', value: bd.custosFixos, color: '#F5A623' },
     { label: 'Impostos', value: bd.impostos, color: '#868686' },
@@ -79,34 +71,7 @@ const BaseModal = ({ base, onClose }) => {
           </div>
         </div>
 
-        <div className="w-full h-px bg-[#2A2A2C] mb-5" />
-
-        {/* Profit table */}
-        <div className="mb-1">
-          <div className="text-[10px] text-[#555] font-semibold uppercase tracking-wider mb-2">
-            Para lucrar, seu CMV precisa ser:
-          </div>
-          <div className="text-[10px] text-[#555] mb-3">
-            Fórmula: <span className="text-[#868686]">CMV máx = 100% − BASE ({parseFloat(base.value).toFixed(0)}%) − Lucro alvo</span>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {lucroTargets.map(({ lucro, label, color }) => {
-              const maxCmv = 100 - baseValue - lucro;
-              return (
-                <div key={lucro} className="flex items-center justify-between px-3 py-2 rounded-[10px] bg-[#1F1F1F] border border-[#2A2A2C]">
-                  <div>
-                    <div className="text-[10px] font-semibold" style={{ color }}>{lucro}% de lucro</div>
-                    <div className="text-[9px] text-[#555]">{label}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[13px] font-bold text-white">{maxCmv > 0 ? `CMV ≤ ${maxCmv.toFixed(0)}%` : 'Inviável'}</div>
-                    <div className="text-[9px] text-[#555]">CMV máximo</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* Tabela de lucro/CMV removida — indicadores de precificação ficam no painel de fichas técnicas */}
       </div>
     </div>
   );
