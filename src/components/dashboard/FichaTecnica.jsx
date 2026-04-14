@@ -485,16 +485,22 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const [addedInsumos, setAddedInsumos] = useState(() => {
     if (editingFicha && editingFicha.insumos > 0) {
       const currentInsumos = dashboardData.operational?.insumos || [];
-      // Enrich ingredients with grossQty/defaultQty from current insumos list
-      // (older saved fichas may not have grossQty stored on the ingredient)
+      // Enrich ingredients from current insumos list
+      // Old fichas may not have purchaseUnit/originalUnit/grossQty stored
       return (editingFicha.ingredients || []).map(ing => {
-        if (ing.grossQty || ing.defaultQty) return ing;
         const master = currentInsumos.find(s => String(s.id) === String(ing.id));
-        if (!master) return ing;
+        const masterUnit = master?.unit || 'gr';
         return {
           ...ing,
-          grossQty: master.grossQty || master.defaultQty || master.qty,
-          defaultQty: master.defaultQty || master.qty,
+          // Ensure purchaseUnit is always the ORIGINAL unit from the insumo (kg, gr, lt, etc.)
+          purchaseUnit: ing.purchaseUnit || ing.originalUnit || masterUnit,
+          originalUnit: ing.originalUnit || masterUnit,
+          // If usageUnit is missing, derive from purchaseUnit
+          usageUnit: ing.usageUnit || ((masterUnit === 'kg') ? 'gr' : (masterUnit === 'lt') ? 'ml' : masterUnit),
+          grossQty: ing.grossQty || ing.defaultQty || (master ? (master.grossQty || master.defaultQty || master.qty) : ing.qty),
+          defaultQty: ing.defaultQty || (master ? (master.defaultQty || master.qty) : ing.qty),
+          // Ensure price reflects master's current price
+          price: ing.price || (master ? master.price : ing.custo),
         };
       });
     }
