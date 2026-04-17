@@ -12,169 +12,263 @@ const transporter = nodemailer.createTransport({
 
 const APP_URL = process.env.APP_URL || 'https://app.breakr.com.br';
 
+// ============================================
+// BREAKR EMAIL TEMPLATE SYSTEM
+// ============================================
+
+const emailWrapper = (content) => `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Breakr</title>
+</head>
+<body style="margin:0;padding:0;background:#F5F5F5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F5F5F5;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="580" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
+
+        <!-- Logo Header -->
+        <tr>
+          <td style="padding:32px 40px 24px;border-bottom:1px solid #F0F0F0;">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="width:36px;height:36px;background:#000;border-radius:10px;text-align:center;vertical-align:middle;">
+                  <span style="color:#F5A623;font-size:18px;font-weight:900;line-height:36px;">B</span>
+                </td>
+                <td style="padding-left:12px;">
+                  <span style="font-size:20px;font-weight:800;color:#111;letter-spacing:-0.5px;">Breakr</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Content -->
+        <tr>
+          <td style="padding:32px 40px 36px;">
+            ${content}
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 40px 24px;border-top:1px solid #F0F0F0;background:#FAFAFA;">
+            <p style="margin:0 0 4px;font-size:12px;color:#999;text-align:center;">
+              Precisa de ajuda? Responda este email ou acesse nosso suporte.
+            </p>
+            <p style="margin:0;font-size:11px;color:#CCC;text-align:center;">
+              Breakr &mdash; Inteligência para Restaurantes &bull; <a href="${APP_URL}" style="color:#F5A623;text-decoration:none;">breakr.com.br</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+const ctaButton = (text, href) => `
+<table cellpadding="0" cellspacing="0" style="margin:28px 0;">
+  <tr>
+    <td style="background:#F5A623;border-radius:12px;padding:14px 36px;">
+      <a href="${href}" style="color:#000;font-size:15px;font-weight:700;text-decoration:none;display:block;">${text}</a>
+    </td>
+  </tr>
+</table>`;
+
+const infoBox = (content) => `
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#F9F9F9;border:1px solid #F0F0F0;border-radius:12px;margin:20px 0;">
+  <tr>
+    <td style="padding:20px 24px;">
+      ${content}
+    </td>
+  </tr>
+</table>`;
+
+// ============================================
+// EMAIL FUNCTIONS
+// ============================================
+
 /**
- * Sends a welcome email with the onboarding link.
+ * Welcome email — sent when a new client is created
  */
 async function sendWelcomeEmail({ to, clientName, hash }) {
   const onboardingLink = `${APP_URL}?hash=${hash}`;
 
+  const content = `
+    <p style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111;">
+      Olá, ${clientName}!
+    </p>
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#666;">
+      Sua conta no Breakr foi criada com sucesso. Você tem <strong style="color:#111;">7 dias grátis</strong> para explorar todas as funcionalidades.
+    </p>
+
+    <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#333;">Comece agora:</p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 4px;">
+      <tr><td style="padding:6px 0;font-size:14px;color:#666;line-height:1.5;">
+        &bull;&nbsp; Preencha o onboarding com os dados do seu restaurante
+      </td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#666;line-height:1.5;">
+        &bull;&nbsp; Cadastre suas fichas técnicas e insumos
+      </td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#666;line-height:1.5;">
+        &bull;&nbsp; Descubra quanto dinheiro você está deixando na mesa
+      </td></tr>
+    </table>
+
+    ${ctaButton('Acessar o Breakr', onboardingLink)}
+
+    <p style="margin:0;font-size:12px;color:#BBB;line-height:1.5;">
+      Ou copie e cole este link no navegador:<br/>
+      <a href="${onboardingLink}" style="color:#F5A623;text-decoration:none;word-break:break-all;font-size:11px;">${onboardingLink}</a>
+    </p>
+  `;
+
   await transporter.sendMail({
     from: `"Breakr" <no-reply@breakr.com.br>`,
     to,
-    subject: 'Bem-vindo ao Breakr — Acesse seu painel',
-    html: `
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-      <body style="margin:0;padding:0;background:#111111;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#111111;padding:40px 0;">
-          <tr><td align="center">
-            <table width="520" cellpadding="0" cellspacing="0" style="background:#161616;border-radius:20px;overflow:hidden;border:1px solid #222;">
-              <!-- Header -->
-              <tr>
-                <td style="background:#FF9406;padding:28px 36px;text-align:center;">
-                  <span style="font-size:22px;font-weight:800;color:#000;letter-spacing:-0.5px;">Breakr</span>
-                </td>
-              </tr>
-              <!-- Body -->
-              <tr>
-                <td style="padding:36px 36px 28px;color:#E1E1E1;">
-                  <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#999;">Olá, <strong style="color:#fff;">${clientName}</strong></p>
-                  <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#999;">
-                    Seu acesso ao painel Breakr está pronto. Clique no botão abaixo para iniciar o preenchimento dos seus dados e começar a enxergar seu negócio de um jeito novo.
-                  </p>
-                  <!-- CTA Button -->
-                  <table cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
-                    <tr>
-                      <td style="background:#FF9406;border-radius:12px;padding:14px 32px;">
-                        <a href="${onboardingLink}" style="color:#000;font-size:15px;font-weight:700;text-decoration:none;display:block;">
-                          Acessar meu painel →
-                        </a>
-                      </td>
-                    </tr>
-                  </table>
-                  <p style="margin:0 0 6px;font-size:12px;color:#555;text-align:center;">Ou copie o link abaixo:</p>
-                  <p style="margin:0;font-size:11px;color:#444;text-align:center;word-break:break-all;">${onboardingLink}</p>
-                </td>
-              </tr>
-              <!-- Footer -->
-              <tr>
-                <td style="padding:20px 36px;border-top:1px solid #222;text-align:center;">
-                  <p style="margin:0;font-size:11px;color:#444;">Este email foi enviado automaticamente pelo sistema Breakr.</p>
-                </td>
-              </tr>
-            </table>
-          </td></tr>
-        </table>
-      </body>
-      </html>
-    `
+    subject: 'Bem-vindo ao Breakr!',
+    html: emailWrapper(content)
   });
 }
 
 /**
- * Sends a credential reset email with new password.
+ * Credential reset email — sent when admin resets a client's password
  */
 async function sendCredentialResetEmail({ to, clientName, newPassword }) {
+  const content = `
+    <p style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111;">
+      Olá, ${clientName}!
+    </p>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#666;">
+      Suas credenciais de acesso ao Breakr foram atualizadas pelo administrador.
+    </p>
+
+    ${infoBox(`
+      <p style="margin:0 0 12px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Nova Senha</p>
+      <p style="margin:0;font-size:22px;font-weight:800;color:#F5A623;letter-spacing:2px;font-family:monospace;">${newPassword}</p>
+    `)}
+
+    <p style="margin:0 0 4px;font-size:14px;color:#666;line-height:1.6;">
+      Recomendamos que você altere esta senha após o primeiro acesso.
+    </p>
+
+    ${ctaButton('Acessar o Breakr', APP_URL)}
+  `;
+
   await transporter.sendMail({
     from: `"Breakr" <no-reply@breakr.com.br>`,
     to,
     subject: 'Breakr — Suas credenciais foram atualizadas',
-    html: `
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-      <body style="margin:0;padding:0;background:#111111;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#111111;padding:40px 0;">
-          <tr><td align="center">
-            <table width="520" cellpadding="0" cellspacing="0" style="background:#161616;border-radius:20px;overflow:hidden;border:1px solid #222;">
-              <tr>
-                <td style="background:#FF9406;padding:28px 36px;text-align:center;">
-                  <span style="font-size:22px;font-weight:800;color:#000;letter-spacing:-0.5px;">Breakr</span>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:36px 36px 28px;color:#E1E1E1;">
-                  <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#999;">Olá, <strong style="color:#fff;">${clientName}</strong></p>
-                  <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#999;">
-                    Suas credenciais de acesso ao Breakr foram atualizadas pelo administrador.
-                  </p>
-                  <table width="100%" cellpadding="0" cellspacing="0" style="background:#1F1F1F;border-radius:12px;margin-bottom:24px;">
-                    <tr>
-                      <td style="padding:18px 20px;">
-                        <p style="margin:0 0 8px;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:1px;">Nova Senha</p>
-                        <p style="margin:0;font-size:18px;font-weight:700;color:#FF9406;letter-spacing:1px;">${newPassword}</p>
-                      </td>
-                    </tr>
-                  </table>
-                  <p style="margin:0 0 6px;font-size:12px;color:#555;text-align:center;">Acesse em:</p>
-                  <p style="margin:0;font-size:11px;color:#444;text-align:center;">${APP_URL}</p>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:20px 36px;border-top:1px solid #222;text-align:center;">
-                  <p style="margin:0;font-size:11px;color:#444;">Este email foi enviado automaticamente pelo sistema Breakr.</p>
-                </td>
-              </tr>
-            </table>
-          </td></tr>
-        </table>
-      </body>
-      </html>
-    `
+    html: emailWrapper(content)
   });
 }
 
 /**
- * Sends a password reset code email.
+ * Password reset code email — sent when client requests password recovery
  */
 async function sendPasswordResetEmail({ to, clientName, token }) {
+  const content = `
+    <p style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111;">
+      Olá, ${clientName}!
+    </p>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#666;">
+      Recebemos uma solicitação para redefinir sua senha. Use o código abaixo (válido por 30 minutos):
+    </p>
+
+    ${infoBox(`
+      <p style="margin:0 0 8px;font-size:11px;color:#999;text-transform:uppercase;letter-spacing:2px;font-weight:600;text-align:center;">Código de verificação</p>
+      <p style="margin:0;font-size:36px;font-weight:800;color:#F5A623;letter-spacing:8px;text-align:center;font-family:monospace;">${token}</p>
+    `)}
+
+    <p style="margin:0;font-size:13px;color:#999;text-align:center;line-height:1.5;">
+      Se não foi você quem solicitou, ignore este email.<br/>
+      Sua senha não será alterada.
+    </p>
+  `;
+
   await transporter.sendMail({
     from: `"Breakr" <no-reply@breakr.com.br>`,
     to,
     subject: 'Breakr — Código para redefinir sua senha',
-    html: `
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-      <body style="margin:0;padding:0;background:#111111;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#111111;padding:40px 0;">
-          <tr><td align="center">
-            <table width="520" cellpadding="0" cellspacing="0" style="background:#161616;border-radius:20px;overflow:hidden;border:1px solid #222;">
-              <tr>
-                <td style="background:#FF9406;padding:28px 36px;text-align:center;">
-                  <span style="font-size:22px;font-weight:800;color:#000;letter-spacing:-0.5px;">Breakr</span>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:36px 36px 28px;color:#E1E1E1;">
-                  <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#999;">Olá, <strong style="color:#fff;">${clientName}</strong></p>
-                  <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#999;">
-                    Recebemos uma solicitação para redefinir sua senha. Use o código abaixo (válido por 30 minutos):
-                  </p>
-                  <table width="100%" cellpadding="0" cellspacing="0" style="background:#1F1F1F;border-radius:12px;margin-bottom:24px;">
-                    <tr>
-                      <td style="padding:24px;text-align:center;">
-                        <p style="margin:0 0 6px;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:2px;">Código de verificação</p>
-                        <p style="margin:0;font-size:36px;font-weight:800;color:#FF9406;letter-spacing:8px;">${token}</p>
-                      </td>
-                    </tr>
-                  </table>
-                  <p style="margin:0;font-size:12px;color:#555;text-align:center;">Se não foi você, ignore este email. Sua senha não será alterada.</p>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:20px 36px;border-top:1px solid #222;text-align:center;">
-                  <p style="margin:0;font-size:11px;color:#444;">Este email foi enviado automaticamente pelo sistema Breakr.</p>
-                </td>
-              </tr>
-            </table>
-          </td></tr>
-        </table>
-      </body>
-      </html>
-    `
+    html: emailWrapper(content)
   });
 }
 
-module.exports = { sendWelcomeEmail, sendCredentialResetEmail, sendPasswordResetEmail };
+/**
+ * Trial expiring reminder — sent 1-2 days before trial ends
+ */
+async function sendTrialExpiringEmail({ to, clientName, daysLeft, hash }) {
+  const link = `${APP_URL}?hash=${hash}`;
+
+  const content = `
+    <p style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111;">
+      ${clientName}, seu trial está acabando!
+    </p>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#666;">
+      Você tem apenas <strong style="color:#111;">${daysLeft} dia${daysLeft > 1 ? 's' : ''}</strong> restante${daysLeft > 1 ? 's' : ''} no período gratuito do Breakr.
+    </p>
+
+    <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#333;">Não perca o que você já construiu:</p>
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 4px;">
+      <tr><td style="padding:6px 0;font-size:14px;color:#666;line-height:1.5;">
+        &bull;&nbsp; Seus dados de onboarding e fichas técnicas
+      </td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#666;line-height:1.5;">
+        &bull;&nbsp; Indicadores financeiros do seu restaurante
+      </td></tr>
+      <tr><td style="padding:6px 0;font-size:14px;color:#666;line-height:1.5;">
+        &bull;&nbsp; Engenharia de cardápio e precificação
+      </td></tr>
+    </table>
+
+    ${ctaButton('Assinar agora', link)}
+
+    <p style="margin:0;font-size:12px;color:#BBB;text-align:center;">
+      Após o término do trial, seu acesso será pausado até a assinatura ser ativada.
+    </p>
+  `;
+
+  await transporter.sendMail({
+    from: `"Breakr" <no-reply@breakr.com.br>`,
+    to,
+    subject: `Breakr — Seu trial acaba em ${daysLeft} dia${daysLeft > 1 ? 's' : ''}`,
+    html: emailWrapper(content)
+  });
+}
+
+/**
+ * Broadcast notification email — admin can send to all or specific clients
+ */
+async function sendBroadcastEmail({ to, clientName, title, message }) {
+  const content = `
+    <p style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111;">
+      Olá, ${clientName}!
+    </p>
+
+    ${infoBox(`
+      <p style="margin:0 0 8px;font-size:16px;font-weight:700;color:#111;">${title}</p>
+      <p style="margin:0;font-size:14px;color:#666;line-height:1.7;">${message}</p>
+    `)}
+
+    ${ctaButton('Ver no Breakr', APP_URL)}
+  `;
+
+  await transporter.sendMail({
+    from: `"Breakr" <no-reply@breakr.com.br>`,
+    to,
+    subject: `Breakr — ${title}`,
+    html: emailWrapper(content)
+  });
+}
+
+module.exports = {
+  sendWelcomeEmail,
+  sendCredentialResetEmail,
+  sendPasswordResetEmail,
+  sendTrialExpiringEmail,
+  sendBroadcastEmail
+};

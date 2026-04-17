@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // ============ DATA ============
 export const parseSafeNumber = (val) => {
@@ -258,11 +259,21 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   const qty = safeRendimento.replace(/[^0-9.,]/g, '');
   const unitMatch = safeRendimento.replace(/[0-9.,]/g, '') || 'gr';
 
-  const [quantidade, setQuantidade] = useState(insumo.qty || insumo.defaultQty || qty || '');
+  const [quantidade] = useState(insumo.qty || insumo.defaultQty || qty || '');
   const [unit, setUnit] = useState(insumo.unit || unitMatch || 'gr');
 
   const safeCusto = insumo.custo || '0,00';
   const [custo, setCusto] = useState(safeCusto.replace(/R\$\s?/g, '').trim());
+
+  // Prepared insumo state
+  const [tipo, setTipo] = useState(insumo.isPrepared ? 'preparado' : 'pronto');
+  const [rendimentoPreparado, setRendimentoPreparado] = useState(insumo.rendimentoPreparado || '');
+  const [rendimentoUnit, setRendimentoUnit] = useState(insumo.rendimentoUnit || 'gr');
+  const [subIngredients, setSubIngredients] = useState(insumo.subIngredients || []);
+  const [subSearch, setSubSearch] = useState('');
+  // Inline creation of new insumo when not found
+  const [showInlineCreate, setShowInlineCreate] = useState(false);
+  const [inlineInsumo, setInlineInsumo] = useState({ name: '', category: 'Proteínas', qty: '1', unit: 'un', price: '' });
 
   // Auto-format currency: user types "190" → "1,90", "3300" → "33,00"
   const handleCustoChange = (e) => {
@@ -273,36 +284,128 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
     setCusto(formatted);
   };
 
-  const { dashboardData } = useDashboard();
+  const { dashboardData, updateDashboardData } = useDashboard();
   const categoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
+  const availableInsumos = (dashboardData.operational?.insumos || []).filter(i =>
+    !i.isPrepared && String(i.id) !== String(insumo.id)
+  );
 
-  // Custo unitário simples (sem FC)
-  const numericCusto = parseSafeNumber(custo);
-  const numericQtd = parseSafeNumber(quantidade);
-  const unitPrice = numericQtd > 0 ? (numericCusto / numericQtd) : 0;
+
+  // Create new insumo inline (from within prepared modal) — adds to global list + as sub-ingredient
+  const handleCreateInlineInsumo = () => {
+    if (!inlineInsumo.name.trim() || !inlineInsumo.price.trim()) {
+      alert('Preencha o nome e o preço do insumo.');
+      return;
+    }
+    const unitPrice = parseSafeNumber(inlineInsumo.price);
+    const newId = `new_${Date.now()}`;
+    const created = {
+      id: newId,
+      name: inlineInsumo.name.trim(),
+      category: inlineInsumo.category,
+      defaultQty: inlineInsumo.qty,
+      qty: inlineInsumo.qty,
+      netQty: inlineInsumo.qty,
+      grossQty: inlineInsumo.qty,
+      fc: '1.00',
+      unit: inlineInsumo.unit,
+      price: unitPrice.toFixed(2).replace('.', ','),
+      rendimento: `${inlineInsumo.qty}${inlineInsumo.unit}`,
+      custo: `R$ ${unitPrice.toFixed(2).replace('.', ',')}`,
+      lastUpdated: Date.now(),
+    };
+
+    // Add to global insumos list
+    const currentInsumos = dashboardData.operational?.insumos || [];
+    updateDashboardData({
+      ...dashboardData,
+      operational: {
+        ...dashboardData.operational,
+        insumos: [...currentInsumos, created]
+      }
+    });
+
+    // Add as sub-ingredient
+    const pUnit = created.unit;
+    const defUnit = (pUnit === 'kg') ? 'gr' : (pUnit === 'lt') ? 'ml' : pUnit;
+    const defQty = (pUnit === 'kg') ? '100' : (pUnit === 'lt') ? '100' : '1';
+    setSubIngredients(prev => [...prev, {
+      ...created,
+      purchaseUnit: pUnit,
+      originalUnit: pUnit,
+      usageUnit: defUnit,
+      qty: defQty,
+    }]);
+
+    // Reset inline form
+    setInlineInsumo({ name: '', category: 'Proteínas', qty: '1', unit: 'un', price: '' });
+    setShowInlineCreate(false);
+    setSubSearch('');
+  };
+
+  // For prepared insumo: total cost = sum of sub-ingredient costs
+  const calcSubIngredientCost = (sub) => {
+    const pricePerUnit = parseSafeNumber(sub.price) || parseSafeNumber(sub.custo);
+    const purchaseUnit = sub.purchaseUnit || sub.originalUnit || sub.unit || 'gr';
+    const usageQty = parseSafeNumber(sub.qty);
+    const usageUnit = sub.usageUnit || sub.unit || 'gr';
+    const usageInPurchaseUnit = convertUnit(usageQty, usageUnit, purchaseUnit);
+    return usageInPurchaseUnit * pricePerUnit;
+  };
+  const totalPreparedCost = subIngredients.reduce((sum, s) => sum + calcSubIngredientCost(s), 0);
+  const rendQty = parseSafeNumber(rendimentoPreparado);
+  const preparedPricePerUnit = rendQty > 0 ? totalPreparedCost / rendQty : 0;
 
   const handleSave = () => {
     if (!nome.trim()) return;
-    onSave({
-      ...insumo,
-      id: insumo.id || Date.now().toString(),
-      name: nome,
-      category: categoria,
-      qty: quantidade,
-      unit: unit,
-      rendimento: `${quantidade}${unit}`,
-      custo: `R$ ${custo}`,
-      price: custo, // price per unit (e.g., R$33/kg)
-      defaultQty: quantidade,
-      grossQty: quantidade,
-    });
+
+    if (tipo === 'preparado') {
+      // Prepared insumo: cost derived from sub-ingredients
+      const totalCost = subIngredients.reduce((sum, s) => sum + calcSubIngredientCost(s), 0);
+      const rQty = parseSafeNumber(rendimentoPreparado);
+      const pricePerUnit = rQty > 0 ? totalCost / rQty : 0;
+
+      onSave({
+        ...insumo,
+        id: insumo.id || Date.now().toString(),
+        name: nome,
+        category: categoria,
+        qty: rendimentoPreparado,
+        unit: rendimentoUnit,
+        rendimento: `${rendimentoPreparado}${rendimentoUnit}`,
+        custo: `R$ ${pricePerUnit.toFixed(2).replace('.', ',')}`,
+        price: pricePerUnit.toFixed(2).replace('.', ','),
+        defaultQty: rendimentoPreparado,
+        grossQty: rendimentoPreparado,
+        isPrepared: true,
+        subIngredients: subIngredients,
+        rendimentoPreparado: rendimentoPreparado,
+        rendimentoUnit: rendimentoUnit,
+        totalCost: totalCost,
+      });
+    } else {
+      onSave({
+        ...insumo,
+        id: insumo.id || Date.now().toString(),
+        name: nome,
+        category: categoria,
+        qty: quantidade,
+        unit: unit,
+        rendimento: `${quantidade}${unit}`,
+        custo: `R$ ${custo}`,
+        price: custo,
+        defaultQty: quantidade,
+        grossQty: quantidade,
+        isPrepared: false,
+      });
+    }
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[90] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative w-[95vw] sm:w-[90vw] max-w-[480px] max-h-[90vh] overflow-y-auto bg-[#1B1B1D] rounded-[20px] p-5 sm:p-8 shadow-2xl border border-[#2A2A2C]">
+      <div className={`relative w-[95vw] sm:w-[90vw] ${tipo === 'preparado' ? 'max-w-[580px]' : 'max-w-[480px]'} max-h-[90vh] overflow-y-auto bg-[#1B1B1D] rounded-[20px] p-5 sm:p-8 shadow-2xl border border-[#2A2A2C]`}>
         {/* Header */}
         <div className="flex items-start justify-between mb-6 sm:mb-8">
           <div>
@@ -343,90 +446,254 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
             />
           </div>
 
-          {/* Categoria */}
-          <div>
-            <label className="block text-[12px] text-[#868686] mb-2">Categoria</label>
-            <div className="relative">
-              <select
-                value={categoria}
-                onChange={(e) => setCategoria(e.target.value)}
-                className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[12px] px-4 py-3.5 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors appearance-none cursor-pointer"
-              >
-                {categoryOptions.map(c => (
-                  <option key={c} value={c} className="bg-[#1B1B1D] text-white">{c}</option>
-                ))}
-              </select>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                 <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-          </div>
-
-          {/* Unidade de Compra + Preço por Unidade */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Tipo - Pronto ou Preparado */}
+          {!isEditing ? (
             <div>
-              <label className="block text-[12px] text-[#868686] mb-2">Unidade de Compra</label>
-              <div className="relative bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
-                <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="w-full bg-transparent px-4 py-3.5 text-[14px] text-white outline-none appearance-none cursor-pointer"
+              <label className="block text-[12px] text-[#868686] mb-2">
+                Tipo de Insumo
+                <span className="ml-1 text-[10px] text-[#555] cursor-help" title="Pronto: vem pronto do fornecedor. Preparado: você produz na casa com outros insumos.">ⓘ</span>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTipo('pronto')}
+                  className={`flex-1 py-3 rounded-[12px] text-[13px] font-semibold transition-all border ${
+                    tipo === 'pronto'
+                      ? 'bg-[#F5A623]/15 border-[#F5A623] text-[#F5A623]'
+                      : 'bg-[#252527] border-[#2A2A2C] text-[#868686] hover:border-[#444]'
+                  }`}
                 >
-                  <option value="gr" className="bg-[#1B1B1D] text-white">Gramas (gr)</option>
-                  <option value="ml" className="bg-[#1B1B1D] text-white">Mililitros (ml)</option>
-                  <option value="un" className="bg-[#1B1B1D] text-white">Unidade (un)</option>
-                  <option value="kg" className="bg-[#1B1B1D] text-white">Quilogramas (kg)</option>
-                  <option value="lt" className="bg-[#1B1B1D] text-white">Litros (lt)</option>
-                </select>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                   <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                  Pronto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTipo('preparado')}
+                  className={`flex-1 py-3 rounded-[12px] text-[13px] font-semibold transition-all border ${
+                    tipo === 'preparado'
+                      ? 'bg-[#F5A623]/15 border-[#F5A623] text-[#F5A623]'
+                      : 'bg-[#252527] border-[#2A2A2C] text-[#868686] hover:border-[#444]'
+                  }`}
+                >
+                  Preparado
+                </button>
+              </div>
+              <div className="mt-2 text-[10px] text-[#555]">
+                {tipo === 'pronto'
+                  ? 'Vem pronto do fornecedor. Ex: Mussarela, Farinha de Trigo, Azeite.'
+                  : 'Produzido na casa com outros insumos. Ex: Molho de tomate, Massa de pizza, Blend de hambúrguer.'}
               </div>
             </div>
-            <div>
-              <label className="block text-[12px] text-[#868686] mb-2">Preço por {unit}</label>
-              <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
-                <span className="text-[13px] text-[#868686] pl-4 shrink-0">R$</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={custo}
-                  onChange={handleCustoChange}
-                  className="flex-1 bg-transparent px-2 py-3.5 text-[14px] text-white outline-none"
-                  placeholder="0,00"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Quantidade Comprada - informativo */}
-          <div>
-            <label className="block text-[12px] text-[#868686] mb-2">Quantidade Comprada <span className="text-[10px] text-[#555]">(apenas referência)</span></label>
-            <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
-              <input
-                type="text"
-                value={quantidade}
-                onChange={(e) => setQuantidade(e.target.value)}
-                className="flex-1 bg-transparent px-4 py-3.5 text-[14px] text-white outline-none"
-                placeholder="Ex: 1"
-              />
-              <span className="text-[13px] text-[#868686] pr-4 shrink-0">{unit}</span>
-            </div>
-          </div>
-
-          {/* Custo total de compra */}
-          {numericCusto > 0 && numericQtd > 0 && (
-            <div className="bg-[#252527] rounded-[12px] p-4 border border-[#2A2A2C]">
-              <div className="flex items-center justify-between">
-                <div className="text-[11px] text-[#868686]">Custo Total da Compra</div>
-                <div className="text-[12px] font-semibold text-white">
-                  R$ {(numericCusto * numericQtd).toFixed(2).replace('.', ',')}
-                  <span className="text-[#868686] font-normal text-[10px]"> ({quantidade} {unit} × R$ {custo}/{unit})</span>
-                </div>
-              </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[#868686]">Tipo:</span>
+              <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-[6px] ${
+                tipo === 'preparado'
+                  ? 'bg-[#F5A623]/15 text-[#F5A623]'
+                  : 'bg-[#252527] text-[#AAA]'
+              }`}>
+                {tipo === 'preparado' ? 'Preparado' : 'Pronto'}
+              </span>
             </div>
           )}
-          
+
+          {tipo === 'pronto' && (
+            <>
+              {/* Categoria */}
+              <div>
+                <label className="block text-[12px] text-[#868686] mb-2">Categoria</label>
+                <div className="relative">
+                  <select
+                    value={categoria}
+                    onChange={(e) => setCategoria(e.target.value)}
+                    className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[12px] px-4 py-3.5 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors appearance-none cursor-pointer"
+                  >
+                    {categoryOptions.map(c => (
+                      <option key={c} value={c} className="bg-[#1B1B1D] text-white">{c}</option>
+                    ))}
+                  </select>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                     <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+
+              {/* Unidade de Compra + Preço por Unidade */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[12px] text-[#868686] mb-2">Unidade de Compra</label>
+                  <div className="relative bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                    <select
+                      value={unit}
+                      onChange={(e) => setUnit(e.target.value)}
+                      className="w-full bg-transparent px-4 py-3.5 text-[14px] text-white outline-none appearance-none cursor-pointer"
+                    >
+                      <option value="gr" className="bg-[#1B1B1D] text-white">Gramas (gr)</option>
+                      <option value="ml" className="bg-[#1B1B1D] text-white">Mililitros (ml)</option>
+                      <option value="un" className="bg-[#1B1B1D] text-white">Unidade (un)</option>
+                      <option value="kg" className="bg-[#1B1B1D] text-white">Quilogramas (kg)</option>
+                      <option value="lt" className="bg-[#1B1B1D] text-white">Litros (lt)</option>
+                    </select>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                       <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[12px] text-[#868686] mb-2">Preço por {unit}</label>
+                  <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                    <span className="text-[13px] text-[#868686] pl-4 shrink-0">R$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={custo}
+                      onChange={handleCustoChange}
+                      className="flex-1 bg-transparent px-2 py-3.5 text-[14px] text-white outline-none"
+                      placeholder="0,00"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {tipo === 'preparado' && (
+            <>
+              {/* Categoria */}
+              <div>
+                <label className="block text-[12px] text-[#868686] mb-2">Categoria</label>
+                <div className="relative">
+                  <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[12px] px-4 py-3.5 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors appearance-none cursor-pointer">
+                    {categoryOptions.map(c => (<option key={c} value={c} className="bg-[#1B1B1D] text-white">{c}</option>))}
+                  </select>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none"><path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+              </div>
+
+              {/* Rendimento */}
+              <div>
+                <label className="block text-[12px] text-[#868686] mb-2">Rendimento da Receita</label>
+                <div className="flex gap-2">
+                  <div className="flex-1 flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                    <input type="text" value={rendimentoPreparado} onChange={(e) => setRendimentoPreparado(e.target.value)} className="flex-1 bg-transparent px-4 py-3.5 text-[14px] text-white outline-none" placeholder="Ex: 10" />
+                  </div>
+                  <div className="relative w-[120px] bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                    <select value={rendimentoUnit} onChange={(e) => setRendimentoUnit(e.target.value)} className="w-full bg-transparent px-3 py-3.5 text-[14px] text-white outline-none appearance-none cursor-pointer">
+                      <option value="gr">Gramas</option><option value="kg">Kg</option><option value="ml">mL</option><option value="lt">Litros</option><option value="un">Un</option>
+                    </select>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"><path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-ingredientes */}
+              <div>
+                <label className="block text-[12px] text-[#868686] mb-2">Ingredientes</label>
+
+                {/* Added sub-ingredients */}
+                {subIngredients.length > 0 && (
+                  <div className="flex flex-col gap-2 mb-3">
+                    {subIngredients.map((sub, idx) => {
+                      const subCost = calcSubIngredientCost(sub);
+                      const dUnit = sub.usageUnit || sub.unit || 'gr';
+                      return (
+                        <div key={sub.id || idx} className="flex items-center gap-2 bg-[#252527] rounded-[10px] p-2.5 border border-[#2A2A2C]">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[12px] text-white font-medium truncate">{sub.name}</div>
+                            <div className="text-[10px] text-[#868686]">R$ {subCost.toFixed(2).replace('.', ',')}</div>
+                          </div>
+                          <input type="text" value={sub.qty || ''} onChange={(e) => {
+                            setSubIngredients(prev => prev.map((s, i) => i === idx ? { ...s, qty: e.target.value } : s));
+                          }} className="w-[60px] bg-[#1E1E1E] text-white text-[12px] px-2 py-1.5 rounded-[6px] border border-[#333] outline-none text-center" />
+                          <select value={dUnit} onChange={(e) => {
+                            setSubIngredients(prev => prev.map((s, i) => i === idx ? { ...s, usageUnit: e.target.value } : s));
+                          }} className="w-[55px] bg-[#1E1E1E] text-white text-[11px] px-1 py-1.5 rounded-[6px] border border-[#333] outline-none">
+                            <option value="gr">gr</option><option value="kg">kg</option><option value="ml">ml</option><option value="lt">lt</option><option value="un">un</option>
+                          </select>
+                          <button onClick={() => setSubIngredients(prev => prev.filter((_, i) => i !== idx))} className="text-[#868686] hover:text-red-400 transition-colors p-1">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Search to add sub-ingredients */}
+                <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-3 py-2.5 mb-2 focus-within:border-[#F5A623]/40 transition-colors">
+                  <input type="text" placeholder="Buscar insumo para adicionar..." value={subSearch} onChange={(e) => setSubSearch(e.target.value)} className="flex-1 bg-transparent text-[12px] text-white placeholder-[#555] outline-none" />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#555" strokeWidth="1.5"/><path d="M16.5 16.5L21 21" stroke="#555" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </div>
+
+                {/* Botão "Criar novo insumo" — sempre visível, abre painel lateral */}
+                <button
+                  onClick={() => { setInlineInsumo(prev => ({ ...prev, name: subSearch })); setShowInlineCreate(true); }}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#F5A623]/15 to-[#F5A623]/8 border border-[#F5A623]/40 rounded-[10px] py-2.5 mb-2 hover:from-[#F5A623]/25 hover:to-[#F5A623]/15 hover:border-[#F5A623]/60 transition-all group"
+                >
+                  <div className="w-[22px] h-[22px] rounded-full bg-[#F5A623] flex items-center justify-center shrink-0 shadow-[0_2px_8px_rgba(245,166,35,0.3)]">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="black" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                  </div>
+                  <span className="text-[13px] text-[#F5A623] font-semibold">Criar novo insumo</span>
+                </button>
+
+                {/* Available insumos to add (matching search) */}
+                {subSearch && (() => {
+                  const matches = availableInsumos
+                    .filter(i => !subIngredients.some(s => String(s.id) === String(i.id)))
+                    .filter(i => i.name.toLowerCase().includes(subSearch.toLowerCase()))
+                    .slice(0, 5);
+                  if (matches.length === 0) {
+                    return (
+                      <div className="text-center py-3 text-[11px] text-[#555] italic mb-2">
+                        Nenhum insumo encontrado com "{subSearch}". Clique no botão acima para criar.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="max-h-[180px] overflow-y-auto flex flex-col gap-1 mb-2">
+                      {matches.map(i => {
+                        const pUnit = i.unit || 'gr';
+                        const defUnit = (pUnit === 'kg') ? 'gr' : (pUnit === 'lt') ? 'ml' : pUnit;
+                        const defQty = (pUnit === 'kg') ? '100' : (pUnit === 'lt') ? '100' : '1';
+                        return (
+                          <div key={i.id} className="flex items-center gap-2 bg-[#1E1E1E] rounded-[8px] p-2 cursor-pointer hover:bg-[#252527] transition-colors" onClick={() => {
+                            setSubIngredients(prev => [...prev, {
+                              ...i,
+                              price: i.price || (i.custo ? i.custo.replace(/R\$\s?/g, '').trim() : '0'),
+                              purchaseUnit: pUnit,
+                              originalUnit: pUnit,
+                              usageUnit: defUnit,
+                              qty: defQty,
+                            }]);
+                            setSubSearch('');
+                          }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="#555" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            <span className="text-[12px] text-[#AAA]">{i.name}</span>
+                            <span className="text-[10px] text-[#555] ml-auto">{i.custo || ''}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+              </div>
+
+              {/* Cost Summary */}
+              {subIngredients.length > 0 && rendQty > 0 && (
+                <div className="bg-[#252527] rounded-[12px] p-4 border border-[#2A2A2C]">
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-[#868686]">Custo total da receita</span>
+                    <span className="text-white font-medium">R$ {totalPreparedCost.toFixed(2).replace('.', ',')}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span className="text-[#868686]">Custo por {rendimentoUnit}</span>
+                    <span className="text-[#F5A623] font-semibold">R$ {preparedPricePerUnit.toFixed(2).replace('.', ',')}</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
         </div>
 
         {/* Footer */}
@@ -439,6 +706,151 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
           </button>
         </div>
       </div>
+
+      {/* ===== SIDE DRAWER: Criar Novo Insumo ===== */}
+      <AnimatePresence>
+      {showInlineCreate && (
+        <>
+          {/* Overlay backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => { setShowInlineCreate(false); setInlineInsumo({ name: '', category: 'Proteínas', qty: '1', unit: 'un', price: '' }); }}
+            className="fixed inset-0 bg-black/60 z-[95]"
+          />
+          {/* Drawer panel — full height on all devices, above MobileNav */}
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'tween', ease: [0.32, 0.72, 0, 1], duration: 0.35 }}
+            className="fixed inset-y-0 right-0 w-full sm:w-[420px] bg-[#1B1B1D] border-l border-[#2A2A2C] z-[100] shadow-2xl flex flex-col"
+          >
+            {/* Drawer Header — com safe area no iPhone (notch) */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#2A2A2C]" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 1rem))' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-[10px] bg-[#F5A623]/15 flex items-center justify-center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#F5A623" strokeWidth="2" strokeLinecap="round"/></svg>
+                </div>
+                <div>
+                  <h3 className="text-[16px] font-bold text-white">Criar Novo Insumo</h3>
+                  <p className="text-[11px] text-[#666]">Será adicionado à sua lista e ao preparado</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowInlineCreate(false); setInlineInsumo({ name: '', category: 'Proteínas', qty: '1', unit: 'un', price: '' }); }}
+                className="p-2 rounded-[8px] text-[#666] hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+
+            {/* Drawer Body — scrollable */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Nome */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#666] uppercase tracking-wider mb-2">Nome do Insumo</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Farinha de trigo"
+                  value={inlineInsumo.name}
+                  onChange={(e) => setInlineInsumo(prev => ({ ...prev, name: e.target.value }))}
+                  autoFocus
+                  className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#F5A623]/50 transition-colors"
+                />
+              </div>
+
+              {/* Categoria */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#666] uppercase tracking-wider mb-2">Categoria</label>
+                <select
+                  value={inlineInsumo.category}
+                  onChange={(e) => setInlineInsumo(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-4 py-3 text-[14px] text-white outline-none focus:border-[#F5A623]/50 [color-scheme:dark] cursor-pointer"
+                >
+                  {categoryOptions.filter(c => c !== 'Insumo Pronto Preparado').map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantidade + Unidade */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#666] uppercase tracking-wider mb-2">Quantidade da Embalagem</label>
+                <div className="grid grid-cols-[1fr_100px] gap-2">
+                  <input
+                    type="text"
+                    placeholder="Ex: 1000"
+                    value={inlineInsumo.qty}
+                    onChange={(e) => setInlineInsumo(prev => ({ ...prev, qty: e.target.value.replace(/[^0-9.,]/g, '') }))}
+                    className="bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#F5A623]/50"
+                  />
+                  <select
+                    value={inlineInsumo.unit}
+                    onChange={(e) => setInlineInsumo(prev => ({ ...prev, unit: e.target.value }))}
+                    className="bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-3 py-3 text-[14px] text-white outline-none focus:border-[#F5A623]/50 [color-scheme:dark] cursor-pointer"
+                  >
+                    <option value="un">un</option>
+                    <option value="gr">gramas</option>
+                    <option value="kg">kg</option>
+                    <option value="ml">ml</option>
+                    <option value="lt">litros</option>
+                  </select>
+                </div>
+                <p className="text-[10px] text-[#555] mt-1.5">Ex: pacote de 1000 gramas</p>
+              </div>
+
+              {/* Preço */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#666] uppercase tracking-wider mb-2">Preço de Compra</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#666] text-[14px] font-medium">R$</span>
+                  <input
+                    type="text"
+                    placeholder="0,00"
+                    value={inlineInsumo.price}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, '');
+                      if (!raw) { setInlineInsumo(prev => ({ ...prev, price: '' })); return; }
+                      const formatted = (parseInt(raw, 10) / 100).toFixed(2).replace('.', ',');
+                      setInlineInsumo(prev => ({ ...prev, price: formatted }));
+                    }}
+                    className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] pl-12 pr-4 py-3 text-[14px] text-white placeholder-[#555] outline-none focus:border-[#F5A623]/50"
+                  />
+                </div>
+                <p className="text-[10px] text-[#555] mt-1.5">Valor pago pela embalagem inteira</p>
+              </div>
+
+              {/* Info card */}
+              <div className="bg-[#F5A623]/5 border border-[#F5A623]/15 rounded-[10px] p-3 flex gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10" stroke="#F5A623" strokeWidth="1.5"/><path d="M12 8v4M12 16h.01" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <p className="text-[11px] text-[#D4A84F] leading-relaxed">
+                  Este insumo ficará disponível na sua lista geral e também será adicionado automaticamente como sub-ingrediente deste preparado.
+                </p>
+              </div>
+            </div>
+
+            {/* Drawer Footer — fixo no final, com safe area no iPhone */}
+            <div className="px-5 py-4 border-t border-[#2A2A2C] flex gap-3 bg-[#161618]" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 1rem))' }}>
+              <button
+                onClick={() => { setShowInlineCreate(false); setInlineInsumo({ name: '', category: 'Proteínas', qty: '1', unit: 'un', price: '' }); }}
+                className="flex-1 bg-[#252527] text-[#868686] text-[13px] font-semibold py-3 rounded-[10px] hover:bg-[#2F2F2F] hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateInlineInsumo}
+                disabled={!inlineInsumo.name.trim() || !inlineInsumo.price.trim()}
+                className="flex-1 bg-gradient-to-b from-[#F5B638] to-[#E5961E] text-black text-[13px] font-bold py-3 rounded-[10px] hover:shadow-[0_8px_24px_-6px_rgba(245,166,35,0.5)] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+              >
+                Criar e Adicionar
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -507,8 +919,11 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
     return [];
   });
   const [showNewInsumoForm, setShowNewInsumoForm] = useState(false);
-  const [newInsumo, setNewInsumo] = useState({ name: '', category: insumoCategoryOptions[0], qty: '200', grossQty: '', unit: 'gr', price: '' });
+  const [newInsumo, setNewInsumo] = useState({ name: '', category: insumoCategoryOptions[0], qty: '200', unit: 'gr', price: '' });
   const [editingInsumoId, setEditingInsumoId] = useState(null);
+  const [pendingInsumo, setPendingInsumo] = useState(null); // insumo waiting for qty input
+  const [pendingQty, setPendingQty] = useState('');
+  const [pendingUnit, setPendingUnit] = useState('gr');
 
   const handleUpdateAddedInsumo = (id, field, value) => {
     setAddedInsumos(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
@@ -586,23 +1001,39 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   );
 
   const handleAddInsumo = (insumo) => {
-    // Resolve price: prefer 'price', fallback to 'custo' (strip R$ prefix)
+    const purchaseUnit = insumo.unit || 'gr';
+    const defaultUsageUnit = (purchaseUnit === 'kg') ? 'gr' : (purchaseUnit === 'lt') ? 'ml' : purchaseUnit;
+    const defaultUsageQty = (purchaseUnit === 'kg') ? '100' : (purchaseUnit === 'lt') ? '100' : (insumo.defaultQty || '100');
+    setPendingInsumo(insumo);
+    setPendingQty(defaultUsageQty);
+    setPendingUnit(defaultUsageUnit);
+  };
+
+  const confirmAddPendingInsumo = () => {
+    if (!pendingInsumo || !pendingQty) return;
+    const insumo = pendingInsumo;
     const resolvedPrice = insumo.price || (insumo.custo ? insumo.custo.replace(/R\$\s?/g, '').trim() : '0');
     const purchaseUnit = insumo.unit || 'gr';
-    // Default usage: if purchase is kg, default usage to gr (common in recipes)
-    const defaultUsageUnit = (purchaseUnit === 'kg') ? 'gr' : (purchaseUnit === 'lt') ? 'ml' : purchaseUnit;
-    const defaultUsageQty = (purchaseUnit === 'kg') ? '100' : (purchaseUnit === 'lt') ? '100' : insumo.defaultQty;
     setAddedInsumos(prev => [...prev, {
         ...insumo,
         price: resolvedPrice,
         purchaseUnit: purchaseUnit,
         originalUnit: purchaseUnit,
-        usageUnit: defaultUsageUnit,
-        qty: defaultUsageQty,
-        netQty: defaultUsageQty,
+        usageUnit: pendingUnit,
+        qty: pendingQty,
+        netQty: pendingQty,
         grossQty: insumo.grossQty || insumo.defaultQty,
         fc: '1.00'
     }]);
+    setPendingInsumo(null);
+    setPendingQty('');
+    setPendingUnit('gr');
+  };
+
+  const cancelPendingInsumo = () => {
+    setPendingInsumo(null);
+    setPendingQty('');
+    setPendingUnit('gr');
   };
 
   const handleRemoveInsumo = (id) => {
@@ -613,12 +1044,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
     if (!newInsumo.name.trim() || !newInsumo.price.trim()) return;
     
     // Parse values
-    const netQty = parseSafeNumber(newInsumo.qty);
-    const grossQty = parseSafeNumber(newInsumo.grossQty || newInsumo.qty) || netQty;
     const unitPrice = parseSafeNumber(newInsumo.price);
-    
-    // Calculate FC
-    const fc = netQty > 0 ? (grossQty / netQty).toFixed(2) : '1.00';
 
     const created = {
       id: `new_${Date.now()}`,
@@ -629,8 +1055,8 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
       // Store metrics
       qty: newInsumo.qty, 
       netQty: newInsumo.qty,
-      grossQty: grossQty.toString().replace('.', ','),
-      fc: fc,
+      grossQty: newInsumo.qty,
+      fc: '1.00',
       
       unit: newInsumo.unit,
       price: unitPrice.toFixed(2).replace('.', ','),
@@ -647,7 +1073,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
       });
     }
 
-    setNewInsumo({ name: '', category: insumoCategoryOptions[0], qty: '200', grossQty: '', unit: 'gr', price: '' });
+    setNewInsumo({ name: '', category: insumoCategoryOptions[0], qty: '200', unit: 'gr', price: '' });
     setShowNewInsumoForm(false);
   };
 
@@ -810,9 +1236,6 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                           const insumoCost = calcInsumoCost(insumo).toFixed(2);
                           const displayUnit = insumo.usageUnit || insumo.unit || 'gr';
                           const pUnit = insumo.purchaseUnit || insumo.originalUnit || insumo.unit || 'gr';
-                          const purchaseQty = parseSafeNumber(insumo.grossQty || insumo.defaultQty || 0);
-                          const usageInPurchaseUnit = convertUnit(parseSafeNumber(insumo.qty), displayUnit, pUnit);
-                          const exceedsStock = purchaseQty > 0 && usageInPurchaseUnit > purchaseQty;
 
                           if (isEditingThis) {
                             return (
@@ -844,12 +1267,6 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                   <span className="text-[10px] text-[#868686]">Custo na receita:</span>
                                   <span className="text-[11px] text-[#00B37E] font-medium">R$ {insumoCost}</span>
                                 </div>
-                                {exceedsStock && (
-                                  <div className="mt-2 flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 rounded-[8px] px-2.5 py-1.5">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                                    <span className="text-[10px] text-red-400">Quantidade excede o estoque ({purchaseQty}{pUnit} disponível)</span>
-                                  </div>
-                                )}
                               </div>
                             );
                           }
@@ -866,12 +1283,6 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                   <span className="w-1 h-1 rounded-full bg-[#555]" />
                                   <span className="text-[#00B37E]">Custo: R$ {insumoCost}</span>
                               </div>
-                              {exceedsStock && (
-                                <div className="flex items-center gap-1 text-[10px] text-red-400">
-                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#EF4444" strokeWidth="2" strokeLinecap="round"/></svg>
-                                  Excede estoque ({purchaseQty}{pUnit})
-                                </div>
-                              )}
                             </div>
                             <div className="bg-red-500/10 text-red-400 text-[10px] font-semibold px-3 py-1.5 rounded-full shrink-0 cursor-pointer hover:bg-red-500 hover:text-white transition-colors" onClick={() => handleRemoveInsumo(insumo.id)}>
                               Remover
@@ -881,6 +1292,52 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                         })}
                         <div className="w-full h-px bg-[#2A2A2C] my-2" />
                       </>
+                    )}
+
+                    {/* Pending Insumo - Quantity Prompt */}
+                    {pendingInsumo && (
+                      <div className="bg-[#1E1E1E] rounded-[14px] p-4 border border-[#F5A623]/60 mb-2 animate-in">
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-[32px] h-[32px] rounded-[8px] bg-[#F5A623]/15 flex items-center justify-center">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="#F5A623" strokeWidth="2" strokeLinecap="round"/></svg>
+                          </div>
+                          <div>
+                            <div className="font-medium text-[13px] text-white">{pendingInsumo.name}</div>
+                            <div className="text-[10px] text-[#868686]">Defina a quantidade utilizada na receita</div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mb-3">
+                          <div className="flex-1">
+                            <label className="text-[9px] text-[#868686] mb-1 block">Quantidade</label>
+                            <input
+                              type="text"
+                              value={pendingQty}
+                              onChange={e => setPendingQty(e.target.value)}
+                              autoFocus
+                              onKeyDown={e => { if (e.key === 'Enter') confirmAddPendingInsumo(); if (e.key === 'Escape') cancelPendingInsumo(); }}
+                              className="w-full bg-[#252527] text-white text-[13px] px-3 py-2 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]"
+                            />
+                          </div>
+                          <div className="w-[80px]">
+                            <label className="text-[9px] text-[#868686] mb-1 block">Unidade</label>
+                            <select
+                              value={pendingUnit}
+                              onChange={e => setPendingUnit(e.target.value)}
+                              className="w-full bg-[#252527] text-white text-[13px] px-2 py-2 rounded-[8px] border border-[#333] outline-none focus:border-[#F5A623]"
+                            >
+                              <option value="gr">gr</option>
+                              <option value="kg">kg</option>
+                              <option value="ml">ml</option>
+                              <option value="lt">lt</option>
+                              <option value="un">un</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={cancelPendingInsumo} className="flex-1 text-[12px] text-[#868686] py-2 rounded-[8px] hover:bg-[#252527] transition-colors">Cancelar</button>
+                          <button onClick={confirmAddPendingInsumo} className="flex-1 bg-[#F5A623] text-black text-[12px] font-semibold py-2 rounded-[8px] hover:bg-[#E5961E] transition-colors">Confirmar</button>
+                        </div>
+                      </div>
                     )}
 
                     {/* Available Insumos */}
@@ -923,19 +1380,10 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                     {insumoCategoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                                 
-                                {/* Net Quantity (PL) */}
                                 <div>
-                                    <label className="text-[10px] text-[#868686] mb-1 block">Qtd Líquida/Útil (PL)</label>
+                                    <label className="text-[10px] text-[#868686] mb-1 block">Quantidade</label>
                                     <div className="flex items-center bg-[#1E1E1E] border border-[#2A2A2C] rounded-[10px] overflow-hidden">
                                         <input type="text" placeholder="100" value={newInsumo.qty} onChange={(e) => setNewInsumo(p => ({ ...p, qty: e.target.value }))} className="w-full bg-transparent px-3 py-2 text-[12px] text-white outline-none" />
-                                    </div>
-                                </div>
-
-                                {/* Gross Quantity (PB) */}
-                                <div>
-                                    <label className="text-[10px] text-[#868686] mb-1 block">Qtd Bruta (PB)</label>
-                                    <div className="flex items-center bg-[#1E1E1E] border border-[#2A2A2C] rounded-[10px] overflow-hidden">
-                                        <input type="text" placeholder="120" value={newInsumo.grossQty || ''} onChange={(e) => setNewInsumo(p => ({ ...p, grossQty: e.target.value }))} className="w-full bg-transparent px-3 py-2 text-[12px] text-white outline-none" />
                                     </div>
                                 </div>
                             </div>
@@ -952,9 +1400,9 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
                                     </select>
                                 </div>
                                 
-                                {/* Price (Total for Gross Qty) */}
+                                {/* Unit Price */}
                                 <div>
-                                    <label className="text-[10px] text-[#868686] mb-1 block">Custo Total (PB)</label>
+                                    <label className="text-[10px] text-[#868686] mb-1 block">Preço por un.</label>
                                     <div className="flex items-center bg-[#1E1E1E] border border-[#2A2A2C] rounded-[10px] overflow-hidden">
                                         <span className="text-[12px] text-[#868686] pl-2 shrink-0">R$</span>
                                         <input type="text" placeholder="0,00" value={newInsumo.price} onChange={(e) => setNewInsumo(p => ({ ...p, price: e.target.value }))} className="w-full bg-transparent px-2 py-2 text-[12px] text-white outline-none" />
@@ -1277,8 +1725,12 @@ const FichaTecnica = () => {
         const newIngredients = ficha.ingredients.map(ing =>
           String(ing.id) === String(updatedInsumo.id)
             ? { ...ing,
+                name: updatedInsumo.name,
                 price: updatedInsumo.price,
                 custo: updatedInsumo.custo,
+                unit: updatedInsumo.unit || ing.unit,
+                purchaseUnit: updatedInsumo.unit || ing.purchaseUnit,
+                originalUnit: updatedInsumo.unit || ing.originalUnit,
                 grossQty: updatedInsumo.grossQty || updatedInsumo.defaultQty || ing.grossQty,
                 defaultQty: updatedInsumo.defaultQty || ing.defaultQty
               }

@@ -26,3 +26,14 @@ dist-ssr
 # Local dev database
 server/prisma/dev.db
 server/prisma/schema.dev.prisma
+
+# Local testing
+docker-compose.local.yml
+test-local.bat
+test-local-stop.bat
+server/.env.local
+server/.env.production.backup
+server/backup-*.json
+
+# Claude Code config (local)
+.claude/

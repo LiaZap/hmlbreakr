@@ -23,6 +23,18 @@ const ADMIN_ACCOUNTS = [
     password: process.env.ADMIN_PASSWORD || '$ADMIN-Brkr26@',
     name: process.env.ADMIN_NAME || 'Admin',
     role: 'admin'
+  },
+  {
+    email: process.env.COMMERCIAL_EMAIL || 'gabriela@breakr.com.br',
+    password: process.env.COMMERCIAL_PASSWORD || '$COM-Brkr26@',
+    name: 'Gabriela',
+    role: 'commercial'
+  },
+  {
+    email: process.env.FINANCIAL_EMAIL || 'jeff@breakr.com.br',
+    password: process.env.FINANCIAL_PASSWORD || '$FIN-Brkr26@',
+    name: 'Djefeline',
+    role: 'financial'
   }
 ];
 
@@ -113,7 +125,28 @@ router.get('/admin/clients', async (req, res) => {
               revenue_history: fd.revenue_history?.months
                 ? { months: fd.revenue_history.months.map(m => ({ month: m.month })) }
                 : fd.revenue_history,
-            }
+            },
+            // Financial indicators for admin filters (Jeff panel)
+            _financial: (() => {
+              try {
+                const parseCur = (v) => { if (!v) return 0; const s = String(v).replace(/[R$\s.]/g, '').replace(',', '.'); return parseFloat(s) || 0; };
+                const rev = fd.revenue_history?.months || [];
+                const latestRevenue = rev.length > 0 ? parseCur(rev[rev.length - 1]?.value) : 0;
+                // Fixed costs sum (simplified — mirrors DashboardContext logic)
+                const loc = fd.location_costs || {};
+                const rentVal = parseCur(loc.rent_value) || parseCur(loc.own_iptu);
+                const util = fd.utilities || {};
+                const utilTotal = parseCur(util.energy) + parseCur(util.water) + parseCur(util.gas) + parseCur(util.internet) + parseCur(util.phone) + parseCur(util.alarm) + parseCur(util.security);
+                const empArr = Array.isArray(fd.employees) ? fd.employees : [];
+                const personnelCost = empArr.reduce((s, e) => s + parseCur(e?.salary), 0) * 1.7;
+                const fixedCosts = rentVal + utilTotal;
+                const totalFixed = fixedCosts + personnelCost;
+                const cfPct = latestRevenue > 0 ? (totalFixed / latestRevenue) * 100 : 0;
+                const fichasCount = (d.operational?.fichas || []).length;
+                const insumosCount = (d.operational?.insumos || []).length;
+                return { revenue: latestRevenue, cfPct: Math.round(cfPct * 10) / 10, totalFixed: Math.round(totalFixed), fichas: fichasCount, insumos: insumosCount, revenueMonths: rev.length };
+              } catch { return null; }
+            })()
           })
         };
       } catch { return c; }
@@ -122,6 +155,42 @@ router.get('/admin/clients', async (req, res) => {
   } catch {
     res.status(500).json({ error: 'Erro ao listar clientes' });
   }
+});
+
+// Full data export for backup (super_admin only)
+// Each table is fetched independently so a schema mismatch in one doesn't break the whole export.
+router.get('/admin/export', async (req, res) => {
+  const result = { _meta: { version: '1.2', exportedAt: new Date().toISOString(), counts: {}, errors: [] }, clients: [], agencies: [], teamMembers: [], broadcasts: [] };
+
+  // Use $queryRawUnsafe as a fallback for tables with schema drift
+  const safeFetch = async (label, fetcher, fallbackSql) => {
+    try {
+      const rows = await fetcher();
+      result[label] = rows;
+      result._meta.counts[label] = rows.length;
+    } catch (err) {
+      console.warn(`[export] ${label} findMany failed: ${err.message}. Trying raw SQL fallback...`);
+      try {
+        const rows = await prisma.$queryRawUnsafe(fallbackSql);
+        result[label] = rows;
+        result._meta.counts[label] = rows.length;
+        result._meta.errors.push(`${label}: used raw SQL fallback due to schema drift`);
+      } catch (rawErr) {
+        console.error(`[export] ${label} raw fallback failed:`, rawErr.message);
+        result._meta.errors.push(`${label}: ${rawErr.message}`);
+        result._meta.counts[label] = 0;
+      }
+    }
+  };
+
+  await Promise.all([
+    safeFetch('clients', () => prisma.client.findMany(), 'SELECT * FROM "Client"'),
+    safeFetch('agencies', () => prisma.agency.findMany(), 'SELECT * FROM "Agency"'),
+    safeFetch('teamMembers', () => prisma.teamMember.findMany(), 'SELECT * FROM "TeamMember"'),
+    safeFetch('broadcasts', () => prisma.broadcast.findMany(), 'SELECT * FROM "Broadcast"'),
+  ]);
+
+  res.json(result);
 });
 
 // Delete Client (super_admin only)
@@ -654,8 +723,50 @@ router.post('/client/:hash/team', async (req, res) => {
       return res.status(409).json({ error: 'Este email já está em uso' });
     }
 
+    // Validate password length (Clerk requires min 8)
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'A senha deve ter no mínimo 8 caracteres' });
+    }
+
     const newHash = require('crypto').randomBytes(16).toString('hex');
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create member in Clerk so they can login via Clerk
+    let clerkUserId = null;
+    let clerkErrorDetail = null;
+    try {
+      const { createClerkClient } = require('@clerk/backend');
+      const clerkSdk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+      const [firstName, ...rest] = name.trim().split(' ');
+      const lastName = rest.join(' ') || firstName;
+      const clerkUser = await clerkSdk.users.createUser({
+        emailAddress: [email],
+        password,
+        firstName,
+        lastName,
+      });
+      clerkUserId = clerkUser.id;
+    } catch (clerkErr) {
+      console.error('Clerk create user error for TeamMember:', clerkErr.message, clerkErr.errors);
+      clerkErrorDetail = clerkErr.errors?.[0]?.message || clerkErr.message;
+      // If Clerk user already exists with this email, try to find and link
+      try {
+        const { createClerkClient } = require('@clerk/backend');
+        const clerkSdk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+        const existing = await clerkSdk.users.getUserList({ emailAddress: [email], limit: 1 });
+        if (existing?.data?.[0]) {
+          clerkUserId = existing.data[0].id;
+          clerkErrorDetail = null; // recovered
+        }
+      } catch { /* swallow */ }
+    }
+
+    // If Clerk creation failed AND no existing user found, reject — otherwise member won't be able to login
+    if (!clerkUserId) {
+      return res.status(400).json({
+        error: clerkErrorDetail || 'Não foi possível criar a conta no sistema de autenticação. Verifique o email e a senha e tente novamente.'
+      });
+    }
 
     const newMember = await prisma.teamMember.create({
       data: {
@@ -663,12 +774,13 @@ router.post('/client/:hash/team', async (req, res) => {
         email,
         password: hashedPassword,
         hash: newHash,
+        clerkUserId,
         clientId: client.id
       }
     });
 
     const { password: _, ...safeMember } = newMember;
-    res.json({ success: true, member: safeMember });
+    res.json({ success: true, member: safeMember, clerkSynced: !!clerkUserId });
 
   } catch (error) {
     console.error(error);
@@ -691,6 +803,17 @@ router.delete('/client/:hash/team/:memberId', async (req, res) => {
 
     if (!member) {
       return res.status(404).json({ error: 'Membro não encontrado' });
+    }
+
+    // Delete from Clerk first (best-effort)
+    if (member.clerkUserId) {
+      try {
+        const { createClerkClient } = require('@clerk/backend');
+        const clerkSdk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+        await clerkSdk.users.deleteUser(member.clerkUserId);
+      } catch (clerkErr) {
+        console.error('Clerk delete user error (non-fatal):', clerkErr.message);
+      }
     }
 
     await prisma.teamMember.delete({
@@ -1000,10 +1123,40 @@ router.get('/clerk/me', async (req, res) => {
     const email = clerkUser.emailAddresses?.[0]?.emailAddress || null;
     const fullName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || email?.split('@')[0] || 'Novo Cliente';
 
-    // 1. Look up by clerkUserId (already linked)
+    // 1. Look up by clerkUserId (already linked as Client/Owner)
     let client = await prisma.client.findUnique({ where: { clerkUserId } });
 
-    // 2. Migration: match by email and auto-link
+    // 2. Check if this Clerk user is a TeamMember (Gerente) — they access the owner's client
+    if (!client) {
+      let teamMember = await prisma.teamMember.findUnique({
+        where: { clerkUserId },
+        include: { client: true }
+      });
+
+      // Fallback: match TeamMember by email if not linked yet
+      if (!teamMember && email) {
+        teamMember = await prisma.teamMember.findUnique({
+          where: { email },
+          include: { client: true }
+        });
+        if (teamMember) {
+          await prisma.teamMember.update({ where: { id: teamMember.id }, data: { clerkUserId } });
+        }
+      }
+
+      if (teamMember?.client) {
+        // TeamMember logged in — return the OWNER's client hash + their team member info
+        return res.json({
+          hash: teamMember.client.hash,
+          name: teamMember.name,
+          role: teamMember.role,
+          isTeamMember: true,
+          memberHash: teamMember.hash,
+        });
+      }
+    }
+
+    // 3. Migration: match Client by email and auto-link
     if (!client && email) {
       client = await prisma.client.findUnique({ where: { email } });
       if (client) {
@@ -1011,7 +1164,7 @@ router.get('/clerk/me', async (req, res) => {
       }
     }
 
-    // 3. New user: create a fresh client record
+    // 4. New user: create a fresh client record
     if (!client) {
       const hash = crypto.randomBytes(16).toString('hex');
       const initialData = {
@@ -1030,10 +1183,117 @@ router.get('/clerk/me', async (req, res) => {
       });
     }
 
+    // Save Clerk profile photo to client data if available
+    if (clerkUser.imageUrl) {
+      try {
+        const clientData = JSON.parse(client.data || '{}');
+        if (!clientData.user) clientData.user = {};
+        clientData.user.photo = clerkUser.imageUrl;
+        clientData._clerkPhoto = clerkUser.imageUrl;
+        await prisma.client.update({ where: { id: client.id }, data: { data: JSON.stringify(clientData) } });
+      } catch (photoErr) {
+        console.error('Failed to save Clerk photo (non-fatal):', photoErr.message);
+      }
+    }
+
     res.json({ hash: client.hash, name: client.name });
   } catch (error) {
     console.error('Clerk /me error:', error.message);
     res.status(401).json({ error: 'Token inválido ou expirado' });
+  }
+});
+
+// ========================
+// BROADCAST ROUTES
+// ========================
+
+// Get active broadcasts (for clients)
+router.get('/broadcasts/active', async (req, res) => {
+  try {
+    const now = new Date();
+    const broadcasts = await prisma.broadcast.findMany({
+      where: {
+        active: true,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: now } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(broadcasts);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar comunicados' });
+  }
+});
+
+// Admin: List all broadcasts
+router.get('/admin/broadcasts', async (req, res) => {
+  try {
+    const broadcasts = await prisma.broadcast.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(broadcasts);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar comunicados' });
+  }
+});
+
+// Admin: Create broadcast
+router.post('/admin/broadcasts', async (req, res) => {
+  try {
+    const { title, message, imageUrl, type, targetCategory, expiresAt } = req.body;
+    if (!title || !message) return res.status(400).json({ error: 'Título e mensagem são obrigatórios' });
+
+    const broadcast = await prisma.broadcast.create({
+      data: {
+        title,
+        message,
+        imageUrl: imageUrl || null,
+        type: type || 'popup',
+        active: true,
+        targetCategory: targetCategory || null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+      }
+    });
+    res.json(broadcast);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao criar comunicado' });
+  }
+});
+
+// Admin: Update broadcast
+router.put('/admin/broadcasts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, message, imageUrl, type, active, targetCategory, expiresAt } = req.body;
+
+    const broadcast = await prisma.broadcast.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(message !== undefined && { message }),
+        ...(imageUrl !== undefined && { imageUrl }),
+        ...(type !== undefined && { type }),
+        ...(active !== undefined && { active }),
+        ...(targetCategory !== undefined && { targetCategory }),
+        ...(expiresAt !== undefined && { expiresAt: expiresAt ? new Date(expiresAt) : null }),
+      }
+    });
+    res.json(broadcast);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao atualizar comunicado' });
+  }
+});
+
+// Admin: Delete broadcast
+router.delete('/admin/broadcasts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.broadcast.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao deletar comunicado' });
   }
 });
 

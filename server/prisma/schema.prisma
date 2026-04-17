@@ -45,13 +45,26 @@ model Client {
 }
 
 model TeamMember {
-  id        String   @id @default(uuid())
-  name      String
-  hash      String   @unique
-  email     String   @unique
-  password  String
-  role      String   @default("Gerente")
-  clientId  String
-  client    Client   @relation("ClientTeam", fields: [clientId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  name        String
+  hash        String   @unique
+  email       String   @unique
+  password    String?
+  clerkUserId String?  @unique
+  role        String   @default("Gerente")
+  clientId    String
+  client      Client   @relation("ClientTeam", fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+}
+
+model Broadcast {
+  id             String    @id @default(uuid())
+  title          String
+  message        String
+  imageUrl       String?
+  type           String    @default("popup") // popup | banner
+  active         Boolean   @default(true)
+  targetCategory String?   // null = all, or "Pizzaria", "Hamburgueria", etc.
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime?
 }

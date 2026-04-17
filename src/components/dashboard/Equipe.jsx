@@ -40,6 +40,10 @@ const Equipe = () => {
       setFormError('Preencha todos os campos.');
       return;
     }
+    if (newPassword.length < 8) {
+      setFormError('A senha deve ter no mínimo 8 caracteres.');
+      return;
+    }
 
     try {
       const res = await fetch(`/api/client/${hash}/team`, {
@@ -181,7 +185,7 @@ const Equipe = () => {
                         placeholder="Senha para este usuário"
                         required
                       />
-                      <p className="text-[10px] text-[#666] mt-2 pl-2">O gerente poderá entrar e redefinir sua senha pelo menu de Perfil.</p>
+                      <p className="text-[10px] text-[#666] mt-2 pl-2">Mínimo 8 caracteres. O gerente poderá redefinir a senha depois do primeiro acesso.</p>
                     </div>
 
                     {formError && <div className="text-red-500 text-[13px] font-medium px-1">{formError}</div>}

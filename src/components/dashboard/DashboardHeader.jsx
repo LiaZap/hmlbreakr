@@ -19,7 +19,7 @@ const DashboardHeader = ({ data }) => {
   const { signOut } = useClerk();
 
   const handleLogout = async () => {
-    try { await signOut(); } catch {}
+    try { await signOut(); } catch { /* ignore */ }
     window.location.href = window.location.pathname;
   };
 
@@ -57,9 +57,9 @@ const DashboardHeader = ({ data }) => {
   };
 
   return (
-    <div className="flex flex-wrap justify-between items-center mb-4 md:mb-8 py-2 md:py-[14px] gap-y-3">
+    <div className="flex flex-wrap justify-between items-center mb-2 md:mb-8 py-1 md:py-[14px] gap-y-2">
       {/* Left - Restaurant Info */}
-      <div className="flex items-center gap-4 md:gap-6">
+      <div className="flex items-center gap-3 md:gap-6">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-[6px]">
             <div className="w-[36px] h-[36px] md:w-[40px] md:h-[40px] rounded-full bg-[#344036] flex items-center justify-center overflow-hidden">
@@ -101,7 +101,7 @@ const DashboardHeader = ({ data }) => {
       </div>
 
       {/* Right - User Profile */}
-      <div className="flex items-center gap-4 md:gap-8">
+      <div className="flex items-center gap-2 md:gap-8">
 
         <button
           onClick={() => setIsProfileModalOpen(true)}

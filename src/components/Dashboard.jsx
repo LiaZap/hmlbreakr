@@ -24,6 +24,7 @@ import InfoTooltip from './dashboard/InfoTooltip';
 import MobileNav from './dashboard/MobileNav';
 import OnboardingForm from './OnboardingForm';
 import MobileOnboarding from './mobile/MobileOnboarding';
+import BroadcastPopup from './dashboard/BroadcastPopup';
 
 const Dashboard = () => {
   /* MOVED TO CONTEXT */
@@ -42,8 +43,8 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="relative w-full h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-hidden">
-      
+    <div className="relative w-full h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-y-auto md:overflow-hidden">
+      <BroadcastPopup restaurantCategory={dashboardData.restaurant?.category} />
       <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
 
       {activePage === 'fichaTecnica' ? (
@@ -66,16 +67,16 @@ const Dashboard = () => {
       <>
       {/* MAIN CONTENT - Full-width black background */}
       <div className="w-full bg-[#101010]">
-      <div className="ml-0 md:ml-[85px] py-1 md:py-2 pb-4 md:pb-6">
+      <div className="ml-0 md:ml-[85px] py-1 md:py-2 pb-2 md:pb-6">
         <div className="w-full px-3 md:px-6 2xl:px-10 flex flex-col min-h-0">
         
         <DashboardHeader data={dashboardData} />
 
         {/* MAIN GRID - 4 columns layout (responsive fluid) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 xl:gap-6 mb-0 min-h-0">
-          
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-4 xl:gap-6 mb-0 min-h-0">
+
           {/* COL 1 - Left Panel */}
-          <div className="flex flex-col h-full py-1 md:py-2">
+          <div className="flex flex-col h-full py-0 md:py-2">
             
             {/* 1. Header Small */}
             <div className="hidden md:block mb-8">
@@ -98,18 +99,18 @@ const Dashboard = () => {
             </div>
 
             {/* 3. Main Title */}
-            <div className="mb-3 md:mb-4 pr-4">
-              <h1 className="text-[20px] md:text-[28px] leading-[1.15] tracking-tight mb-2 md:mb-3">
+            <div className="mb-2 md:mb-4 pr-4">
+              <h1 className="text-[18px] md:text-[28px] leading-[1.15] tracking-tight mb-1 md:mb-3">
                 <span className="font-bold text-[#FF9406]">{dashboardData.restaurant.name}</span>
                 <span className="font-medium text-[#E1E1E1]">, como <br className="hidden md:inline"/>você nunca viu antes</span>
               </h1>
-              <p className="font-normal text-[12px] text-[#888] leading-snug w-full max-w-[280px]">
+              <p className="hidden md:block font-normal text-[12px] text-[#888] leading-snug w-full max-w-[280px]">
                 {dashboardData.overview.subtitle}
               </p>
             </div>
 
             {/* 4. Pills Grid (Responsive) */}
-            <div className="flex flex-nowrap md:flex-wrap overflow-x-auto gap-2 mb-auto mt-3 md:mt-4 pb-1 md:pb-0 scrollbar-hide">
+            <div className="flex flex-nowrap md:flex-wrap overflow-x-auto gap-1.5 md:gap-2 mb-auto mt-2 md:mt-4 pb-1 md:pb-0 scrollbar-hide">
                {dashboardData.overview.tags.map((tag, idx) => (
                  <div key={idx} className="bg-[#151515] border border-[#222] rounded-full px-3 py-1.5 flex items-center gap-2">
                     <span className="text-[10px] text-[#999] whitespace-nowrap">{tag.label}</span>
@@ -122,7 +123,7 @@ const Dashboard = () => {
           </div>
 
           {/* COL 2 - Faturamento */}
-          <div>
+          <div className="bg-[#141414] md:bg-transparent rounded-2xl md:rounded-none p-3 md:p-0 border border-[#1E1E1E] md:border-0">
             <FinanceOverview data={dashboardData.revenue} onSelectMonth={(idx) => setSelectedMonthIndex(idx)} onUpdateRevenue={(monthIdx, value) => {
               const formData = dashboardData.formData || {};
               const revenueHistory = [...(formData.revenue_history || [])];
@@ -140,7 +141,7 @@ const Dashboard = () => {
           </div>
 
           {/* COL 3 - Ponto de Equilíbrio */}
-          <div>
+          <div className="bg-[#141414] md:bg-transparent rounded-2xl md:rounded-none p-3 md:p-0 border border-[#1E1E1E] md:border-0">
             <div className="flex items-center justify-between mb-2">
               <div className="flex flex-col gap-[2px]">
                 <div className="flex items-center gap-1.5">
@@ -180,7 +181,7 @@ const Dashboard = () => {
             </div>
 
             {/* Gauge Chart */}
-            <div className="w-full mb-2 relative">
+            <div className="w-full mb-1 md:mb-2 relative max-w-[280px] md:max-w-none mx-auto md:mx-0">
               {dashboardData.breakEven.hasCmvData && (
                 <div className="absolute top-0 right-0 z-10">
                   <InfoTooltip
@@ -240,7 +241,7 @@ const Dashboard = () => {
             })()}
 
             {/* Dynamic day prediction message */}
-            <div className="flex items-start gap-[7px] mb-3">
+            <div className="flex items-start gap-[7px] mb-2 md:mb-3">
               <div className="w-10 h-10 rounded-[16px] bg-[#1B1B1D] flex items-center justify-center flex-shrink-0">
                 {/* solar:cup-first-outline from Figma */}
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -266,8 +267,8 @@ const Dashboard = () => {
             </div>
 
             {/* Base Info Box */}
-            <div className="p-4 bg-[#FF9406] rounded-[14px] flex flex-col items-center justify-center text-center cursor-pointer hover:brightness-110 transition-all active:scale-[0.98]" onClick={() => setShowBaseModal(true)}>
-              <div className="flex items-center gap-2 mb-2">
+            <div className="p-3 md:p-4 bg-[#FF9406] rounded-[12px] md:rounded-[14px] flex flex-col items-center justify-center text-center cursor-pointer hover:brightness-110 transition-all active:scale-[0.98]" onClick={() => setShowBaseModal(true)}>
+              <div className="flex items-center gap-2 mb-1 md:mb-2">
                 <div className="flex items-center gap-1">
                   <span className="font-bold text-[11px] text-black">Base</span>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round">
@@ -283,7 +284,7 @@ const Dashboard = () => {
                   </svg>
                 </span>
               </div>
-              <span className="font-bold text-[28px] text-black leading-none mb-1">{dashboardData.breakEven.base.value}</span>
+              <span className="font-bold text-[24px] md:text-[28px] text-black leading-none mb-1">{dashboardData.breakEven.base.value}</span>
               <p className="font-medium text-[10px] text-black/60">Faixa saudável: 40 a 45</p>
             </div>
           </div>
@@ -295,9 +296,9 @@ const Dashboard = () => {
       </div>
 
       {/* BOTTOM ROW - Cards (full-width bg) */}
-      <div className="pl-3 md:pl-[85px] pr-3 md:pr-6 py-3 md:py-4 w-full">
-        <div className="w-full px-3 md:px-0 2xl:px-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+      <div className="pl-3 md:pl-[85px] pr-3 md:pr-6 py-2 md:py-4 pb-[80px] md:pb-4 w-full">
+        <div className="w-full px-0 md:px-0 2xl:px-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-4">
             <MoneyOnTable
               data={dashboardData.cards.moneyOnTable}
               onAcknowledge={(key, rawValue) => {
@@ -318,8 +319,7 @@ const Dashboard = () => {
       {/* Mobile Bottom Navigation */}
       <MobileNav activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
 
-      {/* Bottom spacing for mobile nav */}
-      <div className="h-[70px] md:hidden" />
+      {/* Bottom spacing handled by pb-[80px] on bottom row */}
 
       {/* Base Modal */}
       {showBaseModal && (
