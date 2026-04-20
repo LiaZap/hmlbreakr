@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import boltIcon from '../../assets/bolt.svg';
@@ -856,7 +857,6 @@ const AdminPanel = () => {
                   {clients.slice(0, 5).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((c, idx) => {
                     const { displayName } = getClientDisplay(c);
                     const progress = getOnboardingProgress(c);
-                    // eslint-disable-next-line react-hooks/purity
                     const daysSince = Math.floor((Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24));
                     const color = getColor(c.name);
                     return (
@@ -961,8 +961,9 @@ const AdminPanel = () => {
             </div>
           </div>
 
-          {/* Table */}
-          <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[18px] overflow-hidden">
+          {/* Table — scrollable on mobile (min-w to preserve columns) */}
+          <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[18px] overflow-x-auto">
+            <div className="min-w-[780px]">
             {/* Table Header — sortable */}
             <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_0.8fr_auto] gap-4 px-5 py-3 border-b border-white/[0.06] text-[10px] text-[#555] uppercase tracking-widest font-bold bg-white/[0.01]">
               <button onClick={() => toggleSort('name')} className="text-left flex items-center gap-1.5 hover:text-white transition-colors">
@@ -1113,6 +1114,7 @@ const AdminPanel = () => {
                 );
               })
             )}
+            </div>
           </div>
 
           {/* Pagination */}
