@@ -528,7 +528,7 @@ const AdminPanel = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0B] font-jakarta text-white flex relative overflow-hidden">
+    <div className="h-screen bg-[#0A0A0B] font-jakarta text-white flex relative overflow-hidden">
       {/* Ambient background — Breakr signature orange gradients (matches login) */}
       <div className="pointer-events-none fixed top-[-15%] left-[-10%] w-[55%] h-[55%] bg-[#FFC100] blur-[200px] opacity-[0.05] rounded-full" />
       <div className="pointer-events-none fixed bottom-[-20%] right-[-10%] w-[55%] h-[55%] bg-[#F5A623] blur-[200px] opacity-[0.05] rounded-full" />
@@ -647,7 +647,7 @@ const AdminPanel = () => {
       </motion.aside>
 
       {/* ===== MAIN CONTENT ===== */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden relative z-10">
+      <div className="flex-1 flex flex-col h-screen overflow-x-hidden relative z-10">
         {/* Top Bar */}
         <header className="sticky top-0 z-30 bg-[#0A0A0B]/80 backdrop-blur-xl border-b border-white/[0.06]">
           <div className="px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
