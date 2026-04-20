@@ -67,6 +67,11 @@ const AdminPanel = () => {
   const [cropModal, setCropModal] = useState(null); // { src, zoom, offsetX, offsetY }
   const cropContainerRef = useRef(null);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortBy, setSortBy] = useState({ column: 'createdAt', order: 'desc' });
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     fetch('/api/admin/clients')
@@ -138,12 +143,21 @@ const AdminPanel = () => {
   };
 
   const saveProfile = () => {
-    if (profileName.trim()) sessionStorage.setItem('breaker-admin-name', profileName.trim());
+    const nameChanged = profileName.trim() && profileName.trim() !== adminName;
+    if (nameChanged) sessionStorage.setItem('breaker-admin-name', profileName.trim());
     localStorage.setItem('breakr-admin-notif', profileNotifications ? 'on' : 'off');
     localStorage.setItem('breakr-admin-lang', profileLang);
+
+    // Request notification permission if user enabled
+    if (profileNotifications && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
     setProfileModalOpen(false);
-    // Reload to reflect name change everywhere
-    setTimeout(() => window.location.reload(), 100);
+    // Reload only if name changed (needs to re-initialize adminName)
+    if (nameChanged) {
+      setTimeout(() => window.location.reload(), 200);
+    }
   };
 
   const getAdminEmail = () => {
@@ -172,6 +186,13 @@ const AdminPanel = () => {
       setNewClientName('');
       setNewClientEmail('');
       setShowModal(false);
+      // Browser notification if user enabled
+      if (localStorage.getItem('breakr-admin-notif') !== 'off' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('Breakr — Novo cliente', {
+          body: `${newClient.name} foi cadastrado com sucesso.`,
+          icon: '/bolt.svg',
+        });
+      }
     })
     .catch(() => alert("Erro ao criar cliente"));
   };
@@ -410,17 +431,68 @@ const AdminPanel = () => {
     } catch { return null; }
   };
 
-  const filteredClients = clients.filter(c => {
-    if (!c.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (financialFilter === 'all') return true;
-    const fin = getFinancial(c);
-    const progress = getOnboardingProgress(c);
-    if (financialFilter === 'cf_high') return fin && fin.cfPct > 33;
-    if (financialFilter === 'no_revenue') return !fin || fin.revenue === 0;
-    if (financialFilter === 'complete') return progress >= 100;
-    if (financialFilter === 'inactive') return progress === 0;
-    return true;
-  });
+  const filteredClients = (() => {
+    const filtered = clients.filter(c => {
+      // Search by name OR email
+      const q = search.toLowerCase();
+      const matchesSearch = !q || c.name.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+      if (financialFilter === 'all') return true;
+      const fin = getFinancial(c);
+      const progress = getOnboardingProgress(c);
+      if (financialFilter === 'cf_high') return fin && fin.cfPct > 33;
+      if (financialFilter === 'no_revenue') return !fin || fin.revenue === 0;
+      if (financialFilter === 'complete') return progress >= 100;
+      if (financialFilter === 'inactive') return progress === 0;
+      return true;
+    });
+
+    // Sort
+    const sorted = [...filtered].sort((a, b) => {
+      const { column, order } = sortBy;
+      let va, vb;
+      if (column === 'name') {
+        const { displayName: na } = getClientDisplay(a);
+        const { displayName: nb } = getClientDisplay(b);
+        va = na.toLowerCase(); vb = nb.toLowerCase();
+      } else if (column === 'progress') {
+        va = getOnboardingProgress(a); vb = getOnboardingProgress(b);
+      } else if (column === 'revenue') {
+        va = getFinancial(a)?.revenue || 0; vb = getFinancial(b)?.revenue || 0;
+      } else {
+        // createdAt
+        va = new Date(a.createdAt).getTime(); vb = new Date(b.createdAt).getTime();
+      }
+      if (va < vb) return order === 'asc' ? -1 : 1;
+      if (va > vb) return order === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  })();
+
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / PAGE_SIZE));
+  const pagedClients = filteredClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // Reset to page 1 if current page becomes invalid after filtering
+  if (currentPage > totalPages && totalPages > 0 && currentPage !== 1) {
+    setTimeout(() => setCurrentPage(1), 0);
+  }
+
+  const toggleSort = (column) => {
+    setSortBy(prev => ({
+      column,
+      order: prev.column === column && prev.order === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  const SortIcon = ({ column }) => {
+    if (sortBy.column !== column) return <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="text-[#444]"><path d="M7 10l5-5 5 5M7 14l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>;
+    return sortBy.order === 'asc' ? (
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="text-[#F5A623]"><path d="M7 14l5-5 5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+    ) : (
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" className="text-[#F5A623]"><path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+    );
+  };
 
   // SaaS metrics
   const metrics = (() => {
@@ -461,8 +533,27 @@ const AdminPanel = () => {
       <div className="pointer-events-none fixed bottom-[-20%] right-[-10%] w-[55%] h-[55%] bg-[#F5A623] blur-[200px] opacity-[0.05] rounded-full" />
       <div className="pointer-events-none fixed top-[30%] right-[20%] w-[30%] h-[30%] bg-[#FF8A00] blur-[150px] opacity-[0.025] rounded-full" />
 
-      {/* ===== LEFT SIDEBAR ===== */}
-      <aside className="hidden md:flex w-[250px] shrink-0 flex-col bg-gradient-to-b from-[#0F0F10] to-[#0A0A0B] border-r border-white/[0.06] h-screen sticky top-0 z-20">
+      {/* Mobile sidebar backdrop */}
+      <AnimatePresence>
+        {mobileSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setMobileSidebarOpen(false)}
+            className="md:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-[70]"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ===== LEFT SIDEBAR — desktop static + mobile drawer ===== */}
+      <motion.aside
+        initial={false}
+        animate={{
+          x: mobileSidebarOpen ? 0 : (typeof window !== 'undefined' && window.innerWidth >= 768 ? 0 : '-100%')
+        }}
+        transition={{ type: 'tween', duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+        className="fixed md:sticky md:translate-x-0 top-0 left-0 w-[260px] md:w-[250px] shrink-0 flex flex-col bg-gradient-to-b from-[#0F0F10] to-[#0A0A0B] border-r border-white/[0.06] h-screen z-[80] md:z-20"
+        style={{ transform: typeof window !== 'undefined' && window.innerWidth >= 768 ? 'translateX(0)' : undefined }}
+      >
         {/* Logo */}
         <div className="px-5 py-5 flex items-center gap-3 border-b border-white/[0.04]">
           <div className="relative">
@@ -471,10 +562,14 @@ const AdminPanel = () => {
               <img src={boltIcon} alt="Breakr" className="w-[20px]" />
             </div>
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-[16px] font-bold text-white leading-tight tracking-tight">Breakr</h1>
             <p className="text-[9px] text-[#555] uppercase tracking-widest font-semibold">Admin Panel</p>
           </div>
+          {/* Close button — only on mobile */}
+          <button onClick={() => setMobileSidebarOpen(false)} className="md:hidden p-2 rounded-[8px] text-[#666] hover:text-white hover:bg-white/[0.06] transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          </button>
         </div>
 
         {/* User Profile Card — clickable opens modal */}
@@ -511,7 +606,7 @@ const AdminPanel = () => {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => { setActiveTab(item.id); setMobileSidebarOpen(false); }}
                 className={`relative w-full flex items-center gap-3 px-3 py-2.5 rounded-[10px] mb-1 transition-all text-left group ${
                   isActive
                     ? 'bg-gradient-to-r from-[#F5A623]/15 to-[#F5A623]/5 text-[#F5A623] shadow-[inset_0_1px_0_rgba(245,166,35,0.1)]'
@@ -548,13 +643,18 @@ const AdminPanel = () => {
             <span className="text-[13px] font-medium">Sair</span>
           </button>
         </div>
-      </aside>
+      </motion.aside>
 
       {/* ===== MAIN CONTENT ===== */}
       <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden relative z-10">
         {/* Top Bar */}
         <header className="sticky top-0 z-30 bg-[#0A0A0B]/80 backdrop-blur-xl border-b border-white/[0.06]">
-          <div className="px-6 py-3 flex items-center gap-4">
+          <div className="px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
+            {/* Mobile hamburger */}
+            <button onClick={() => setMobileSidebarOpen(true)} className="md:hidden p-2 rounded-[10px] text-[#868686] hover:text-white hover:bg-white/[0.04] transition-colors shrink-0">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+
             {/* Breadcrumbs */}
             <div className="hidden lg:flex items-center gap-2 text-[12px]">
               <span className="text-[#555]">Admin</span>
@@ -577,19 +677,64 @@ const AdminPanel = () => {
               <kbd className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[9px] font-mono font-semibold text-[#666] bg-white/[0.05] border border-white/[0.08] rounded">⌘K</kbd>
             </div>
 
-            <div className="flex items-center gap-1">
-              {/* Notification bell */}
-              <button className="relative p-2.5 rounded-[10px] text-[#868686] hover:text-white hover:bg-white/[0.04] transition-colors">
+            <div className="flex items-center gap-1 relative">
+              {/* Notification bell — opens dropdown with recent broadcasts */}
+              <button onClick={() => setNotifOpen(v => !v)} className="relative p-2.5 rounded-[10px] text-[#868686] hover:text-white hover:bg-white/[0.04] transition-colors">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 {broadcasts.filter(b => b.active).length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-[8px] h-[8px] rounded-full bg-[#F5A623] ring-2 ring-[#0A0A0B] animate-pulse"/>
+                  <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-[#F5A623] ring-2 ring-[#0A0A0B] text-[9px] text-black font-bold flex items-center justify-center">{broadcasts.filter(b => b.active).length}</span>
                 )}
               </button>
-              {/* Help */}
-              <button className="p-2.5 rounded-[10px] text-[#868686] hover:text-white hover:bg-white/[0.04] transition-colors">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
 
+              {/* Notification dropdown */}
+              <AnimatePresence>
+                {notifOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setNotifOpen(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-full mt-2 w-[320px] bg-[#141416] border border-white/[0.08] rounded-[14px] shadow-2xl z-40 overflow-hidden"
+                    >
+                      <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
+                        <h4 className="text-[13px] font-bold text-white">Notificações</h4>
+                        {canManage && (
+                          <button onClick={() => { setActiveTab('broadcasts'); setNotifOpen(false); }} className="text-[10px] text-[#F5A623] font-semibold hover:underline">
+                            Gerenciar
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto">
+                        {broadcasts.filter(b => b.active).length === 0 ? (
+                          <div className="px-4 py-8 text-center">
+                            <div className="w-10 h-10 mx-auto rounded-full bg-white/[0.03] flex items-center justify-center mb-2">
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-[#444]"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            </div>
+                            <p className="text-[11px] text-[#666]">Nenhuma notificação ativa</p>
+                          </div>
+                        ) : (
+                          broadcasts.filter(b => b.active).map(b => (
+                            <div key={b.id} className="px-4 py-3 border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
+                              <div className="flex items-start gap-2">
+                                <div className={`w-[6px] h-[6px] rounded-full mt-1.5 shrink-0 ${b.type === 'banner' ? 'bg-[#5B8DEF]' : 'bg-[#F5A623]'}`} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                                    <p className="text-[12px] font-semibold text-white truncate">{b.title}</p>
+                                    <span className="text-[9px] text-[#666] shrink-0">{new Date(b.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                                  </div>
+                                  <p className="text-[11px] text-[#999] line-clamp-2">{b.message}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>
@@ -613,11 +758,6 @@ const AdminPanel = () => {
                 {(() => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; })()}, {adminName.split(' ')[0]} 👋
               </h2>
               <p className="text-[13px] text-[#868686] mt-1">Aqui está o resumo do seu negócio hoje.</p>
-            </div>
-            <div className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-[10px] p-1">
-              {['Hoje', 'Semana', 'Mês'].map((p, i) => (
-                <button key={p} className={`px-3 py-1.5 text-[11px] font-semibold rounded-[8px] transition-colors ${i === 0 ? 'bg-white/[0.08] text-white' : 'text-[#868686] hover:text-white'}`}>{p}</button>
-              ))}
             </div>
           </div>
 
@@ -823,13 +963,21 @@ const AdminPanel = () => {
 
           {/* Table */}
           <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[18px] overflow-hidden">
-            {/* Table Header */}
+            {/* Table Header — sortable */}
             <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_0.8fr_auto] gap-4 px-5 py-3 border-b border-white/[0.06] text-[10px] text-[#555] uppercase tracking-widest font-bold bg-white/[0.01]">
-              <span>Cliente</span>
+              <button onClick={() => toggleSort('name')} className="text-left flex items-center gap-1.5 hover:text-white transition-colors">
+                Cliente <SortIcon column="name" />
+              </button>
               <span>Responsável</span>
-              <span>Status</span>
-              <span>Cadastro</span>
-              <span>Indicadores</span>
+              <button onClick={() => toggleSort('progress')} className="text-left flex items-center gap-1.5 hover:text-white transition-colors">
+                Status <SortIcon column="progress" />
+              </button>
+              <button onClick={() => toggleSort('createdAt')} className="text-left flex items-center gap-1.5 hover:text-white transition-colors">
+                Cadastro <SortIcon column="createdAt" />
+              </button>
+              <button onClick={() => toggleSort('revenue')} className="text-left flex items-center gap-1.5 hover:text-white transition-colors">
+                Indicadores <SortIcon column="revenue" />
+              </button>
               <span className="text-right">Ações</span>
             </div>
 
@@ -843,7 +991,7 @@ const AdminPanel = () => {
                 {search && <p className="text-[#444] text-[11px] mt-1">Tente outra busca ou limpe os filtros</p>}
               </div>
             ) : (
-              filteredClients.map((client, idx) => {
+              pagedClients.map((client, idx) => {
                 const color = getColor(client.name);
                 const progress = getOnboardingProgress(client);
                 const photo = getClientPhoto(client);
@@ -966,6 +1114,48 @@ const AdminPanel = () => {
               })
             )}
           </div>
+
+          {/* Pagination */}
+          {filteredClients.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between mt-4 px-2">
+              <div className="text-[11px] text-[#666]">
+                Página <span className="text-white font-semibold">{currentPage}</span> de <span className="text-white font-semibold">{totalPages}</span> — {filteredClients.length} clientes
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-[8px] text-[#868686] hover:text-white hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+                {/* Page numbers — show first, last, and nearby */}
+                {(() => {
+                  const pages = [];
+                  const showPage = (p) => p === 1 || p === totalPages || (p >= currentPage - 1 && p <= currentPage + 1);
+                  let prevShown = 0;
+                  for (let p = 1; p <= totalPages; p++) {
+                    if (!showPage(p)) continue;
+                    if (prevShown && p - prevShown > 1) pages.push(<span key={`dot-${p}`} className="text-[#555] px-1 text-[11px]">···</span>);
+                    pages.push(
+                      <button key={p} onClick={() => setCurrentPage(p)} className={`min-w-[32px] h-[32px] rounded-[8px] text-[12px] font-semibold transition-colors ${currentPage === p ? 'bg-[#F5A623] text-black' : 'text-[#868686] hover:text-white hover:bg-white/[0.04]'}`}>
+                        {p}
+                      </button>
+                    );
+                    prevShown = p;
+                  }
+                  return pages;
+                })()}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-[8px] text-[#868686] hover:text-white hover:bg-white/[0.04] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Bottom Metrics — premium */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
