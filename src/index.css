@@ -49,23 +49,13 @@ body {
 [class*="cl-formFieldInput"]:focus-within {
   border-color: #F5A623 !important;
 }
-/* Force social buttons container + button to respect parent width */
-[class*="cl-socialButtons"],
-[class*="cl-socialButtonsBlockButton"] {
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
-  box-sizing: border-box !important;
-}
 [class*="cl-socialButtonsBlockButton"] {
   background: #1E1E1E !important;
   background-color: #1E1E1E !important;
   border: 1px solid #2A2A2C !important;
   color: #ffffff !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 0 16px !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
   overflow: hidden !important;
 }
 [class*="cl-socialButtonsBlockButton"]:hover {
@@ -76,12 +66,7 @@ body {
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  font-size: 14px !important;
-}
-/* Also the inner form container */
-[class*="cl-form"] {
-  width: 100% !important;
-  box-sizing: border-box !important;
+  min-width: 0 !important;
 }
 [class*="cl-dividerLine"] {
   background: #2A2A2C !important;
