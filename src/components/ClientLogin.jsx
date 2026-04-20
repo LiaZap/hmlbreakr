@@ -164,7 +164,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-[420px] mx-4 my-8 bg-[#141416]/90 backdrop-blur-xl border border-[#2A2A2C]/50 rounded-[24px] px-6 pt-8 pb-6 sm:px-10 sm:pt-10 sm:pb-8 flex flex-col items-center overflow-hidden"
+        className="relative z-10 w-full max-w-[460px] mx-4 my-8 bg-[#141416]/90 backdrop-blur-xl border border-[#2A2A2C]/50 rounded-[24px] px-5 pt-8 pb-6 sm:px-8 sm:pt-10 sm:pb-8 flex flex-col items-center"
       >
         {/* Logo — tap 5x to reveal Admin tab */}
         <div className="relative mb-6 cursor-pointer select-none" onClick={() => setLogoClicks(c => c + 1)}>
@@ -199,7 +199,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
         </div>
 
         {/* Tab Content */}
-        <div className="w-full overflow-hidden">
+        <div className="w-full">
           <AnimatePresence mode="wait">
             <motion.div key={tab} initial={{ opacity: 0, x: tab === 'signup' ? 20 : tab === 'agency' ? 20 : -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
 
