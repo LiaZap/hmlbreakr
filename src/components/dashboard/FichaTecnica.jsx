@@ -200,14 +200,33 @@ const InsumoCard = ({ item, onClick, onDuplicate, onDelete }) => (
     </div>
     <div className="w-full h-px bg-[#2A2A2C]" />
     <div className="flex flex-col gap-1.5">
-      <div className="flex justify-between text-[11px]">
-        <span className="text-[#868686]">Rendimento</span>
-        <span className="text-white">{item.rendimento}</span>
-      </div>
-      <div className="flex justify-between text-[11px]">
-        <span className="text-[#868686]">Custo</span>
-        <span className="text-white font-medium">{item.custo}</span>
-      </div>
+      {item.isPrepared ? (
+        // ─── Insumo Preparado: mostra rendimento da receita ───
+        <>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-[#868686]">Rendimento</span>
+            <span className="text-white">{item.rendimentoPreparado || 0}{item.rendimentoUnit || 'gr'}</span>
+          </div>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-[#868686]">Custo por {item.unit || 'un'}</span>
+            <span className="text-[#F5A623] font-semibold">{item.custo}</span>
+          </div>
+        </>
+      ) : (
+        // ─── Insumo Pronto: mostra última compra (opcional) + preço por unidade ───
+        <>
+          {item.purchaseQty && item.purchaseTotal && (
+            <div className="flex justify-between text-[11px]">
+              <span className="text-[#868686]">Comprou</span>
+              <span className="text-white">{item.purchaseQty}{item.unit || ''} por R$ {item.purchaseTotal}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-[11px]">
+            <span className="text-[#868686]">Preço por {item.unit || 'un'}</span>
+            <span className="text-[#F5A623] font-semibold">{item.custo}</span>
+          </div>
+        </>
+      )}
     </div>
     <div className="flex items-center justify-end gap-3">
       {onDelete && (
@@ -360,7 +379,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
       ...dashboardData,
       operational: {
         ...dashboardData.operational,
-        insumos: [...currentInsumos, created]
+        insumos: [created, ...currentInsumos]
       }
     });
 
@@ -1730,7 +1749,7 @@ import CategoriesModal from './CategoriesModal';
 // ... (keep Modals and sub-components as is)
 
 // ============ MAIN COMPONENT ============
-const ITEMS_PER_PAGE = 6;
+const ITEMS_PER_PAGE = 8;
 
 const FichaTecnica = () => {
   const { dashboardData, updateDashboardData } = useDashboard();
@@ -1798,7 +1817,8 @@ const FichaTecnica = () => {
     if (exists) {
       newInsumos = insumos.map(i => i.id === updatedInsumo.id ? updatedInsumo : i);
     } else {
-      newInsumos = [...insumos, updatedInsumo];
+      // Novo insumo vai pro INÍCIO da lista (mais visível na primeira página)
+      newInsumos = [updatedInsumo, ...insumos];
     }
 
     const updatePayload = {
