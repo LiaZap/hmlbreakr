@@ -34,6 +34,19 @@ const Dashboard = () => {
   const [showDailyRevenue, setShowDailyRevenue] = useState(false);
   const [showBaseModal, setShowBaseModal] = useState(false);
 
+  // Admin-viewing mode detection
+  const hash = new URLSearchParams(window.location.search).get('hash');
+  const adminSession = sessionStorage.getItem('breaker-admin');
+  const adminRole = sessionStorage.getItem('breaker-admin-role') || 'admin';
+  const adminName = sessionStorage.getItem('breaker-admin-name') || (adminRole === 'super_admin' ? 'Gustavo Costa' : 'Admin');
+  const isAdminViewing = !!adminSession && !!hash;
+  const roleLabel = { super_admin: 'Super Admin', admin: 'Admin', commercial: 'Comercial', financial: 'Financeiro' }[adminRole] || 'Admin';
+
+  const handleBackToAdmin = () => {
+    if (window.opener) window.close();
+    else window.location.href = window.location.pathname;
+  };
+
   const handleNavigate = (page) => {
     if (page === 'editOnboarding') {
       setShowOnboarding(true);
@@ -44,6 +57,28 @@ const Dashboard = () => {
 
   return (
     <div className="relative w-full h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-y-auto md:overflow-hidden">
+      {/* Banner de modo admin-viewing */}
+      {isAdminViewing && (
+        <div className="sticky top-0 z-[60] bg-gradient-to-r from-[#F5A623] to-[#E5961E] text-black shadow-lg">
+          <div className="px-3 md:px-6 py-2 flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span className="text-[12px] font-bold">
+                Modo {roleLabel} — Visualizando como <span className="underline">{dashboardData.user?.name || dashboardData.restaurant?.name || 'Cliente'}</span>
+              </span>
+            </div>
+            <span className="text-[11px] opacity-70 hidden sm:inline">· Logado como {adminName}</span>
+            <button
+              onClick={handleBackToAdmin}
+              className="ml-auto bg-black/20 hover:bg-black/30 text-black text-[11px] font-bold px-3 py-1.5 rounded-[8px] transition-colors flex items-center gap-1.5 shrink-0"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Voltar ao Admin
+            </button>
+          </div>
+        </div>
+      )}
+
       <BroadcastPopup restaurantCategory={dashboardData.restaurant?.category} />
       <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
 

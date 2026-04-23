@@ -105,26 +105,47 @@ const AdminPanel = () => {
     if (!cropModal) return;
     const img = new Image();
     img.onload = () => {
-      const size = 256; // Output size 256x256
+      const canvasSize = 256;   // Output 256x256 (para salvar)
+      const previewSize = 280;  // Tamanho do container circular no preview
       const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
+      canvas.width = canvasSize;
+      canvas.height = canvasSize;
       const ctx = canvas.getContext('2d');
+
       // Clip into circle
       ctx.beginPath();
-      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.arc(canvasSize / 2, canvasSize / 2, canvasSize / 2, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
-      // Compute scaled dimensions
-      const minSide = Math.min(img.width, img.height);
-      const baseScale = size / minSide;
-      const scale = baseScale * cropModal.zoom;
-      const drawW = img.width * scale;
-      const drawH = img.height * scale;
-      // Center + apply offset
-      const dx = (size - drawW) / 2 + cropModal.offsetX;
-      const dy = (size - drawH) / 2 + cropModal.offsetY;
-      ctx.drawImage(img, dx, dy, drawW, drawH);
+
+      // Replica o comportamento do CSS object-fit: cover com transform scale/translate
+      // O menor lado da imagem cobre o container (previewSize)
+      const aspect = img.width / img.height;
+      let drawW, drawH;
+      if (aspect >= 1) {
+        // Imagem mais larga que alta — fit by height
+        drawH = previewSize;
+        drawW = drawH * aspect;
+      } else {
+        // Imagem mais alta que larga — fit by width
+        drawW = previewSize;
+        drawH = drawW / aspect;
+      }
+
+      // Aplica zoom (escala)
+      drawW *= cropModal.zoom;
+      drawH *= cropModal.zoom;
+
+      // Converte offset de pixels do preview para pixels do canvas
+      const scale = canvasSize / previewSize;
+      const offsetX = cropModal.offsetX * scale;
+      const offsetY = cropModal.offsetY * scale;
+
+      // Centraliza + aplica offset (ambos em pixels do canvas)
+      const dx = (canvasSize - drawW * scale) / 2 + offsetX;
+      const dy = (canvasSize - drawH * scale) / 2 + offsetY;
+
+      ctx.drawImage(img, dx, dy, drawW * scale, drawH * scale);
       const base64 = canvas.toDataURL('image/jpeg', 0.9);
       localStorage.setItem('breakr-admin-photo', base64);
       setAdminPhoto(base64);
@@ -432,11 +453,26 @@ const AdminPanel = () => {
     } catch { return null; }
   };
 
+  // Normaliza texto pra busca (sem acentos, minúsculas, trim)
+  const normalizeSearch = (str) => {
+    if (!str) return '';
+    return String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  };
+
   const filteredClients = (() => {
+    const q = normalizeSearch(search);
     const filtered = clients.filter(c => {
-      // Search by name OR email
-      const q = search.toLowerCase();
-      const matchesSearch = !q || c.name.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q);
+      if (!q) return true;
+      // Busca em: name, email, displayName (restaurante), ownerName, hash
+      const { displayName, ownerName } = getClientDisplay(c);
+      const haystack = [
+        c.name,
+        c.email,
+        displayName,
+        ownerName,
+        c.hash,
+      ].map(normalizeSearch).join(' ');
+      const matchesSearch = haystack.includes(q);
       if (!matchesSearch) return false;
       if (financialFilter === 'all') return true;
       const fin = getFinancial(c);
@@ -1506,17 +1542,11 @@ const AdminPanel = () => {
                 <img
                   src={cropModal.src}
                   alt="Preview"
-                  className="absolute pointer-events-none"
+                  className="absolute inset-0 w-full h-full pointer-events-none"
                   style={{
-                    left: '50%',
-                    top: '50%',
-                    transform: `translate(calc(-50% + ${cropModal.offsetX}px), calc(-50% + ${cropModal.offsetY}px)) scale(${cropModal.zoom})`,
-                    minWidth: '100%',
-                    minHeight: '100%',
-                    width: 'auto',
-                    height: 'auto',
+                    transform: `translate(${cropModal.offsetX}px, ${cropModal.offsetY}px) scale(${cropModal.zoom})`,
                     objectFit: 'cover',
-                    maxWidth: 'none',
+                    transformOrigin: 'center center',
                   }}
                   draggable={false}
                 />

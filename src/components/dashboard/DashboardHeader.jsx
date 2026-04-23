@@ -13,8 +13,17 @@ const DashboardHeader = ({ data }) => {
 
   const adminSession = sessionStorage.getItem('breaker-admin');
   const adminRole = sessionStorage.getItem('breaker-admin-role') || 'admin';
-  const adminName = adminRole === 'super_admin' ? 'Gustavo Costa' : (sessionStorage.getItem('breaker-admin-name') || 'Admin');
-  const isAdminViewing = !!adminSession;
+  const adminName = sessionStorage.getItem('breaker-admin-name') || (adminRole === 'super_admin' ? 'Gustavo Costa' : 'Admin');
+  const isAdminViewing = !!adminSession && !!hash;
+
+  const handleBackToAdmin = () => {
+    // Fecha a aba se foi aberta pelo admin, senão redireciona para home (vai cair no roteamento admin)
+    if (window.opener) {
+      window.close();
+    } else {
+      window.location.href = window.location.pathname;
+    }
+  };
 
   const { signOut } = useClerk();
 
@@ -107,34 +116,21 @@ const DashboardHeader = ({ data }) => {
           onClick={() => setIsProfileModalOpen(true)}
           className="flex items-center gap-3 md:gap-4 md:border-l md:border-[#333] md:pl-6 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none"
         >
+          {/* SEMPRE mostra o DONO do restaurante (não mistura com admin) */}
           <div className="flex items-center gap-[8px]">
-            {isAdminViewing ? (
-              <>
-                <div className="w-[36px] h-[36px] md:w-[40px] md:h-[40px] rounded-full bg-[#FF9406]/20 border border-[#FF9406]/40 flex items-center justify-center">
-                  <span className="text-[#FF9406] font-bold text-[13px]">{adminName.substring(0, 2).toUpperCase()}</span>
-                </div>
-                <div className="hidden sm:flex flex-col text-left">
-                  <span className="font-medium text-[12px] text-[#CACACA]">{adminName}</span>
-                  <span className="font-medium text-[9px] text-[#FF9406]">{adminRole === 'super_admin' ? 'Super Admin' : 'Admin'} · Visualizando</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="w-[36px] h-[36px] md:w-[40px] md:h-[40px] rounded-full bg-[#FDD688] flex items-center justify-center overflow-hidden">
-                   {data.user?.photo ? (
-                     <img src={data.user.photo} alt={data.user.name} className="w-full h-full object-cover" />
-                   ) : data.user?.name && data.user.name !== "Usuário" ? (
-                     <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(data.user.name)}&background=FDD688&color=000&size=100`} alt={data.user.initials} className="w-full h-full object-cover" />
-                   ) : (
-                     <span className="text-black font-bold text-[14px]">{data.user?.initials || 'U'}</span>
-                   )}
-                </div>
-                <div className="hidden sm:flex flex-col text-left">
-                  <span className="font-medium text-[12px] text-[#CACACA]">{data.user?.name || 'Usuário'}</span>
-                  <span className="font-medium text-[9px] text-[#A0A0A0]">{data.user?.role || 'Acesso Cliente'}</span>
-                </div>
-              </>
-            )}
+            <div className="w-[36px] h-[36px] md:w-[40px] md:h-[40px] rounded-full bg-[#FDD688] flex items-center justify-center overflow-hidden">
+              {data.user?.photo ? (
+                <img src={data.user.photo} alt={data.user.name} className="w-full h-full object-cover" />
+              ) : data.user?.name && data.user.name !== "Usuário" ? (
+                <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(data.user.name)}&background=FDD688&color=000&size=100`} alt={data.user.initials} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-black font-bold text-[14px]">{data.user?.initials || 'U'}</span>
+              )}
+            </div>
+            <div className="hidden sm:flex flex-col text-left">
+              <span className="font-medium text-[12px] text-[#CACACA]">{data.user?.name || 'Usuário'}</span>
+              <span className="font-medium text-[9px] text-[#A0A0A0]">{data.user?.role || 'Acesso Cliente'}</span>
+            </div>
             <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
               <path d="M4.5 6.75L9 11.25L13.5 6.75" stroke="#959387" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
