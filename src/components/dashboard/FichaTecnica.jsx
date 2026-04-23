@@ -176,10 +176,13 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent, t
 };
 
 // ============ CARD: Insumo ============
-const InsumoCard = ({ item, onClick, onDuplicate, onDelete }) => (
+const InsumoCard = ({ item, onClick, onDuplicate, onDelete }) => {
+  const hasZeroCost = parseSafeNumber(item.price) === 0 && parseSafeNumber(item.custo) === 0;
+  return (
   <div
-    className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-4 flex flex-col gap-3 cursor-pointer hover:border-[#F5A623]/40 hover:scale-[1.01] transition-all"
+    className={`bg-[#1B1B1D] border rounded-[16px] p-4 flex flex-col gap-3 cursor-pointer hover:scale-[1.01] transition-all ${hasZeroCost ? 'border-[#FF4560]/40 hover:border-[#FF4560]/70' : 'border-[#2A2A2C] hover:border-[#F5A623]/40'}`}
     onClick={onClick}
+    title={hasZeroCost ? 'Atenção: este insumo está com custo zero. Clique para preencher.' : ''}
   >
     <div className="flex items-start justify-between">
       <div className="flex items-center gap-3">
@@ -194,8 +197,16 @@ const InsumoCard = ({ item, onClick, onDuplicate, onDelete }) => (
           <div className="text-[10px] text-[#868686]">{item.category}</div>
         </div>
       </div>
-      <div className="bg-[#2A2A2C] text-[#868686] text-[10px] font-medium px-2.5 py-1 rounded-full border border-[#3A3A3C] shrink-0">
-        Insumo
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <div className="bg-[#2A2A2C] text-[#868686] text-[10px] font-medium px-2.5 py-1 rounded-full border border-[#3A3A3C]">
+          {item.isPrepared ? 'Preparado' : 'Insumo'}
+        </div>
+        {hasZeroCost && (
+          <div className="bg-[#FF4560]/10 text-[#FF4560] text-[9px] font-semibold px-2 py-0.5 rounded-full border border-[#FF4560]/30 flex items-center gap-1">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Custo zero
+          </div>
+        )}
       </div>
     </div>
     <div className="w-full h-px bg-[#2A2A2C]" />
@@ -265,7 +276,8 @@ const InsumoCard = ({ item, onClick, onDuplicate, onDelete }) => (
       </button>
     </div>
   </div>
-);
+  );
+};
 
 // ============ MODAL: Editar/Criar Insumo ============
 const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
@@ -336,9 +348,11 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculatedPricePerUnit]);
 
-  // Purchase unit sempre acompanha a unidade base (padronização)
+  // Purchase unit sempre acompanha a unidade base — APENAS ao criar novo
+  // (não sobrescreve purchaseUnit de insumos antigos ao editar)
   React.useEffect(() => {
-    setPurchaseUnit(unit);
+    if (!insumo.id) setPurchaseUnit(unit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unit]);
 
   const { dashboardData, updateDashboardData } = useDashboard();
@@ -415,13 +429,29 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   const preparedPricePerUnit = rendQty > 0 ? totalPreparedCost / rendQty : 0;
 
   const handleSave = () => {
-    if (!nome.trim()) return;
+    if (!nome.trim()) {
+      alert('Preencha o nome do insumo.');
+      return;
+    }
 
     if (tipo === 'preparado') {
+      const rQty = parseSafeNumber(rendimentoPreparado);
+
+      // Validação: rendimento obrigatório
+      if (rQty <= 0) {
+        alert('Preencha o rendimento da receita (deve ser maior que zero).\n\nEx: essa receita rende 500gr de molho.');
+        return;
+      }
+
+      // Validação: pelo menos 1 sub-ingrediente
+      if (subIngredients.length === 0) {
+        alert('Adicione pelo menos um ingrediente para calcular o custo do preparado.');
+        return;
+      }
+
       // Prepared insumo: cost derived from sub-ingredients
       const totalCost = subIngredients.reduce((sum, s) => sum + calcSubIngredientCost(s), 0);
-      const rQty = parseSafeNumber(rendimentoPreparado);
-      const pricePerUnit = rQty > 0 ? totalCost / rQty : 0;
+      const pricePerUnit = totalCost / rQty;
 
       onSave({
         ...insumo,
@@ -431,8 +461,10 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
         qty: rendimentoPreparado,
         unit: rendimentoUnit,
         rendimento: `${rendimentoPreparado}${rendimentoUnit}`,
-        custo: `R$ ${pricePerUnit.toFixed(2).replace('.', ',')}`,
-        price: pricePerUnit.toFixed(2).replace('.', ','),
+        // Preço com 4 decimais internos para preservar precisão em molhos/especiarias
+        // (ex: R$ 3,50 / 500gr = R$ 0,007/gr → antes era arredondado pra 0,01 = erro de 43%)
+        custo: `R$ ${pricePerUnit.toFixed(2).replace('.', ',')}`,  // exibição 2 decimais
+        price: pricePerUnit.toFixed(4).replace('.', ','),  // cálculo 4 decimais
         defaultQty: rendimentoPreparado,
         grossQty: rendimentoPreparado,
         isPrepared: true,
@@ -440,6 +472,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
         rendimentoPreparado: rendimentoPreparado,
         rendimentoUnit: rendimentoUnit,
         totalCost: totalCost,
+        lastUpdated: Date.now(),
       });
     } else {
       onSave({
@@ -1811,14 +1844,50 @@ const FichaTecnica = () => {
   };
 
   const handleSaveInsumo = (updatedInsumo) => {
-    let newInsumos;
     const exists = insumos.some(i => i.id === updatedInsumo.id);
 
+    // Step 1: Update the insumo in the list
+    let newInsumos = exists
+      ? insumos.map(i => i.id === updatedInsumo.id ? updatedInsumo : i)
+      : [updatedInsumo, ...insumos];
+
+    // ========== CASCADE PROPAGATION ==========
+    // Helper: recalcular custo de um insumo preparado usando a lista atual de insumos
+    const recalcPreparedCost = (prepared, currentInsumos) => {
+      if (!prepared.isPrepared || !prepared.subIngredients || prepared.subIngredients.length === 0) return prepared;
+      const rQty = parseSafeNumber(prepared.rendimentoPreparado);
+      if (rQty <= 0) return prepared;
+
+      const totalCost = prepared.subIngredients.reduce((sum, sub) => {
+        // Buscar versão ATUAL do sub-ingrediente na lista (pode ter sido editado)
+        const currentSub = currentInsumos.find(i => String(i.id) === String(sub.id)) || sub;
+        const pricePerUnit = parseSafeNumber(currentSub.price) || parseSafeNumber(currentSub.custo);
+        const purchaseUnit = currentSub.purchaseUnit || currentSub.unit || 'gr';
+        const usageQty = parseSafeNumber(sub.qty);
+        const usageUnit = sub.usageUnit || sub.unit || 'gr';
+        return sum + convertUnit(usageQty, usageUnit, purchaseUnit) * pricePerUnit;
+      }, 0);
+
+      const newPricePerUnit = totalCost / rQty;
+      return {
+        ...prepared,
+        totalCost,
+        // Preço com 4 decimais internos (precisão) + 2 na exibição do custo
+        price: newPricePerUnit.toFixed(4).replace('.', ','),
+        custo: `R$ ${newPricePerUnit.toFixed(2).replace('.', ',')}`,
+        lastUpdated: Date.now(),
+      };
+    };
+
+    // Step 2 (CASCATA NIVEL 1): recalcular todos os PREPARADOS que usam este insumo
     if (exists) {
-      newInsumos = insumos.map(i => i.id === updatedInsumo.id ? updatedInsumo : i);
-    } else {
-      // Novo insumo vai pro INÍCIO da lista (mais visível na primeira página)
-      newInsumos = [updatedInsumo, ...insumos];
+      newInsumos = newInsumos.map(i => {
+        if (!i.isPrepared) return i;
+        // Preparado usa este insumo como sub-ingrediente?
+        const usesUpdatedInsumo = (i.subIngredients || []).some(sub => String(sub.id) === String(updatedInsumo.id));
+        if (!usesUpdatedInsumo) return i;
+        return recalcPreparedCost(i, newInsumos);
+      });
     }
 
     const updatePayload = {
@@ -1828,30 +1897,39 @@ const FichaTecnica = () => {
         }
     };
 
-    // Propagate updated price to all fichas that use this insumo as ingredient
+    // Step 3 (CASCATA NIVEL 2): propagar para FICHAS que usam qualquer insumo atualizado
+    // Inclui o insumo editado direto + preparados recalculados
     if (exists) {
+      const updatedInsumoIds = new Set([
+        String(updatedInsumo.id),
+        ...newInsumos.filter(i => i.isPrepared && (i.subIngredients || []).some(sub => String(sub.id) === String(updatedInsumo.id))).map(i => String(i.id))
+      ]);
+
       let newMenuEngineering = [...(dashboardData.menuEngineering || [])];
       const updatedFichas = fichas.map(ficha => {
         if (!ficha.ingredients || ficha.ingredients.length === 0) return ficha;
-        if (!ficha.ingredients.some(ing => String(ing.id) === String(updatedInsumo.id))) return ficha;
+        // Ficha tem algum ingrediente que é insumo/preparado atualizado?
+        const hasAffectedIngredient = ficha.ingredients.some(ing => updatedInsumoIds.has(String(ing.id)));
+        if (!hasAffectedIngredient) return ficha;
 
-        const newIngredients = ficha.ingredients.map(ing =>
-          String(ing.id) === String(updatedInsumo.id)
-            ? { ...ing,
-                name: updatedInsumo.name,
-                price: updatedInsumo.price,
-                custo: updatedInsumo.custo,
-                unit: updatedInsumo.unit || ing.unit,
-                purchaseUnit: updatedInsumo.unit || ing.purchaseUnit,
-                originalUnit: updatedInsumo.unit || ing.originalUnit,
-                grossQty: updatedInsumo.grossQty || updatedInsumo.defaultQty || ing.grossQty,
-                defaultQty: updatedInsumo.defaultQty || ing.defaultQty
-              }
-            : ing
-        );
+        // Atualiza ingredients com preços mais recentes dos insumos
+        const newIngredients = ficha.ingredients.map(ing => {
+          const currentInsumo = newInsumos.find(i => String(i.id) === String(ing.id));
+          if (!currentInsumo) return ing;
+          return {
+            ...ing,
+            name: currentInsumo.name,
+            price: currentInsumo.price,
+            custo: currentInsumo.custo,
+            unit: currentInsumo.unit || ing.unit,
+            purchaseUnit: currentInsumo.unit || ing.purchaseUnit,
+            originalUnit: currentInsumo.unit || ing.originalUnit,
+            grossQty: currentInsumo.grossQty || currentInsumo.defaultQty || ing.grossQty,
+            defaultQty: currentInsumo.defaultQty || ing.defaultQty,
+          };
+        });
 
         const custoInsumos = newIngredients.reduce((sum, i) => {
-          // price = preço por unidade (como digitado no "Preço por {unit}")
           const pricePerUnit = parseSafeNumber(i.price) || parseSafeNumber(i.custo);
           const purchaseUnit = i.purchaseUnit || i.originalUnit || i.unit || 'gr';
           const usageQty = parseSafeNumber(i.qty);
@@ -1862,7 +1940,6 @@ const FichaTecnica = () => {
         const custoEmb = parseSafeNumber(ficha.custoEmbalagem);
         const newCustoTotal = `R$ ${(custoInsumos + custoEmb).toFixed(2).replace('.', ',')}`;
 
-        // Sync cost into menuEngineering if this ficha is listed there
         const meIdx = newMenuEngineering.findIndex(m => m.id === `ft_${ficha.id}`);
         if (meIdx >= 0) {
           newMenuEngineering[meIdx] = { ...newMenuEngineering[meIdx], cost: newCustoTotal };
