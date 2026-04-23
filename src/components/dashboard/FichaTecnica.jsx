@@ -317,6 +317,11 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculatedPricePerUnit]);
 
+  // Purchase unit sempre acompanha a unidade base (padronização)
+  React.useEffect(() => {
+    setPurchaseUnit(unit);
+  }, [unit]);
+
   const { dashboardData, updateDashboardData } = useDashboard();
   const categoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
   // Todos os insumos EXCETO o próprio que está sendo editado (para permitir qualquer insumo como sub-ingrediente)
@@ -578,43 +583,29 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                 </div>
               </div>
 
-              {/* Informações da Compra — bloco compacto */}
+              {/* Informações da Compra — bloco compacto (usa unidade base) */}
               <div className="bg-gradient-to-br from-[#F5A623]/5 to-transparent border border-[#F5A623]/20 rounded-[12px] p-3 space-y-2.5">
                 <div className="flex items-center gap-2">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   <span className="text-[12px] text-[#F5A623] font-semibold">Informações da Compra</span>
-                  <span className="text-[9px] text-[#666] ml-auto">Sistema calcula por {unit} automaticamente</span>
+                  <span className="text-[9px] text-[#666] ml-auto">Calcula preço por {unit} automaticamente</span>
                 </div>
 
-                {/* Linha única: Qty + Unit + Total */}
-                <div className="grid grid-cols-[1fr_70px_1fr] gap-2">
+                {/* Linha única: Qty + Total (usa a unidade base definida acima) */}
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] text-[#868686] mb-1">Qtd comprada</label>
+                    <label className="block text-[10px] text-[#868686] mb-1">Quantidade comprada ({unit})</label>
                     <input
                       type="text"
                       inputMode="decimal"
                       value={purchaseQty}
                       onChange={(e) => setPurchaseQty(e.target.value.replace(/[^0-9.,]/g, ''))}
                       className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[8px] px-2.5 py-2 text-[13px] text-white outline-none focus:border-[#F5A623] transition-colors"
-                      placeholder="Ex: 900"
+                      placeholder={unit === 'un' ? 'Ex: 100' : unit === 'kg' ? 'Ex: 3' : unit === 'lt' ? 'Ex: 1' : 'Ex: 900'}
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-[#868686] mb-1">Un</label>
-                    <select
-                      value={purchaseUnit}
-                      onChange={(e) => setPurchaseUnit(e.target.value)}
-                      className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[8px] px-1.5 py-2 text-[12px] text-white outline-none focus:border-[#F5A623] transition-colors cursor-pointer [color-scheme:dark]"
-                    >
-                      <option value="gr">gr</option>
-                      <option value="kg">kg</option>
-                      <option value="ml">ml</option>
-                      <option value="lt">lt</option>
-                      <option value="un">un</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-[#868686] mb-1">Valor pago</label>
+                    <label className="block text-[10px] text-[#868686] mb-1">Valor pago pela embalagem</label>
                     <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[8px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
                       <span className="text-[12px] text-[#868686] pl-2 shrink-0">R$</span>
                       <input
