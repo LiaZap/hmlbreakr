@@ -51,8 +51,11 @@ export const DashboardProvider = ({ children }) => {
     const hash = params.get('hash');
 
     if (hash) {
-      // Fetch from Backend API
-      fetch(`${API_URL}/api/client/${hash}`)
+      // Fetch from Backend API — envia flag quando admin está visualizando para não expor dados pessoais
+      const isAdminViewing = !!sessionStorage.getItem('breaker-admin');
+      fetch(`${API_URL}/api/client/${hash}`, {
+        headers: isAdminViewing ? { 'x-admin-viewing': 'true' } : {}
+      })
         .then(res => {
           if (!res.ok) throw new Error('Client not found');
           return res.json();

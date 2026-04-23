@@ -109,38 +109,78 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
 
   if (!isOpen) return null;
 
-  // ── Admin view ──
+  // ── Admin view — modal restrito de segurança ──
   if (isAdminViewing) {
     const adminInitials = adminName ? adminName.substring(0, 2).toUpperCase() : 'AD';
-    const roleLabel = adminRole === 'super_admin' ? 'Super Admin' : 'Admin';
+    const roleLabel = { super_admin: 'Super Admin', admin: 'Admin', commercial: 'Comercial', financial: 'Financeiro' }[adminRole] || 'Admin';
+    const handleBackToAdmin = () => {
+      if (window.opener) window.close();
+      else window.location.href = window.location.pathname;
+    };
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div onClick={onClose} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-        <div className="relative w-full max-w-sm bg-[#161616] border border-[#2A2A2C] rounded-[24px] p-6 shadow-2xl font-jakarta">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-white">Perfil Admin</h2>
+        <div onClick={onClose} className="absolute inset-0 bg-black/85 backdrop-blur-md" />
+        <div className="relative w-full max-w-md bg-gradient-to-br from-[#1A1A1C] to-[#121214] border border-[#F5A623]/30 rounded-[24px] p-6 shadow-2xl font-jakarta">
+          {/* Top accent */}
+          <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[#F5A623] to-[#E5961E] rounded-t-[24px]" />
+
+          <div className="flex justify-between items-start mb-5 mt-2">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#F5A623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <span className="text-[10px] font-bold text-[#F5A623] uppercase tracking-widest">Modo Admin</span>
+              </div>
+              <h2 className="text-[18px] font-bold text-white">Sua conta administrativa</h2>
+            </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#252527] flex items-center justify-center text-[#868686] hover:text-white transition-colors">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1L13 13M1 13L13 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </button>
           </div>
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-[56px] h-[56px] rounded-full bg-[#FF9406]/20 border border-[#FF9406]/40 flex items-center justify-center shrink-0">
-              <span className="text-[#FF9406] font-bold text-[18px]">{adminInitials}</span>
+
+          {/* Admin profile info */}
+          <div className="flex items-center gap-4 p-4 bg-[#F5A623]/5 border border-[#F5A623]/15 rounded-[14px] mb-4">
+            <div className="w-[52px] h-[52px] rounded-full bg-[#F5A623]/20 border border-[#F5A623]/40 flex items-center justify-center shrink-0">
+              <span className="text-[#F5A623] font-bold text-[16px]">{adminInitials}</span>
             </div>
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold text-white truncate">{adminName}</p>
+              <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-[#F5A623]/15 text-[#F5A623] text-[10px] font-semibold">
+                <span className="w-[5px] h-[5px] rounded-full bg-[#F5A623]" />
+                {roleLabel}
+              </span>
+            </div>
+          </div>
+
+          {/* Security notice — DESTACADO */}
+          <div className="p-3.5 bg-red-500/5 border border-red-500/20 rounded-[12px] mb-4 flex items-start gap-2.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" className="shrink-0 mt-0.5">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M12 8v4M12 16h.01"/>
+            </svg>
             <div>
-              <p className="text-[15px] font-bold text-white">{adminName}</p>
-              <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-[#FF9406]/15 text-[#FF9406] text-[11px] font-semibold">{roleLabel}</span>
+              <p className="text-[12px] text-white font-semibold mb-1">Privacidade do cliente protegida</p>
+              <p className="text-[11px] text-[#999] leading-relaxed">
+                Os dados pessoais do dono (nome, email, CPF, senha, telefone, foto) estão <span className="text-red-400 font-semibold">ocultos</span>. Você pode visualizar o dashboard mas não alterar o perfil dele.
+              </p>
             </div>
           </div>
-          <div className="p-3 bg-[#1A1A1A] border border-[#2A2A2C] rounded-[12px] mb-6 flex items-start gap-2">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F5A623" strokeWidth="2" strokeLinecap="round" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            <p className="text-[12px] text-[#868686] leading-relaxed">Você está visualizando o dashboard de um cliente. As credenciais deste cliente não são exibidas por segurança.</p>
+
+          {/* Actions */}
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleBackToAdmin}
+              className="w-full bg-[#F5A623] hover:bg-[#E5961E] text-black font-bold text-[13px] rounded-[12px] py-3 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Voltar ao Painel Admin
+            </button>
+            <button
+              onClick={() => { sessionStorage.removeItem('breaker-admin'); sessionStorage.removeItem('breaker-admin-role'); sessionStorage.removeItem('breaker-admin-name'); window.location.href = window.location.pathname; }}
+              className="w-full bg-transparent border border-[#333] hover:bg-[#202020] text-[#868686] hover:text-white font-medium text-[12px] rounded-[12px] py-2.5 transition-colors"
+            >
+              Encerrar sessão admin
+            </button>
           </div>
-          <button onClick={() => { sessionStorage.removeItem('breaker-admin'); sessionStorage.removeItem('breaker-admin-role'); window.location.href = window.location.pathname; }}
-            className="w-full bg-transparent border border-[#333] hover:bg-[#202020] text-[#868686] hover:text-white font-semibold text-[14px] rounded-[14px] py-3 transition-colors flex items-center justify-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H15M10 17L15 12M15 12L10 7M15 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Sair da Conta Admin
-          </button>
         </div>
       </div>
     );
@@ -170,6 +210,14 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
       if (password) payload.password = password;
 
       if (Object.keys(payload).length === 0) { setLoading(false); onClose(); return; }
+
+      // Segurança: informar o backend se é admin visualizando (se verdadeiro, backend bloqueia)
+      const adminViewingFlag = !!sessionStorage.getItem('breaker-admin');
+      if (adminViewingFlag) {
+        setError('Você está em modo admin visualizando. Não é possível alterar dados do cliente.');
+        setLoading(false);
+        return;
+      }
 
       const res = await fetch(`/api/client/${hash}/profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();

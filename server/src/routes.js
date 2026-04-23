@@ -510,6 +510,19 @@ router.get('/client/:hash', async (req, res) => {
     dashboardData._clientEmail = client.email || null;
     dashboardData._profile = dashboardData.profile || {};
 
+    // SEGURANÇA: se request vem de admin visualizando (header x-admin-viewing),
+    // stripar dados pessoais sensíveis antes de enviar (email, CPF, telefone, aniversário, foto pessoal)
+    // Admin pode VER o dashboard mas não as credenciais/dados privados do dono
+    const isAdminViewing = req.headers['x-admin-viewing'] === 'true';
+    if (isAdminViewing) {
+      dashboardData._clientEmail = null;
+      dashboardData._profile = {}; // remove phone, cpf, birthday
+      if (dashboardData.profile) {
+        dashboardData.profile = { photo: dashboardData.profile.photo || null };
+      }
+      dashboardData._adminViewing = true; // flag pra frontend reforçar UI
+    }
+
     res.json(dashboardData);
   } catch (error) {
     console.error("Error loading data:", error);
@@ -579,7 +592,15 @@ router.post('/client/:hash/sync', async (req, res) => {
 router.put('/client/:hash/profile', async (req, res) => {
   try {
     const { hash } = req.params;
-    const { name, password, email, phone, cpf, birthday, photo } = req.body;
+    const { name, password, email, phone, cpf, birthday, photo, _viewerIsAdmin } = req.body;
+
+    // SEGURANÇA: se request vem de admin visualizando o cliente, bloquear alterações
+    // O admin NUNCA deve conseguir alterar dados pessoais do dono (senha, CPF, email, foto, telefone)
+    if (_viewerIsAdmin) {
+      return res.status(403).json({
+        error: 'Admin em modo visualização não pode alterar dados do cliente. Entre em contato com o dono do restaurante.'
+      });
+    }
 
     let userToUpdate = null;
     let isClient = true;
