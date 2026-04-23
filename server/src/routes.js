@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const router = express.Router();
 const prisma = new PrismaClient();
 const { sendWelcomeEmail, sendCredentialResetEmail, sendPasswordResetEmail } = require('./services/emailService');
+const { calculateClientFinancials } = require('./services/financialCalc');
 const crypto = require('crypto');
 
 // ========================
@@ -126,25 +127,13 @@ router.get('/admin/clients', async (req, res) => {
                 ? { months: fd.revenue_history.months.map(m => ({ month: m.month })) }
                 : fd.revenue_history,
             },
-            // Financial indicators for admin filters (Jeff panel)
+            // Financial indicators — cálculo PRECISO usando mesma lógica do DashboardContext
+            // Via services/financialCalc.js (inclui TODOS os componentes: location, utilities,
+            // recurring, operational, monthly services, admin, marketing, marketplaces, vehicles,
+            // equipment depreciation, other fixed costs, partners pro-labore, employees CLT reserves, benefícios)
             _financial: (() => {
               try {
-                const parseCur = (v) => { if (!v) return 0; const s = String(v).replace(/[R$\s.]/g, '').replace(',', '.'); return parseFloat(s) || 0; };
-                const rev = fd.revenue_history?.months || [];
-                const latestRevenue = rev.length > 0 ? parseCur(rev[rev.length - 1]?.value) : 0;
-                // Fixed costs sum (simplified — mirrors DashboardContext logic)
-                const loc = fd.location_costs || {};
-                const rentVal = parseCur(loc.rent_value) || parseCur(loc.own_iptu);
-                const util = fd.utilities || {};
-                const utilTotal = parseCur(util.energy) + parseCur(util.water) + parseCur(util.gas) + parseCur(util.internet) + parseCur(util.phone) + parseCur(util.alarm) + parseCur(util.security);
-                const empArr = Array.isArray(fd.employees) ? fd.employees : [];
-                const personnelCost = empArr.reduce((s, e) => s + parseCur(e?.salary), 0) * 1.7;
-                const fixedCosts = rentVal + utilTotal;
-                const totalFixed = fixedCosts + personnelCost;
-                const cfPct = latestRevenue > 0 ? (totalFixed / latestRevenue) * 100 : 0;
-                const fichasCount = (d.operational?.fichas || []).length;
-                const insumosCount = (d.operational?.insumos || []).length;
-                return { revenue: latestRevenue, cfPct: Math.round(cfPct * 10) / 10, totalFixed: Math.round(totalFixed), fichas: fichasCount, insumos: insumosCount, revenueMonths: rev.length };
+                return calculateClientFinancials(c.data);
               } catch { return null; }
             })()
           })

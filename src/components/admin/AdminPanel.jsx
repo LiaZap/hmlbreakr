@@ -449,7 +449,9 @@ const AdminPanel = () => {
   const getFinancial = (client) => {
     try {
       const raw = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
-      return raw?.formData?._financial || null;
+      // _financial está no nível root do data (não dentro de formData)
+      // Mantém fallback pra formData por compat com versões antigas
+      return raw?._financial || raw?.formData?._financial || null;
     } catch { return null; }
   };
 
