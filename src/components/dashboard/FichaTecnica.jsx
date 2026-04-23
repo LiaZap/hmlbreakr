@@ -444,12 +444,12 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className={`relative w-[95vw] sm:w-[90vw] ${tipo === 'preparado' ? 'max-w-[580px]' : 'max-w-[480px]'} max-h-[90vh] overflow-y-auto bg-[#1B1B1D] rounded-[20px] p-5 sm:p-8 shadow-2xl border border-[#2A2A2C]`}>
+      <div className={`relative w-[95vw] sm:w-[90vw] ${tipo === 'preparado' ? 'max-w-[580px]' : 'max-w-[480px]'} max-h-[92vh] overflow-y-auto bg-[#1B1B1D] rounded-[20px] p-4 sm:p-6 shadow-2xl border border-[#2A2A2C]`}>
         {/* Header */}
-        <div className="flex items-start justify-between mb-6 sm:mb-8">
+        <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-[20px] font-bold text-white">{isEditing ? 'Editar Insumo' : 'Criar Insumo'}</h2>
-            <p className="text-[12px] text-[#868686] mt-1">{isEditing ? 'Atualize os dados do insumo' : 'Cadastre um novo insumo'}</p>
+            <h2 className="text-[18px] font-bold text-white">{isEditing ? 'Editar Insumo' : 'Criar Insumo'}</h2>
+            <p className="text-[11px] text-[#868686] mt-0.5">{isEditing ? 'Atualize os dados' : 'Cadastre um novo insumo'}</p>
           </div>
           <div className="flex items-center gap-2">
             {isEditing && (
@@ -472,15 +472,15 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
         </div>
 
         {/* Form */}
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-3">
           {/* Nome */}
           <div>
-            <label className="block text-[12px] text-[#868686] mb-2">Nome</label>
+            <label className="block text-[11px] text-[#868686] mb-1.5 font-medium">Nome</label>
             <input
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[12px] px-4 py-3.5 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors"
+              className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-3 py-2.5 text-[13px] text-white outline-none focus:border-[#F5A623] transition-colors"
               placeholder="Ex: Peito de Frango"
             />
           </div>
@@ -488,7 +488,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
           {/* Tipo - Pronto ou Preparado */}
           {!isEditing ? (
             <div>
-              <label className="block text-[12px] text-[#868686] mb-2">
+              <label className="block text-[11px] text-[#868686] mb-1.5 font-medium">
                 Tipo de Insumo
                 <span className="ml-1 text-[10px] text-[#555] cursor-help" title="Pronto: vem pronto do fornecedor. Preparado: você produz na casa com outros insumos.">ⓘ</span>
               </label>
@@ -496,7 +496,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                 <button
                   type="button"
                   onClick={() => setTipo('pronto')}
-                  className={`flex-1 py-3 rounded-[12px] text-[13px] font-semibold transition-all border ${
+                  className={`flex-1 py-2.5 rounded-[10px] text-[12px] font-semibold transition-all border ${
                     tipo === 'pronto'
                       ? 'bg-[#F5A623]/15 border-[#F5A623] text-[#F5A623]'
                       : 'bg-[#252527] border-[#2A2A2C] text-[#868686] hover:border-[#444]'
@@ -507,7 +507,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                 <button
                   type="button"
                   onClick={() => setTipo('preparado')}
-                  className={`flex-1 py-3 rounded-[12px] text-[13px] font-semibold transition-all border ${
+                  className={`flex-1 py-2.5 rounded-[10px] text-[12px] font-semibold transition-all border ${
                     tipo === 'preparado'
                       ? 'bg-[#F5A623]/15 border-[#F5A623] text-[#F5A623]'
                       : 'bg-[#252527] border-[#2A2A2C] text-[#868686] hover:border-[#444]'
@@ -516,10 +516,10 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                   Preparado
                 </button>
               </div>
-              <div className="mt-2 text-[10px] text-[#555]">
+              <div className="mt-1.5 text-[10px] text-[#555]">
                 {tipo === 'pronto'
-                  ? 'Vem pronto do fornecedor. Ex: Mussarela, Farinha de Trigo, Azeite.'
-                  : 'Produzido na casa com outros insumos. Ex: Molho de tomate, Massa de pizza, Blend de hambúrguer.'}
+                  ? 'Vem pronto do fornecedor. Ex: Mussarela, Farinha de Trigo.'
+                  : 'Produzido na casa. Ex: Molho de tomate, Blend de hambúrguer.'}
               </div>
             </div>
           ) : (
@@ -537,73 +537,74 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
 
           {tipo === 'pronto' && (
             <>
-              {/* Categoria */}
-              <div>
-                <label className="block text-[12px] text-[#868686] mb-2">Categoria</label>
-                <div className="relative">
-                  <select
-                    value={categoria}
-                    onChange={(e) => setCategoria(e.target.value)}
-                    className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[12px] px-4 py-3.5 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors appearance-none cursor-pointer"
-                  >
-                    {categoryOptions.map(c => (
-                      <option key={c} value={c} className="bg-[#1B1B1D] text-white">{c}</option>
-                    ))}
-                  </select>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                     <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+              {/* Categoria + Unidade Base lado a lado */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] text-[#868686] mb-1.5 font-medium">Categoria</label>
+                  <div className="relative">
+                    <select
+                      value={categoria}
+                      onChange={(e) => setCategoria(e.target.value)}
+                      className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-3 py-2.5 text-[13px] text-white outline-none focus:border-[#F5A623] transition-colors appearance-none cursor-pointer pr-8"
+                    >
+                      {categoryOptions.map(c => (
+                        <option key={c} value={c} className="bg-[#1B1B1D] text-white">{c}</option>
+                      ))}
+                    </select>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-[#868686] mb-1.5 font-medium">Unidade Base</label>
+                  <div className="relative bg-[#252527] border border-[#2A2A2C] rounded-[10px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                    <select
+                      value={unit}
+                      onChange={(e) => { setUnit(e.target.value); if (!insumo.id) setPurchaseUnit(e.target.value); }}
+                      className="w-full bg-transparent px-3 py-2.5 text-[13px] text-white outline-none appearance-none cursor-pointer pr-8"
+                    >
+                      <option value="gr" className="bg-[#1B1B1D] text-white">Gramas (gr)</option>
+                      <option value="ml" className="bg-[#1B1B1D] text-white">Mililitros (ml)</option>
+                      <option value="un" className="bg-[#1B1B1D] text-white">Unidade (un)</option>
+                      <option value="kg" className="bg-[#1B1B1D] text-white">Quilogramas (kg)</option>
+                      <option value="lt" className="bg-[#1B1B1D] text-white">Litros (lt)</option>
+                    </select>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
                 </div>
               </div>
 
-              {/* Unidade Base (gr/kg/ml/lt/un) */}
-              <div>
-                <label className="block text-[12px] text-[#868686] mb-2">Unidade Base</label>
-                <div className="relative bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
-                  <select
-                    value={unit}
-                    onChange={(e) => { setUnit(e.target.value); if (!insumo.id) setPurchaseUnit(e.target.value); }}
-                    className="w-full bg-transparent px-4 py-3.5 text-[14px] text-white outline-none appearance-none cursor-pointer"
-                  >
-                    <option value="gr" className="bg-[#1B1B1D] text-white">Gramas (gr)</option>
-                    <option value="ml" className="bg-[#1B1B1D] text-white">Mililitros (ml)</option>
-                    <option value="un" className="bg-[#1B1B1D] text-white">Unidade (un)</option>
-                    <option value="kg" className="bg-[#1B1B1D] text-white">Quilogramas (kg)</option>
-                    <option value="lt" className="bg-[#1B1B1D] text-white">Litros (lt)</option>
-                  </select>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <p className="text-[10px] text-[#555] mt-1.5">Como o insumo é medido no preparo (ex: farinha em gramas, Qboa em litros)</p>
-              </div>
-
-              {/* Quantidade Comprada + Valor Pago */}
-              <div className="bg-[#1A1A1A] border border-[#2A2A2C] rounded-[14px] p-4 space-y-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              {/* Informações da Compra — bloco compacto */}
+              <div className="bg-gradient-to-br from-[#F5A623]/5 to-transparent border border-[#F5A623]/20 rounded-[12px] p-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   <span className="text-[12px] text-[#F5A623] font-semibold">Informações da Compra</span>
+                  <span className="text-[9px] text-[#666] ml-auto">Sistema calcula por {unit} automaticamente</span>
                 </div>
-                <p className="text-[10px] text-[#868686] -mt-1">Informe o que você comprou e pagou, o sistema calcula o preço por {unit} automaticamente</p>
 
-                <div className="grid grid-cols-[1fr_90px] gap-2">
+                {/* Linha única: Qty + Unit + Total */}
+                <div className="grid grid-cols-[1fr_70px_1fr] gap-2">
                   <div>
-                    <label className="block text-[11px] text-[#868686] mb-1.5">Quantidade comprada</label>
+                    <label className="block text-[10px] text-[#868686] mb-1">Qtd comprada</label>
                     <input
                       type="text"
                       inputMode="decimal"
                       value={purchaseQty}
                       onChange={(e) => setPurchaseQty(e.target.value.replace(/[^0-9.,]/g, ''))}
-                      className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-3 py-2.5 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors"
+                      className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[8px] px-2.5 py-2 text-[13px] text-white outline-none focus:border-[#F5A623] transition-colors"
                       placeholder="Ex: 900"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-[#868686] mb-1.5">Unidade</label>
+                    <label className="block text-[10px] text-[#868686] mb-1">Un</label>
                     <select
                       value={purchaseUnit}
                       onChange={(e) => setPurchaseUnit(e.target.value)}
-                      className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-2 py-2.5 text-[13px] text-white outline-none focus:border-[#F5A623] transition-colors cursor-pointer [color-scheme:dark]"
+                      className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[8px] px-1.5 py-2 text-[12px] text-white outline-none focus:border-[#F5A623] transition-colors cursor-pointer [color-scheme:dark]"
                     >
                       <option value="gr">gr</option>
                       <option value="kg">kg</option>
@@ -612,46 +613,43 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                       <option value="un">un</option>
                     </select>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] text-[#868686] mb-1.5">Valor pago pela embalagem</label>
-                  <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[10px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
-                    <span className="text-[13px] text-[#868686] pl-3 shrink-0">R$</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={purchaseTotal}
-                      onChange={handlePurchaseTotalChange}
-                      className="flex-1 bg-transparent px-2 py-2.5 text-[14px] text-white outline-none"
-                      placeholder="0,00"
-                    />
+                  <div>
+                    <label className="block text-[10px] text-[#868686] mb-1">Valor pago</label>
+                    <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[8px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                      <span className="text-[12px] text-[#868686] pl-2 shrink-0">R$</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={purchaseTotal}
+                        onChange={handlePurchaseTotalChange}
+                        className="w-full bg-transparent px-1.5 py-2 text-[13px] text-white outline-none"
+                        placeholder="0,00"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Preço calculado por unidade */}
+                {/* Preço calculado */}
                 {calculatedPricePerUnit !== null && (
-                  <div className="flex items-center justify-between pt-2 border-t border-[#2A2A2C]">
-                    <span className="text-[11px] text-[#868686]">Preço calculado por {unit}:</span>
+                  <div className="flex items-center justify-between pt-2 border-t border-[#F5A623]/15">
+                    <span className="text-[11px] text-[#868686]">Preço por {unit}:</span>
                     <span className="text-[14px] font-bold text-[#F5A623]">R$ {calculatedPricePerUnit.toFixed(2).replace('.', ',')}</span>
                   </div>
                 )}
               </div>
 
-              {/* Campo manual de "Preço por {unit}" — visível apenas se purchase fields estão vazios (retrocompatibilidade) */}
+              {/* Fallback manual — só aparece se não tiver purchase info */}
               {!calculatedPricePerUnit && (
                 <div>
-                  <label className="block text-[12px] text-[#868686] mb-2">
-                    Preço por {unit} <span className="text-[10px] text-[#555]">(preencha os campos acima para calcular automaticamente)</span>
-                  </label>
-                  <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
-                    <span className="text-[13px] text-[#868686] pl-4 shrink-0">R$</span>
+                  <label className="block text-[11px] text-[#868686] mb-1.5 font-medium">Preço por {unit} <span className="text-[9px] text-[#555] font-normal">(ou preencha acima)</span></label>
+                  <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[10px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                    <span className="text-[13px] text-[#868686] pl-3 shrink-0">R$</span>
                     <input
                       type="text"
                       inputMode="numeric"
                       value={custo}
                       onChange={handleCustoChange}
-                      className="flex-1 bg-transparent px-2 py-3.5 text-[14px] text-white outline-none"
+                      className="flex-1 bg-transparent px-2 py-2.5 text-[13px] text-white outline-none"
                       placeholder="0,00"
                     />
                   </div>
@@ -801,11 +799,11 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between mt-6 sm:mt-8 pt-4">
-          <button onClick={onClose} className="text-[13px] sm:text-[14px] text-[#F5A623] font-medium hover:text-[#E5961E] transition-colors">
+        <div className="flex items-center justify-between mt-5 pt-3 border-t border-[#2A2A2C]">
+          <button onClick={onClose} className="text-[13px] text-[#F5A623] font-medium hover:text-[#E5961E] transition-colors">
             Cancelar
           </button>
-          <button onClick={handleSave} className="bg-[#F5A623] text-black font-semibold text-[13px] sm:text-[14px] px-6 sm:px-8 py-3 sm:py-3.5 rounded-[12px] hover:bg-[#E5961E] transition-colors">
+          <button onClick={handleSave} className="bg-[#F5A623] text-black font-semibold text-[13px] px-6 py-2.5 rounded-[10px] hover:bg-[#E5961E] transition-colors">
             {isEditing ? 'Atualizar Insumo' : 'Salvar Insumo'}
           </button>
         </div>
