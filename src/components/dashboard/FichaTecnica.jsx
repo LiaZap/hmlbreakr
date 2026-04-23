@@ -265,6 +265,12 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   const safeCusto = insumo.custo || '0,00';
   const [custo, setCusto] = useState(safeCusto.replace(/R\$\s?/g, '').trim());
 
+  // Purchase info — quantidade comprada + valor pago total (para calcular preço por unidade base)
+  // purchaseQty é a qtd comprada na unidade purchaseUnit; purchaseTotal é o valor pago pela embalagem inteira
+  const [purchaseQty, setPurchaseQty] = useState(insumo.purchaseQty || '');
+  const [purchaseUnit, setPurchaseUnit] = useState(insumo.purchaseUnit || insumo.unit || unitMatch || 'gr');
+  const [purchaseTotal, setPurchaseTotal] = useState(insumo.purchaseTotal || '');
+
   // Prepared insumo state
   const [tipo, setTipo] = useState(insumo.isPrepared ? 'preparado' : 'pronto');
   const [rendimentoPreparado, setRendimentoPreparado] = useState(insumo.rendimentoPreparado || '');
@@ -284,10 +290,38 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
     setCusto(formatted);
   };
 
+  const handlePurchaseTotalChange = (e) => {
+    const raw = e.target.value.replace(/[^0-9]/g, '');
+    if (!raw) { setPurchaseTotal(''); return; }
+    const formatted = (parseInt(raw, 10) / 100).toFixed(2).replace('.', ',');
+    setPurchaseTotal(formatted);
+  };
+
+  // Auto-calcula preço por unidade base a partir de quantidade comprada + valor pago
+  // Ex: comprou 900ml por R$15 → unidade base lt → calcula R$ 16,67/lt
+  const calculatedPricePerUnit = (() => {
+    const pQty = parseSafeNumber(purchaseQty);
+    const pTotal = parseSafeNumber(purchaseTotal);
+    if (!pQty || !pTotal) return null;
+    // Convert purchaseQty to base unit
+    const qtyInBaseUnit = convertUnit(pQty, purchaseUnit, unit);
+    if (!qtyInBaseUnit || qtyInBaseUnit <= 0) return null;
+    return pTotal / qtyInBaseUnit;
+  })();
+
+  // Sync custo field when auto-calc changes
+  React.useEffect(() => {
+    if (calculatedPricePerUnit !== null) {
+      setCusto(calculatedPricePerUnit.toFixed(2).replace('.', ','));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calculatedPricePerUnit]);
+
   const { dashboardData, updateDashboardData } = useDashboard();
   const categoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
+  // Todos os insumos EXCETO o próprio que está sendo editado (para permitir qualquer insumo como sub-ingrediente)
   const availableInsumos = (dashboardData.operational?.insumos || []).filter(i =>
-    !i.isPrepared && String(i.id) !== String(insumo.id)
+    String(i.id) !== String(insumo.id)
   );
 
 
@@ -396,7 +430,12 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
         price: custo,
         defaultQty: quantidade,
         grossQty: quantidade,
+        // Purchase info — preservado para exibir/editar depois
+        purchaseQty: purchaseQty || '',
+        purchaseUnit: purchaseUnit || unit,
+        purchaseTotal: purchaseTotal || '',
         isPrepared: false,
+        lastUpdated: Date.now(),
       });
     }
     onClose();
@@ -517,29 +556,94 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                 </div>
               </div>
 
-              {/* Unidade de Compra + Preço por Unidade */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[12px] text-[#868686] mb-2">Unidade de Compra</label>
-                  <div className="relative bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+              {/* Unidade Base (gr/kg/ml/lt/un) */}
+              <div>
+                <label className="block text-[12px] text-[#868686] mb-2">Unidade Base</label>
+                <div className="relative bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                  <select
+                    value={unit}
+                    onChange={(e) => { setUnit(e.target.value); if (!insumo.id) setPurchaseUnit(e.target.value); }}
+                    className="w-full bg-transparent px-4 py-3.5 text-[14px] text-white outline-none appearance-none cursor-pointer"
+                  >
+                    <option value="gr" className="bg-[#1B1B1D] text-white">Gramas (gr)</option>
+                    <option value="ml" className="bg-[#1B1B1D] text-white">Mililitros (ml)</option>
+                    <option value="un" className="bg-[#1B1B1D] text-white">Unidade (un)</option>
+                    <option value="kg" className="bg-[#1B1B1D] text-white">Quilogramas (kg)</option>
+                    <option value="lt" className="bg-[#1B1B1D] text-white">Litros (lt)</option>
+                  </select>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <p className="text-[10px] text-[#555] mt-1.5">Como o insumo é medido no preparo (ex: farinha em gramas, Qboa em litros)</p>
+              </div>
+
+              {/* Quantidade Comprada + Valor Pago */}
+              <div className="bg-[#1A1A1A] border border-[#2A2A2C] rounded-[14px] p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <span className="text-[12px] text-[#F5A623] font-semibold">Informações da Compra</span>
+                </div>
+                <p className="text-[10px] text-[#868686] -mt-1">Informe o que você comprou e pagou, o sistema calcula o preço por {unit} automaticamente</p>
+
+                <div className="grid grid-cols-[1fr_90px] gap-2">
+                  <div>
+                    <label className="block text-[11px] text-[#868686] mb-1.5">Quantidade comprada</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={purchaseQty}
+                      onChange={(e) => setPurchaseQty(e.target.value.replace(/[^0-9.,]/g, ''))}
+                      className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-3 py-2.5 text-[14px] text-white outline-none focus:border-[#F5A623] transition-colors"
+                      placeholder="Ex: 900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#868686] mb-1.5">Unidade</label>
                     <select
-                      value={unit}
-                      onChange={(e) => setUnit(e.target.value)}
-                      className="w-full bg-transparent px-4 py-3.5 text-[14px] text-white outline-none appearance-none cursor-pointer"
+                      value={purchaseUnit}
+                      onChange={(e) => setPurchaseUnit(e.target.value)}
+                      className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-2 py-2.5 text-[13px] text-white outline-none focus:border-[#F5A623] transition-colors cursor-pointer [color-scheme:dark]"
                     >
-                      <option value="gr" className="bg-[#1B1B1D] text-white">Gramas (gr)</option>
-                      <option value="ml" className="bg-[#1B1B1D] text-white">Mililitros (ml)</option>
-                      <option value="un" className="bg-[#1B1B1D] text-white">Unidade (un)</option>
-                      <option value="kg" className="bg-[#1B1B1D] text-white">Quilogramas (kg)</option>
-                      <option value="lt" className="bg-[#1B1B1D] text-white">Litros (lt)</option>
+                      <option value="gr">gr</option>
+                      <option value="kg">kg</option>
+                      <option value="ml">ml</option>
+                      <option value="lt">lt</option>
+                      <option value="un">un</option>
                     </select>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                       <path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
                   </div>
                 </div>
+
                 <div>
-                  <label className="block text-[12px] text-[#868686] mb-2">Preço por {unit}</label>
+                  <label className="block text-[11px] text-[#868686] mb-1.5">Valor pago pela embalagem</label>
+                  <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[10px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
+                    <span className="text-[13px] text-[#868686] pl-3 shrink-0">R$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={purchaseTotal}
+                      onChange={handlePurchaseTotalChange}
+                      className="flex-1 bg-transparent px-2 py-2.5 text-[14px] text-white outline-none"
+                      placeholder="0,00"
+                    />
+                  </div>
+                </div>
+
+                {/* Preço calculado por unidade */}
+                {calculatedPricePerUnit !== null && (
+                  <div className="flex items-center justify-between pt-2 border-t border-[#2A2A2C]">
+                    <span className="text-[11px] text-[#868686]">Preço calculado por {unit}:</span>
+                    <span className="text-[14px] font-bold text-[#F5A623]">R$ {calculatedPricePerUnit.toFixed(2).replace('.', ',')}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Campo manual de "Preço por {unit}" — visível apenas se purchase fields estão vazios (retrocompatibilidade) */}
+              {!calculatedPricePerUnit && (
+                <div>
+                  <label className="block text-[12px] text-[#868686] mb-2">
+                    Preço por {unit} <span className="text-[10px] text-[#555]">(preencha os campos acima para calcular automaticamente)</span>
+                  </label>
                   <div className="flex items-center bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
                     <span className="text-[13px] text-[#868686] pl-4 shrink-0">R$</span>
                     <input
@@ -552,7 +656,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                     />
                   </div>
                 </div>
-              </div>
+              )}
             </>
           )}
 
