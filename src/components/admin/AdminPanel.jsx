@@ -455,6 +455,21 @@ const AdminPanel = () => {
     } catch { return null; }
   };
 
+  // Helper to get client display data — deve ficar ANTES de filteredClients/metrics (TDZ)
+  const getClientDisplay = (client) => {
+    try {
+      const raw = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
+      const GENERIC = ['Seu Restaurante', 'Acesso Cliente', 'Usuário', ''];
+      const restaurantFromData = raw.formData?.identity?.restaurant_name || raw.restaurant?.name;
+      const displayName = (restaurantFromData && !GENERIC.includes(restaurantFromData)) ? restaurantFromData : client.name;
+      const rawOwner = raw.formData?.user_info?.user_name || raw.user?.name || '';
+      const ownerName = GENERIC.includes(rawOwner) ? '' : rawOwner;
+      return { displayName, ownerName, raw };
+    } catch {
+      return { displayName: client.name || '', ownerName: '', raw: {} };
+    }
+  };
+
   // Normaliza texto pra busca (sem acentos, minúsculas, trim)
   const normalizeSearch = (str) => {
     if (!str) return '';
@@ -553,17 +568,6 @@ const AdminPanel = () => {
     { id: 'commercial', label: 'Comercial', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M20 8v6M23 11h-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
     ...(canManage ? [{ id: 'broadcasts', label: 'Comunicados', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, badge: broadcasts.filter(b => b.active).length }] : []),
   ];
-
-  // Helper to get client display data
-  const getClientDisplay = (client) => {
-    const raw = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
-    const GENERIC = ['Seu Restaurante', 'Acesso Cliente', 'Usuário', ''];
-    const restaurantFromData = raw.formData?.identity?.restaurant_name || raw.restaurant?.name;
-    const displayName = (restaurantFromData && !GENERIC.includes(restaurantFromData)) ? restaurantFromData : client.name;
-    const rawOwner = raw.formData?.user_info?.user_name || raw.user?.name || '';
-    const ownerName = GENERIC.includes(rawOwner) ? '' : rawOwner;
-    return { displayName, ownerName, raw };
-  };
 
   return (
     <div className="h-screen bg-[#0A0A0B] font-jakarta text-white flex relative overflow-hidden">
