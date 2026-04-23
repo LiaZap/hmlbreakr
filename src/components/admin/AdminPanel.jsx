@@ -74,6 +74,18 @@ const AdminPanel = () => {
   const [sortBy, setSortBy] = useState({ column: 'createdAt', order: 'desc' });
   const PAGE_SIZE = 20;
 
+  // Abre dashboard do cliente em nova aba com contexto admin (sessionStorage é isolado por aba)
+  // Passa adminView=1 + role + name via URL — App.jsx detecta e seta sessionStorage na aba nova
+  const openClientAsAdmin = (hash) => {
+    const params = new URLSearchParams({
+      hash,
+      adminView: '1',
+      adminRole,
+      adminName,
+    });
+    window.open(`${window.location.origin}/?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  };
+
   useEffect(() => {
     fetch('/api/admin/clients')
       .then(res => res.json())
@@ -904,7 +916,7 @@ const AdminPanel = () => {
                     return (
                       <motion.div key={c.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + idx * 0.05 }}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-[10px] hover:bg-white/[0.03] transition-colors cursor-pointer group"
-                        onClick={() => window.open(`${window.location.origin}/?hash=${c.hash}`, '_blank')}>
+                        onClick={() => openClientAsAdmin(c.hash)}>
                         <div className="relative">
                           <div className="w-9 h-9 rounded-[10px] flex items-center justify-center text-[11px] font-bold shrink-0 shadow-sm" style={{ backgroundColor: color + '25', color }}>{getInitials(displayName)}</div>
                           <span className="absolute -bottom-0.5 -right-0.5 w-[10px] h-[10px] rounded-full ring-2 ring-[#121214]" style={{ backgroundColor: progress >= 100 ? '#00B37E' : progress > 0 ? '#F5A623' : '#555' }} />
@@ -1103,7 +1115,7 @@ const AdminPanel = () => {
                     {/* Actions */}
                     <div className="flex items-center gap-1 justify-end">
                       <button
-                        onClick={() => window.open(`${window.location.origin}/?hash=${client.hash}`, '_blank', 'noopener,noreferrer')}
+                        onClick={() => openClientAsAdmin(client.hash)}
                         className="p-2 rounded-[8px] text-[#868686] hover:text-white hover:bg-[#252527] transition-colors"
                         title="Acessar dashboard"
                       >
@@ -1339,7 +1351,7 @@ const AdminPanel = () => {
                             const progress = getOnboardingProgress(client);
                             const color = getColor(client.name);
                             return (
-                              <div key={client.id} className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[12px] p-3 hover:border-[#3A3A3C] transition-all cursor-pointer" onClick={() => window.open(`${window.location.origin}/?hash=${client.hash}`, '_blank', 'noopener,noreferrer')}>
+                              <div key={client.id} className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[12px] p-3 hover:border-[#3A3A3C] transition-all cursor-pointer" onClick={() => openClientAsAdmin(client.hash)}>
                                 <div className="flex items-center gap-2 mb-2">
                                   <div className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[10px] font-bold shrink-0" style={{ backgroundColor: color + '20', color: color }}>
                                     {getInitials(displayName)}

@@ -28,6 +28,22 @@ function App() {
     const hash = params.get('hash');
     const agency = params.get('agency');
     const demo = params.get('demo');
+    // Admin-view mode via URL: quando admin clica "Acessar" no painel, abre com ?adminView=1
+    // Essa aba nova não tem o sessionStorage da aba admin (isolado), então precisamos setar aqui
+    const adminView = params.get('adminView');
+    const adminRoleParam = params.get('adminRole');
+    const adminNameParam = params.get('adminName');
+    if (adminView === '1' && hash) {
+      sessionStorage.setItem('breaker-admin', 'true');
+      if (adminRoleParam) sessionStorage.setItem('breaker-admin-role', adminRoleParam);
+      if (adminNameParam) sessionStorage.setItem('breaker-admin-name', adminNameParam);
+      // Limpar params da URL pra não poluir o histórico (mantém só o hash)
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('adminView');
+      cleanUrl.searchParams.delete('adminRole');
+      cleanUrl.searchParams.delete('adminName');
+      window.history.replaceState({}, '', cleanUrl.toString());
+    }
     const adminSession = sessionStorage.getItem('breaker-admin');
     const agencySession = sessionStorage.getItem('breaker-agency');
 
