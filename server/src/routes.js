@@ -259,6 +259,125 @@ router.get('/admin/inspect/:hash/raw', async (req, res) => {
   }
 });
 
+// Listar backups disponíveis no servidor
+router.get('/admin/backups', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const serverDir = path.resolve(__dirname, '..', '..');
+    const files = fs.readdirSync(serverDir)
+      .filter(f => f.startsWith('backup-') && f.endsWith('.json'))
+      .map(f => {
+        const stat = fs.statSync(path.join(serverDir, f));
+        return { name: f, size: stat.size, mtime: stat.mtime };
+      })
+      .sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
+    res.json({ backups: files, serverDir });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao listar backups', details: error.message });
+  }
+});
+
+// Restaurar fichas/insumos de um backup para um cliente específico
+router.post('/admin/restore-operational', async (req, res) => {
+  try {
+    const { backupFile, clientHash, dryRun = true } = req.body;
+    if (!backupFile || !clientHash) {
+      return res.status(400).json({ error: 'backupFile e clientHash são obrigatórios' });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const filepath = path.resolve(__dirname, '..', '..', backupFile);
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: `Backup não encontrado: ${backupFile}` });
+    }
+
+    const backupRaw = fs.readFileSync(filepath, 'utf-8');
+    const backup = JSON.parse(backupRaw);
+
+    // Procurar o cliente no backup
+    const clientsInBackup = backup.clients || [];
+    const backupClient = clientsInBackup.find(c => c.hash === clientHash);
+    if (!backupClient) {
+      return res.status(404).json({
+        error: `Cliente com hash ${clientHash} não encontrado no backup`,
+        availableHashes: clientsInBackup.map(c => ({ hash: c.hash, name: c.name })).slice(0, 20),
+      });
+    }
+
+    // Parse do data do backup
+    const backupData = typeof backupClient.data === 'string' ? JSON.parse(backupClient.data) : backupClient.data;
+    const fichasFromBackup = backupData?.operational?.fichas || [];
+    const insumosFromBackup = backupData?.operational?.insumos || [];
+
+    // Cliente atual no banco
+    const currentClient = await prisma.client.findUnique({ where: { hash: clientHash } });
+    if (!currentClient) {
+      return res.status(404).json({ error: 'Cliente atual não encontrado no banco' });
+    }
+    const currentData = typeof currentClient.data === 'string' ? JSON.parse(currentClient.data) : currentClient.data;
+    const currentFichas = currentData?.operational?.fichas || [];
+    const currentInsumos = currentData?.operational?.insumos || [];
+
+    if (dryRun) {
+      return res.json({
+        dryRun: true,
+        clientName: currentClient.name,
+        backupFile,
+        backupDate: backup._meta?.exportedAt || 'unknown',
+        current: { fichasCount: currentFichas.length, insumosCount: currentInsumos.length },
+        backup: { fichasCount: fichasFromBackup.length, insumosCount: insumosFromBackup.length },
+        willRestore: fichasFromBackup.length > 0 || insumosFromBackup.length > 0,
+        message: 'Esta é uma simulação. Para efetuar o restore, passe dryRun: false.',
+      });
+    }
+
+    // EXECUTAR RESTORE: merge fichas/insumos do backup no data atual
+    // Estratégia: se o atual está vazio, usa o do backup. Se atual tem alguns, faz merge por ID único.
+    const mergedFichas = [...currentFichas];
+    fichasFromBackup.forEach(bf => {
+      if (!mergedFichas.some(cf => String(cf.id) === String(bf.id))) {
+        mergedFichas.push(bf);
+      }
+    });
+    const mergedInsumos = [...currentInsumos];
+    insumosFromBackup.forEach(bi => {
+      if (!mergedInsumos.some(ci => String(ci.id) === String(bi.id))) {
+        mergedInsumos.push(bi);
+      }
+    });
+
+    const newData = {
+      ...currentData,
+      operational: {
+        ...(currentData.operational || {}),
+        fichas: mergedFichas,
+        insumos: mergedInsumos,
+      },
+    };
+
+    await prisma.client.update({
+      where: { id: currentClient.id },
+      data: { data: JSON.stringify(newData) },
+    });
+
+    res.json({
+      success: true,
+      clientName: currentClient.name,
+      restored: {
+        fichas: mergedFichas.length - currentFichas.length,
+        insumos: mergedInsumos.length - currentInsumos.length,
+      },
+      totals: { fichas: mergedFichas.length, insumos: mergedInsumos.length },
+    });
+  } catch (error) {
+    console.error('Restore error:', error);
+    res.status(500).json({ error: 'Erro ao restaurar', details: error.message });
+  }
+});
+
 // Full data export for backup (super_admin only)
 // Each table is fetched independently so a schema mismatch in one doesn't break the whole export.
 router.get('/admin/export', async (req, res) => {
