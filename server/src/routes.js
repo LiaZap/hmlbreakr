@@ -146,7 +146,7 @@ router.get('/admin/clients', async (req, res) => {
   }
 });
 
-// Inspect single client raw data (super_admin debug) — procura fichas/insumos em qualquer lugar do JSON
+// Inspect single client — summary mode (sem raw, mais legível)
 router.get('/admin/inspect/:hash', async (req, res) => {
   try {
     const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
@@ -159,6 +159,7 @@ router.get('/admin/inspect/:hash', async (req, res) => {
     const fichas = parsed?.operational?.fichas || [];
     const insumos = parsed?.operational?.insumos || [];
 
+    // Sem o "raw" — só estrutura
     res.json({
       clientId: client.id,
       hash: client.hash,
@@ -166,22 +167,43 @@ router.get('/admin/inspect/:hash', async (req, res) => {
       email: client.email,
       createdAt: client.createdAt,
       updatedAt: client.updatedAt,
-      // Snapshot
       hasData: !!client.data,
       dataSize: raw.length,
       structure: {
         hasOperational: !!parsed?.operational,
         fichasCount: fichas.length,
         insumosCount: insumos.length,
-        fichasIds: fichas.map(f => ({ id: f.id, name: f.name, type: f.type })),
-        insumosIds: insumos.map(i => ({ id: i.id, name: i.name, isPrepared: i.isPrepared })),
+        fichas: fichas.map(f => ({ id: f.id, name: f.name, type: f.type, ingredients: f.ingredients?.length || 0, custoTotal: f.custoTotal, lastUpdated: f.lastUpdated })),
+        insumos: insumos.map(i => ({ id: i.id, name: i.name, isPrepared: !!i.isPrepared, custo: i.custo })),
       },
-      // Raw para download/inspeção
-      raw: parsed,
     });
   } catch (error) {
     console.error('Inspect error:', error);
     res.status(500).json({ error: 'Erro ao inspecionar cliente' });
+  }
+});
+
+// Inspect raw data (com o JSON inteiro) — pra download de backup manual
+router.get('/admin/inspect/:hash/raw', async (req, res) => {
+  try {
+    const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    const raw = typeof client.data === 'string' ? client.data : JSON.stringify(client.data || {});
+    let parsed = {};
+    try { parsed = JSON.parse(raw); } catch { /* invalid json */ }
+    res.setHeader('Content-Disposition', `attachment; filename="client-${client.hash}-${Date.now()}.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json({
+      clientId: client.id,
+      hash: client.hash,
+      name: client.name,
+      createdAt: client.createdAt,
+      updatedAt: client.updatedAt,
+      data: parsed,
+    });
+  } catch (error) {
+    console.error('Inspect raw error:', error);
+    res.status(500).json({ error: 'Erro ao exportar raw' });
   }
 });
 
