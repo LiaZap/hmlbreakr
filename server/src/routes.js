@@ -159,7 +159,58 @@ router.get('/admin/inspect/:hash', async (req, res) => {
     const fichas = parsed?.operational?.fichas || [];
     const insumos = parsed?.operational?.insumos || [];
 
-    // Sem o "raw" — só estrutura
+    // Mapear o peso de cada key para encontrar ONDE os 900KB estão
+    const topLevelKeys = {};
+    for (const [k, v] of Object.entries(parsed || {})) {
+      try {
+        const size = JSON.stringify(v).length;
+        topLevelKeys[k] = {
+          size,
+          type: Array.isArray(v) ? 'array' : typeof v,
+          length: Array.isArray(v) ? v.length : (typeof v === 'object' && v !== null ? Object.keys(v).length : undefined),
+        };
+      } catch {
+        topLevelKeys[k] = { size: 0, type: 'error' };
+      }
+    }
+
+    // Se operational existe, mostrar as sub-keys dele também
+    const operationalSubKeys = {};
+    if (parsed?.operational && typeof parsed.operational === 'object') {
+      for (const [k, v] of Object.entries(parsed.operational)) {
+        try {
+          operationalSubKeys[k] = {
+            size: JSON.stringify(v).length,
+            type: Array.isArray(v) ? 'array' : typeof v,
+            length: Array.isArray(v) ? v.length : (typeof v === 'object' && v !== null ? Object.keys(v).length : undefined),
+          };
+        } catch {
+          operationalSubKeys[k] = { size: 0 };
+        }
+      }
+    }
+
+    // Busca recursiva por objetos que parecem ficha/insumo (tem name + ingredients ou name + price)
+    const findSuspiciousLists = (obj, path = '') => {
+      const found = [];
+      if (!obj || typeof obj !== 'object') return found;
+      if (Array.isArray(obj)) {
+        if (obj.length > 0 && typeof obj[0] === 'object') {
+          const first = obj[0];
+          if (first && (first.ingredients !== undefined || first.custoTotal !== undefined)) {
+            found.push({ path, type: 'possible_fichas', count: obj.length, sample: { id: first.id, name: first.name } });
+          } else if (first && (first.price !== undefined || first.custo !== undefined)) {
+            found.push({ path, type: 'possible_insumos', count: obj.length, sample: { id: first.id, name: first.name } });
+          }
+        }
+        return found;
+      }
+      for (const [k, v] of Object.entries(obj)) {
+        found.push(...findSuspiciousLists(v, path ? `${path}.${k}` : k));
+      }
+      return found;
+    };
+
     res.json({
       clientId: client.id,
       hash: client.hash,
@@ -169,12 +220,13 @@ router.get('/admin/inspect/:hash', async (req, res) => {
       updatedAt: client.updatedAt,
       hasData: !!client.data,
       dataSize: raw.length,
+      topLevelKeys,
+      operationalSubKeys,
+      suspiciousLists: findSuspiciousLists(parsed),
       structure: {
         hasOperational: !!parsed?.operational,
         fichasCount: fichas.length,
         insumosCount: insumos.length,
-        fichas: fichas.map(f => ({ id: f.id, name: f.name, type: f.type, ingredients: f.ingredients?.length || 0, custoTotal: f.custoTotal, lastUpdated: f.lastUpdated })),
-        insumos: insumos.map(i => ({ id: i.id, name: i.name, isPrepared: !!i.isPrepared, custo: i.custo })),
       },
     });
   } catch (error) {
