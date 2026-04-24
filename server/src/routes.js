@@ -393,6 +393,55 @@ router.post('/admin/bulk-restore', async (req, res) => {
   }
 });
 
+// Detecta clientes potencialmente afetados pelo bug de apagamento
+// Critério: dataSize grande (>200KB) mas fichas=0 e insumos=0
+router.get('/admin/affected-clients', async (req, res) => {
+  try {
+    const clients = await prisma.client.findMany();
+    const affected = [];
+    const ok = [];
+
+    for (const c of clients) {
+      try {
+        const raw = typeof c.data === 'string' ? c.data : JSON.stringify(c.data || '{}');
+        const parsed = JSON.parse(raw);
+        const fichasCount = parsed?.operational?.fichas?.length || 0;
+        const insumosCount = parsed?.operational?.insumos?.length || 0;
+        const dataSize = raw.length;
+
+        const info = {
+          hash: c.hash,
+          name: c.name,
+          email: c.email,
+          dataSize,
+          fichasCount,
+          insumosCount,
+          updatedAt: c.updatedAt,
+        };
+
+        // Suspeito: data grande mas fichas e insumos vazios
+        if (dataSize > 200000 && fichasCount === 0 && insumosCount === 0) {
+          affected.push(info);
+        } else {
+          ok.push(info);
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+    }
+
+    res.json({
+      total: clients.length,
+      affected,
+      okCount: ok.length,
+      message: `${affected.length} clientes potencialmente afetados de ${clients.length} total`,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Cria backup imediato via browser (baixa JSON de todos os clientes)
 router.get('/admin/emergency-backup', async (req, res) => {
   try {
