@@ -329,6 +329,70 @@ router.post('/admin/restore-client-data', async (req, res) => {
   }
 });
 
+// Restauração EM MASSA a partir de um emergency-backup.json
+// Usado pra restaurar estado inteiro após restore destrutivo de snapshot
+router.post('/admin/bulk-restore', async (req, res) => {
+  try {
+    const { backup, dryRun = true, excludeHash = null } = req.body;
+    if (!backup || !Array.isArray(backup.clients)) {
+      return res.status(400).json({ error: 'backup.clients é obrigatório' });
+    }
+
+    const results = { updated: [], skipped: [], errors: [], total: backup.clients.length };
+
+    for (const backupClient of backup.clients) {
+      try {
+        // Opção: excluir um hash específico (ex: Pampa — não queremos sobrescrever a restauração dele)
+        if (excludeHash && backupClient.hash === excludeHash) {
+          results.skipped.push({ hash: backupClient.hash, reason: 'excluded by request' });
+          continue;
+        }
+
+        // Verificar se cliente existe no banco atual
+        const current = await prisma.client.findUnique({ where: { hash: backupClient.hash } });
+        if (!current) {
+          results.skipped.push({ hash: backupClient.hash, name: backupClient.name, reason: 'not in current DB' });
+          continue;
+        }
+
+        // Parse do data
+        let newDataString = backupClient.data;
+        if (typeof newDataString !== 'string') {
+          newDataString = JSON.stringify(newDataString);
+        }
+
+        if (!dryRun) {
+          await prisma.client.update({
+            where: { id: current.id },
+            data: { data: newDataString },
+          });
+        }
+
+        results.updated.push({
+          hash: backupClient.hash,
+          name: backupClient.name,
+          dataSize: newDataString.length,
+        });
+      } catch (err) {
+        results.errors.push({ hash: backupClient.hash, error: err.message });
+      }
+    }
+
+    res.json({
+      dryRun,
+      excludeHash,
+      backupDate: backup._meta?.exportedAt,
+      results,
+      message: dryRun
+        ? 'Simulação — nenhum dado alterado. Envie com dryRun: false pra executar.'
+        : `${results.updated.length} clientes atualizados, ${results.skipped.length} pulados, ${results.errors.length} erros.`,
+    });
+  } catch (error) {
+    console.error('Bulk restore error:', error);
+    res.status(500).json({ error: 'Erro ao restaurar em massa', details: error.message });
+  }
+});
+
 // Cria backup imediato via browser (baixa JSON de todos os clientes)
 router.get('/admin/emergency-backup', async (req, res) => {
   try {
