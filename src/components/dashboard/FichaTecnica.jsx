@@ -1899,7 +1899,9 @@ const FichaTecnica = () => {
 
     // Step 3 (CASCATA NIVEL 2): propagar para FICHAS que usam qualquer insumo atualizado
     // Inclui o insumo editado direto + preparados recalculados
-    if (exists) {
+    // SEGURANÇA: só roda se fichas existem no estado. Se fichas.length === 0,
+    // NÃO sobrescrever (pode ser que o estado ainda não carregou — evita apagar dados).
+    if (exists && fichas.length > 0) {
       const updatedInsumoIds = new Set([
         String(updatedInsumo.id),
         ...newInsumos.filter(i => i.isPrepared && (i.subIngredients || []).some(sub => String(sub.id) === String(updatedInsumo.id))).map(i => String(i.id))

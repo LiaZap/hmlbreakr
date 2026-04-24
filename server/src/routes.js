@@ -259,6 +259,76 @@ router.get('/admin/inspect/:hash/raw', async (req, res) => {
   }
 });
 
+// Restaurar data de um cliente específico a partir de JSON enviado (admin manual)
+// Uso: após extrair JSON do snapshot, enviar aqui para injetar em produção
+router.post('/admin/restore-client-data', async (req, res) => {
+  try {
+    const { clientHash, newData, dryRun = true } = req.body;
+    if (!clientHash || !newData) {
+      return res.status(400).json({ error: 'clientHash e newData são obrigatórios' });
+    }
+
+    const client = await prisma.client.findUnique({ where: { hash: clientHash } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado no banco atual' });
+
+    // newData pode ser string JSON ou objeto
+    let dataString;
+    let parsed;
+    try {
+      if (typeof newData === 'string') {
+        parsed = JSON.parse(newData);
+        dataString = newData;
+      } else {
+        parsed = newData;
+        dataString = JSON.stringify(newData);
+      }
+    } catch {
+      return res.status(400).json({ error: 'newData não é JSON válido' });
+    }
+
+    const currentData = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
+
+    const summary = {
+      current: {
+        dataSize: typeof client.data === 'string' ? client.data.length : JSON.stringify(client.data || {}).length,
+        fichas: currentData?.operational?.fichas?.length || 0,
+        insumos: currentData?.operational?.insumos?.length || 0,
+      },
+      new: {
+        dataSize: dataString.length,
+        fichas: parsed?.operational?.fichas?.length || 0,
+        insumos: parsed?.operational?.insumos?.length || 0,
+      },
+    };
+
+    if (dryRun) {
+      return res.json({
+        dryRun: true,
+        clientName: client.name,
+        clientHash,
+        summary,
+        warning: 'Esta é uma simulação. Para executar, envie com dryRun: false',
+      });
+    }
+
+    // Executar atualização
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { data: dataString },
+    });
+
+    res.json({
+      success: true,
+      clientName: client.name,
+      summary,
+      message: 'Dados do cliente restaurados com sucesso',
+    });
+  } catch (error) {
+    console.error('Restore client data error:', error);
+    res.status(500).json({ error: 'Erro ao restaurar', details: error.message });
+  }
+});
+
 // Cria backup imediato via browser (baixa JSON de todos os clientes)
 router.get('/admin/emergency-backup', async (req, res) => {
   try {
