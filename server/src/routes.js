@@ -259,6 +259,39 @@ router.get('/admin/inspect/:hash/raw', async (req, res) => {
   }
 });
 
+// Cria backup imediato via browser (baixa JSON de todos os clientes)
+router.get('/admin/emergency-backup', async (req, res) => {
+  try {
+    const clients = await prisma.client.findMany();
+    const payload = {
+      _meta: {
+        version: '1.2-emergency',
+        exportedAt: new Date().toISOString(),
+        clientCount: clients.length,
+        totalSize: clients.reduce((s, c) => s + (c.data?.length || 0), 0),
+      },
+      clients: clients.map(c => ({
+        id: c.id,
+        name: c.name,
+        hash: c.hash,
+        email: c.email,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        active: c.active,
+        clerkUserId: c.clerkUserId,
+        data: c.data, // STRING completa
+      })),
+    };
+    const filename = `backup-emergency-${new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)}.json`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(payload);
+  } catch (error) {
+    console.error('Emergency backup error:', error);
+    res.status(500).json({ error: 'Erro ao gerar backup', details: error.message });
+  }
+});
+
 // Listar backups disponíveis no servidor
 router.get('/admin/backups', async (req, res) => {
   try {
