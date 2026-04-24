@@ -146,6 +146,45 @@ router.get('/admin/clients', async (req, res) => {
   }
 });
 
+// Inspect single client raw data (super_admin debug) — procura fichas/insumos em qualquer lugar do JSON
+router.get('/admin/inspect/:hash', async (req, res) => {
+  try {
+    const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+    const raw = typeof client.data === 'string' ? client.data : JSON.stringify(client.data || {});
+    let parsed = {};
+    try { parsed = JSON.parse(raw); } catch { /* invalid json */ }
+
+    const fichas = parsed?.operational?.fichas || [];
+    const insumos = parsed?.operational?.insumos || [];
+
+    res.json({
+      clientId: client.id,
+      hash: client.hash,
+      name: client.name,
+      email: client.email,
+      createdAt: client.createdAt,
+      updatedAt: client.updatedAt,
+      // Snapshot
+      hasData: !!client.data,
+      dataSize: raw.length,
+      structure: {
+        hasOperational: !!parsed?.operational,
+        fichasCount: fichas.length,
+        insumosCount: insumos.length,
+        fichasIds: fichas.map(f => ({ id: f.id, name: f.name, type: f.type })),
+        insumosIds: insumos.map(i => ({ id: i.id, name: i.name, isPrepared: i.isPrepared })),
+      },
+      // Raw para download/inspeção
+      raw: parsed,
+    });
+  } catch (error) {
+    console.error('Inspect error:', error);
+    res.status(500).json({ error: 'Erro ao inspecionar cliente' });
+  }
+});
+
 // Full data export for backup (super_admin only)
 // Each table is fetched independently so a schema mismatch in one doesn't break the whole export.
 router.get('/admin/export', async (req, res) => {
