@@ -957,10 +957,9 @@ router.get('/client/:hash', async (req, res) => {
     dashboardData._clientEmail = client.email || null;
     dashboardData._profile = dashboardData.profile || {};
 
-    // BPO V2.0 — info pra Sidebar mostrar/esconder "Financeiro"
+    // Financeiro V2.0 — feature padrão do produto pra todo cliente
     dashboardData._bpo = {
-      enabled: !!client.bpoEnabled,
-      activatedAt: client.bpoActivatedAt,
+      enabled: true,
       clientId: client.id,
       hash: client.hash,
     };

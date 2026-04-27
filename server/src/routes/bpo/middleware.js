@@ -23,9 +23,7 @@ const requireBpoClient = async (req, res, next) => {
     if (!client) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
-    if (!client.bpoEnabled) {
-      return res.status(403).json({ error: 'Cliente não tem BPO ativado' });
-    }
+    // Removido: bpoEnabled flag (financeiro é feature padrão do produto)
     req.bpoClient = client;
     next();
   } catch (err) {

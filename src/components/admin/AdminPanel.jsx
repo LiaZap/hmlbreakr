@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import boltIcon from '../../assets/bolt.svg';
 import AdminDREModal from './AdminDREModal';
-import BpoApp from '../bpo/BpoApp';
+// BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
+// import BpoApp from '../bpo/BpoApp';
 
 // Tiny sparkline SVG component
 const Sparkline = ({ data = [], color = '#F5A623', width = 60, height = 24 }) => {
@@ -580,8 +581,6 @@ const AdminPanel = () => {
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard Inicial', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 22V12h6v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
     { id: 'clients', label: 'Gestão de Clientes', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-    // BPO Financeiro V2.0 — disponível pra super_admin/admin/financial
-    ...(canManage || isFinancial ? [{ id: 'bpo', label: 'BPO Financeiro', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, badge: 'NOVO' }] : []),
     { id: 'commercial', label: 'Comercial', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M20 8v6M23 11h-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
     ...(canManage ? [{ id: 'broadcasts', label: 'Comunicados', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, badge: broadcasts.filter(b => b.active).length }] : []),
   ];
@@ -802,15 +801,8 @@ const AdminPanel = () => {
         {/* Page Content */}
         <main className="flex-1 px-6 py-6 overflow-y-auto">
 
-        {/* ===== BPO FINANCEIRO TAB (V2.0) ===== */}
-        {activeTab === 'bpo' ? (
-          <div className="-m-6 h-[calc(100vh-3.5rem)]">
-            <BpoApp />
-          </div>
-        ) :
-
-        /* ===== DASHBOARD TAB ===== */
-        activeTab === 'dashboard' ? (
+        {/* ===== DASHBOARD TAB ===== */}
+        {activeTab === 'dashboard' ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           {/* Hero greeting */}
           <div className="mb-6 flex items-end justify-between flex-wrap gap-4">
@@ -1134,31 +1126,6 @@ const AdminPanel = () => {
                           title="Ver DRE Aberto"
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </button>
-                      )}
-                      {/* V2.0: Toggle BPO Financeiro */}
-                      {canManage && (
-                        <button
-                          onClick={async () => {
-                            const enabled = !client.bpoEnabled;
-                            const action = enabled ? 'ativar' : 'desativar';
-                            if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} BPO Financeiro pra ${getClientDisplay(client).displayName}?`)) return;
-                            try {
-                              const res = await fetch(`/api/bpo/admin/clients/${client.hash}/bpo-toggle`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ enabled }),
-                              });
-                              if (!res.ok) throw new Error('Falha');
-                              window.location.reload();
-                            } catch (e) {
-                              alert('Erro ao alterar BPO');
-                            }
-                          }}
-                          className={`p-2 rounded-[8px] transition-colors ${client.bpoEnabled ? 'text-[#F5A623] bg-[#F5A623]/10 hover:bg-[#F5A623]/20' : 'text-[#868686] hover:text-[#F5A623] hover:bg-[#252527]'}`}
-                          title={client.bpoEnabled ? 'BPO ativo — clique pra desativar' : 'Ativar BPO Financeiro'}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </button>
                       )}
                       <button

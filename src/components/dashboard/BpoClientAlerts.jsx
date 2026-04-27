@@ -16,7 +16,7 @@ const BpoClientAlerts = ({ bpoInfo, onNavigateToFinance }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!bpoInfo?.enabled || !bpoInfo?.hash) {
+    if (!bpoInfo?.hash) {
       setLoading(false);
       return;
     }
@@ -28,13 +28,12 @@ const BpoClientAlerts = ({ bpoInfo, onNavigateToFinance }) => {
       .then(setData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [bpoInfo?.enabled, bpoInfo?.hash]);
+  }, [bpoInfo?.hash]);
 
-  // Não mostra nada se BPO não está ativo
-  if (!bpoInfo?.enabled) return null;
   if (loading) return null; // silenciosamente não mostra durante carregamento
   if (error || !data) return null;
-  if (!data.hasAlerts && data.counters.tasksOpen === 0) return null;
+  // Só mostra o bloco quando há algo a comunicar
+  if (!data.hasAlerts && data.counters.tasksOpen === 0 && data.counters.pendingApproval === 0) return null;
 
   const c = data.counters;
   const severityBg = {

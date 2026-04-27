@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import boltIcon from '../../assets/bolt.svg';
 
-const Sidebar = ({ activePage = 'home', onNavigate, isOwner = true, bpoEnabled = false }) => {
+const Sidebar = ({ activePage = 'home', onNavigate, isOwner = true }) => {
   const [expanded, setExpanded] = useState(false);
 
   const navItems = [
@@ -31,18 +31,13 @@ const Sidebar = ({ activePage = 'home', onNavigate, isOwner = true, bpoEnabled =
         <circle cx="17" cy="18" r="2" fill={active ? '#F5A623' : '#959387'} fillOpacity="0.5"/>
       </svg>
     )},
+    // Financeiro V2.0 — feature padrão pra todo cliente (não depende de flag)
+    { id: 'financeiro', label: 'Financeiro', icon: (active) => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" stroke={active ? '#F5A623' : '#959387'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    )},
   ];
-
-  // BPO Financeiro V2.0 — só aparece se admin ativou pra esse cliente
-  if (bpoEnabled) {
-    navItems.push({
-      id: 'financeiro', label: 'Financeiro', icon: (active) => (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" stroke={active ? '#F5A623' : '#959387'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      )
-    });
-  }
 
   // Add Equipe if owner
   if (isOwner) {
