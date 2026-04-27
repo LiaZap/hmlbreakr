@@ -119,10 +119,11 @@ export const onboardingQuestions = [
     title: 'Serviços Recorrentes',
     description: 'Outros custos de manutenção.',
     type: 'composite',
+    infoText: '⚠️ Sempre informe o valor MENSAL. Se o serviço for trimestral, semestral ou anual, divida o valor pelo período. Ex: Trimestral R$ 150 → R$ 50/mês. Anual R$ 600 → R$ 50/mês.',
     fields: [
-      { id: 'pest_control', label: 'Dedetização', type: 'currency', placeholder: 'R$ 0,00' },
-      { id: 'waste_removal', label: 'Lixo Especial', type: 'currency', placeholder: 'R$ 0,00' },
-      { id: 'cleaning_supplies', label: 'Material de Limpeza', type: 'currency', placeholder: 'R$ 0,00' }
+      { id: 'pest_control', label: 'Dedetização', type: 'currency', placeholder: 'R$ 0,00', helpText: 'Valor MENSAL. Se for trimestral R$ 150, informe R$ 50.' },
+      { id: 'waste_removal', label: 'Lixo Especial', type: 'currency', placeholder: 'R$ 0,00', helpText: 'Valor MENSAL. Se for por coleta, calcule média mensal.' },
+      { id: 'cleaning_supplies', label: 'Material de Limpeza', type: 'currency', placeholder: 'R$ 0,00', helpText: 'Valor MENSAL. Se compra a cada 3 meses, divida por 3.' }
     ]
   },
 

@@ -954,12 +954,39 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                   );
               })}
               
-              <button 
+              <button
                 onClick={() => handleAddDynamicItem(question.id)}
                 className="py-3 border border-dashed border-[#444] rounded-lg text-sm text-[#888] hover:border-[#FFC100] hover:text-[#FFC100] transition-colors"
               >
                   + Adicionar {question.itemLabel}
               </button>
+
+              {/* TOTAL PRÓ-LABORE — BAH-021 (só pra calcType pro_labore = sócios) */}
+              {question.calcType === 'pro_labore' && items.length > 0 && (() => {
+                const totalNominal = items.reduce((acc, it) => {
+                  const v = parseFloat((it.pro_labore || '0').toString().replace(/\D/g, '')) / 100 || 0;
+                  return acc + v;
+                }, 0);
+                const totalCustoReal = items.reduce((acc, it) => acc + calculateProLabore(it.pro_labore), 0);
+                if (totalNominal === 0) return null;
+                return (
+                  <div className="mt-2 p-4 bg-[#151515] rounded-lg border border-[#FFC100]/30">
+                    <div className="text-[10px] text-[#FFC100] font-bold uppercase tracking-wider mb-3">
+                      Resumo dos Sócios ({items.length})
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[10px] text-[#7E7E7E] mb-0.5">Pró-Labore (declarado)</div>
+                        <div className="text-[14px] font-semibold text-[#E1E1E1]">{fmtBRL(totalNominal)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-[#7E7E7E] mb-0.5">Custo Real Total (+11% INSS)</div>
+                        <div className="text-[14px] font-bold text-[#FFC100]">{fmtBRL(totalCustoReal)}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
           </div>
       );
   };

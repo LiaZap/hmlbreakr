@@ -955,7 +955,7 @@ export const DashboardProvider = ({ children }) => {
                     breakdown: [
                         { label: 'Pessoal + Sócios', value: `R$ ${formatMoney(personnelCosts)}` },
                         { label: 'Infraestrutura', value: `R$ ${formatMoney(Math.max(0, infraCosts))}` },
-                        { label: 'CMV Estimado', value: `R$ ${formatMoney(cmvCost)}` },
+                        { label: 'CMV Teórico', value: `R$ ${formatMoney(cmvCost)}` },
                         { label: 'Admin e Mkt', value: `R$ ${formatMoney(adminMktTotal)}` },
                     ],
                     reserves: {

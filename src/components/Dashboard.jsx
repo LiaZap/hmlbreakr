@@ -18,7 +18,6 @@ import MatrizPreco from './dashboard/MatrizPreco';
 import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
 import DRE from './dashboard/DRE';
-import BaseModal from './dashboard/BaseModal';
 import CardRateComparison from './dashboard/CardRateComparison';
 import InfoTooltip from './dashboard/InfoTooltip';
 import MobileNav from './dashboard/MobileNav';
@@ -32,7 +31,7 @@ const Dashboard = () => {
   const [activePage, setActivePage] = useState('home');
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showDailyRevenue, setShowDailyRevenue] = useState(false);
-  const [showBaseModal, setShowBaseModal] = useState(false);
+  // BAH-036: BaseModal removido. Indicadores agora ficam inline no CostStructure / SimuladorPrecificacao
 
   // Admin-viewing mode detection
   const hash = new URLSearchParams(window.location.search).get('hash');
@@ -301,17 +300,13 @@ const Dashboard = () => {
               </p>
             </div>
 
-            {/* Base Info Box */}
-            <div className="p-3 md:p-4 bg-[#FF9406] rounded-[12px] md:rounded-[14px] flex flex-col items-center justify-center text-center cursor-pointer hover:brightness-110 transition-all active:scale-[0.98]" onClick={() => setShowBaseModal(true)}>
+            {/* Base Info Box — display inline (BAH-036: modal removido, indicadores ficam em CostStructure e Fichas Técnicas) */}
+            <div
+              className="p-3 md:p-4 bg-[#FF9406] rounded-[12px] md:rounded-[14px] flex flex-col items-center justify-center text-center"
+              title={`BASE = Custos Fixos (${dashboardData.breakEven.base.breakdown?.custosFixos || '0'}%) + Impostos (${dashboardData.breakEven.base.breakdown?.impostos || '0'}%) + Cartão (${dashboardData.breakEven.base.breakdown?.taxasCartao || '0'}%)`}
+            >
               <div className="flex items-center gap-2 mb-1 md:mb-2">
-                <div className="flex items-center gap-1">
-                  <span className="font-bold text-[11px] text-black">Base</span>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M12 16v-4M12 8h.01"/>
-                  </svg>
-                  <span className="text-[9px] text-black/50 font-medium">Toque para detalhes</span>
-                </div>
+                <span className="font-bold text-[11px] text-black">Base</span>
                 <span className="px-2.5 py-0.5 bg-black/15 rounded-full text-[9px] font-medium text-black flex items-center gap-1">
                   {dashboardData.breakEven.base.status}
                   <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -320,7 +315,9 @@ const Dashboard = () => {
                 </span>
               </div>
               <span className="font-bold text-[24px] md:text-[28px] text-black leading-none mb-1">{dashboardData.breakEven.base.value}</span>
-              <p className="font-medium text-[10px] text-black/60">Faixa saudável: 40 a 45</p>
+              <p className="font-medium text-[10px] text-black/60">
+                CF {dashboardData.breakEven.base.breakdown?.custosFixos || '0'}% · Imp {dashboardData.breakEven.base.breakdown?.impostos || '0'}% · Cartão {dashboardData.breakEven.base.breakdown?.taxasCartao || '0'}%
+              </p>
             </div>
           </div>
 
@@ -355,11 +352,6 @@ const Dashboard = () => {
       <MobileNav activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
 
       {/* Bottom spacing handled by pb-[80px] on bottom row */}
-
-      {/* Base Modal */}
-      {showBaseModal && (
-        <BaseModal base={dashboardData.breakEven?.base} onClose={() => setShowBaseModal(false)} />
-      )}
 
       {/* Daily Revenue Modal */}
       <DailyRevenueModal

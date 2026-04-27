@@ -40,8 +40,8 @@ const DRE = ({ data }) => {
     {
       type: 'deduction',
       sign: '-',
-      label: 'CMV',
-      sublabel: 'Custo da Mercadoria Vendida',
+      label: 'CMV Teórico',
+      sublabel: 'Custo da Mercadoria Vendida (estimado das fichas técnicas)',
       value: `R$ ${data.cmv}`,
       pct: `${data.cmvPct}%`,
       bold: false,
