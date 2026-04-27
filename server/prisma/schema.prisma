@@ -55,6 +55,8 @@ model Client {
   reconciliationRules ReconciliationRule[] @relation("ClientReconciliationRules")
   bankTransfers       BankTransfer[]       @relation("ClientBankTransfers")
   bpoTasks            BpoTask[]            @relation("ClientBpoTasks")
+  whatsappMessages    WhatsappMessage[]    @relation("ClientWhatsappMessages")
+  pdvIntegrations     PdvIntegration[]     @relation("ClientPdvIntegrations")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -417,4 +419,51 @@ model BpoTask {
 
   @@index([clientId, status])
   @@index([status, severity, dueAt])
+}
+
+// =====================================================================
+// BPO Fase 5 (stub — aguarda contratos Z-API e PDVs)
+// Schema preparado pra plugar quando APIs externas estiverem ativas
+// =====================================================================
+
+model WhatsappMessage {
+  id                  String    @id @default(uuid())
+  clientId            String? // null inicial; bot identifica depois
+  client              Client?   @relation("ClientWhatsappMessages", fields: [clientId], references: [id], onDelete: SetNull)
+  fromNumber          String // +55XXXXXXXXX
+  senderName          String?
+  messageType         String    @default("text") // text | image | document | audio
+  textContent         String?
+  mediaUrl            String? // imagens/PDFs
+  mediaCaption        String?
+  conversationStep    String? // identifying | choosing_doc_type | choosing_launch | choosing_account | confirm
+  conversationData    String? // JSON com escolhas parciais
+  validatedAt         DateTime?
+  validatedBy         String? // email do operador BPO
+  createdPayableId    String?
+  createdReceivableId String?
+  status              String    @default("pending") // pending | validated | discarded
+  rawJson             String? // payload bruto do webhook Z-API
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([clientId, status])
+  @@index([fromNumber])
+  @@index([status, createdAt])
+}
+
+model PdvIntegration {
+  id             String    @id @default(uuid())
+  clientId       String
+  client         Client    @relation("ClientPdvIntegrations", fields: [clientId], references: [id], onDelete: Cascade)
+  provider       String // suitable | colibri | linx | saipos | outro
+  authConfig     String // JSON: { apiKey, baseUrl, etc }
+  active         Boolean   @default(true)
+  lastSyncAt     DateTime?
+  lastSyncStatus String? // ok | error
+  lastSyncError  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([clientId, active])
 }

@@ -18,7 +18,10 @@ import ImportsHub from './imports/ImportsHub';
 import ReportsHub from './relatorios/ReportsHub';
 import BpoDashboard from './dashboard/BpoDashboard';
 import BpoOpsPanel from './painel/BpoOpsPanel';
+import BpoTasksList from './painel/BpoTasksList';
 import BankManagement from './bancario/BankManagement';
+import ReconciliationRulesList from './bancario/ReconciliationRulesList';
+import WhatsappInbox from './whatsapp/WhatsappInbox';
 
 const ComingSoon = ({ section }) => (
   <EmptyState
@@ -50,7 +53,10 @@ const BpoAppInner = () => {
       case 'imports': return <ImportsHub />;
       case 'relatorios': return <ReportsHub />;
       case 'bancario': return <BankManagement />;
+      case 'reconciliation-rules': return <ReconciliationRulesList />;
       case 'painel': return <BpoOpsPanel />;
+      case 'tasks': return <BpoTasksList />;
+      case 'whatsapp': return <WhatsappInbox />;
       default: return <ComingSoon section={section} />;
     }
   };

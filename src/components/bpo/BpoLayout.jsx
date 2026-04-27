@@ -24,8 +24,15 @@ const NAV = [
     { id: 'imports', label: 'Importar (NF-e/Boleto/Excel)' },
   ]},
   { id: 'relatorios', label: 'Relatórios', icon: 'chart' },
-  { id: 'bancario', label: 'Gestão Bancária', icon: 'bank' },
-  { id: 'painel', label: 'Painel BPO (multi-cliente)', icon: 'dashboard' },
+  { id: 'bancario', label: 'Gestão Bancária', icon: 'bank', children: [
+    { id: 'bancario', label: 'Saldos / Conciliação / Transferências' },
+    { id: 'reconciliation-rules', label: 'Regras de Conciliação' },
+  ]},
+  { id: 'whatsapp', label: 'WhatsApp Inbox', icon: 'list' },
+  { id: 'painel', label: 'Painel BPO (multi-cliente)', icon: 'dashboard', children: [
+    { id: 'painel', label: 'Visão Multi-cliente' },
+    { id: 'tasks', label: 'Tarefas' },
+  ]},
 ];
 
 const Icon = ({ name }) => {
@@ -99,9 +106,9 @@ const BpoLayout = ({ activeSection, onNavigate, children }) => {
           </nav>
         </aside>
 
-        {/* Main — seção 'painel' (multi-cliente) não exige cliente selecionado */}
+        {/* Main — seções multi-cliente não exigem cliente selecionado */}
         <main className="flex-1 overflow-y-auto p-6">
-          {!selectedClient && activeSection !== 'painel' ? (
+          {!selectedClient && !['painel', 'tasks', 'whatsapp'].includes(activeSection) ? (
             <EmptyState
               icon={
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">

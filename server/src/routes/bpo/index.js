@@ -34,6 +34,8 @@ const reportsRoutes = require('./reports');
 const transfersRoutes = require('./transfers');
 const reconciliationRoutes = require('./reconciliation');
 const opsPanelRoutes = require('./ops-panel');
+const tasksRoutes = require('./tasks');
+const { webhookRouter, inboxGlobalRouter, inboxRouter } = require('./whatsapp');
 
 // Toggle BPO pra um cliente (admin only — TODO: validar role)
 router.post('/admin/clients/:hash/bpo-toggle', async (req, res) => {
@@ -91,5 +93,13 @@ router.use('/:clientHash/reports', reportsRoutes);
 router.use('/:clientHash/transfers', transfersRoutes);
 router.use('/:clientHash/reconciliation', reconciliationRoutes);
 router.use('/:clientHash/ops-panel', opsPanelRoutes);
+
+// Fase 5 stub: WhatsApp
+router.use('/webhook', webhookRouter);                    // público (sem auth)
+router.use('/whatsapp', inboxGlobalRouter);               // multi-cliente (auth operador)
+router.use('/:clientHash/whatsapp', inboxRouter);         // por cliente (auth)
+
+// Tarefas BPO (multi-cliente)
+router.use('/tasks', tasksRoutes);
 
 module.exports = router;
