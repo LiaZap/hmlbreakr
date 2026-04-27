@@ -1,7 +1,58 @@
 @import "tailwindcss";
 
+/*
+ * Breakr Design Tokens — V2.0
+ * Use estes tokens em vez de hex inline (bg-[#1B1B1D] → bg-surface).
+ * Adicionado em 2026-04-27 antes da Fase 0 do BPO Financeiro.
+ */
 @theme {
-  --color-background: #111111;
+  /* === BRAND === */
+  --color-brand: #F5A623;
+  --color-brand-hover: #E5961E;
+  --color-brand-soft: rgba(245, 166, 35, 0.15);
+
+  /* === BACKGROUNDS (do mais escuro pro mais claro) === */
+  --color-background: #111111;        /* page bg */
+  --color-bg-elevated: #161616;       /* segundo nível (dentro de cards) */
+  --color-bg-card: #1B1B1D;           /* cards principais */
+  --color-bg-input: #252527;          /* inputs e botões secundários */
+  --color-bg-input-hover: #333333;
+  --color-bg-overlay: rgba(0, 0, 0, 0.6);   /* modal backdrop */
+
+  /* === BORDERS === */
+  --color-border: #2A2A2C;
+  --color-border-strong: #2F2F31;
+  --color-border-subtle: #1F1F1F;
+  --color-border-focus: #F5A623;
+
+  /* === TEXT === */
+  --color-text: #E1E1E1;
+  --color-text-strong: #FFFFFF;
+  --color-text-muted: #868686;
+  --color-text-subtle: #555555;
+  --color-text-placeholder: #555555;
+
+  /* === SEMANTIC === */
+  --color-success: #00B37E;
+  --color-success-soft: rgba(0, 179, 126, 0.15);
+  --color-warning: #F5A623;
+  --color-warning-soft: rgba(245, 166, 35, 0.15);
+  --color-danger: #FF4560;
+  --color-danger-soft: rgba(255, 69, 96, 0.15);
+  --color-info: #00C8F4;
+  --color-info-soft: rgba(0, 200, 244, 0.15);
+
+  /* === RADIUS === */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
+  --radius-modal: 24px;
+
+  /* === FONTS === */
   --font-jakarta: "Plus Jakarta Sans", sans-serif;
   --font-inter: "Inter", sans-serif;
 }

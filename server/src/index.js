@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
+const bpoRoutes = require('./routes/bpo');
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use(express.json({ limit: '50mb' }));
 
 // Routes
 app.use('/api', routes);
+app.use('/api/bpo', bpoRoutes); // BPO Financeiro V2.0
 
 // Health Check - actually test DB connection
 app.get('/health', async (req, res) => {

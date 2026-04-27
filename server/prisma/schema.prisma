@@ -8,40 +8,53 @@ datasource db {
 }
 
 model Agency {
-  id                     String    @id @default(uuid())
-  name                   String
-  hash                   String    @unique
-  email                  String    @unique
-  password               String
-  resetToken             String?
-  resetTokenAt           DateTime?
-  stripeCustomerId       String?
-  stripeSubscriptionId   String?
-  plan                   String    @default("basic") // basic | unlimited
-  active                 Boolean   @default(false)
-  clients                Client[]  @relation("AgencyClients")
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  name                 String
+  hash                 String    @unique
+  email                String    @unique
+  password             String
+  resetToken           String?
+  resetTokenAt         DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  plan                 String    @default("basic") // basic | unlimited
+  active               Boolean   @default(false)
+  clients              Client[]  @relation("AgencyClients")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model Client {
-  id                     String       @id @default(uuid())
-  name                   String
-  hash                   String       @unique
-  email                  String?      @unique
-  password               String?
-  resetToken             String?
-  resetTokenAt           DateTime?
-  clerkUserId            String?      @unique
-  stripeCustomerId       String?
-  stripeSubscriptionId   String?
-  active                 Boolean      @default(true)
-  agencyId               String?
-  agency                 Agency?      @relation("AgencyClients", fields: [agencyId], references: [id])
-  data                   String
-  teamMembers            TeamMember[] @relation("ClientTeam")
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
+  id                   String       @id @default(uuid())
+  name                 String
+  hash                 String       @unique
+  email                String?      @unique
+  password             String?
+  resetToken           String?
+  resetTokenAt         DateTime?
+  clerkUserId          String?      @unique
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  active               Boolean      @default(true)
+  agencyId             String?
+  agency               Agency?      @relation("AgencyClients", fields: [agencyId], references: [id])
+  data                 String
+  teamMembers          TeamMember[] @relation("ClientTeam")
+
+  // BPO Financeiro V2.0
+  bpoEnabled          Boolean             @default(false)
+  bpoActivatedAt      DateTime?
+  suppliers           Supplier[]
+  bankAccounts        BankAccount[]
+  financialCategories FinancialCategory[]
+  bpoEmployees        BpoEmployee[]
+  bpoPartners         BpoPartner[]
+  paymentMethods      PaymentMethod[]
+  payables            Payable[]
+  receivables         Receivable[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TeamMember {
@@ -64,7 +77,257 @@ model Broadcast {
   imageUrl       String?
   type           String    @default("popup") // popup | banner
   active         Boolean   @default(true)
-  targetCategory String?   // null = all, or "Pizzaria", "Hamburgueria", etc.
+  targetCategory String? // null = all, or "Pizzaria", "Hamburgueria", etc.
   createdAt      DateTime  @default(now())
   expiresAt      DateTime?
+}
+
+// =====================================================================
+// BPO FINANCEIRO — Fase 1 (Cadastros + Lançamentos Manuais)
+// Adicionado em 2026-04-27. Documentação:
+// [[Breakr V2.0 - Plano de Acao BPO Financeiro]]
+// =====================================================================
+
+model Supplier {
+  id                   String             @id @default(uuid())
+  clientId             String
+  client               Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  cnpj                 String
+  name                 String
+  email                String?
+  phone                String?
+  pixKey               String?
+  bankCode             String?
+  agency               String?
+  account              String?
+  defaultCategoryId    String?
+  defaultCategory      FinancialCategory? @relation("SupplierDefaultCategory", fields: [defaultCategoryId], references: [id], onDelete: SetNull)
+  defaultBankAccountId String?
+  defaultBankAccount   BankAccount?       @relation("SupplierDefaultBankAccount", fields: [defaultBankAccountId], references: [id], onDelete: SetNull)
+  notes                String?
+  payables             Payable[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@unique([clientId, cnpj])
+  @@index([clientId])
+}
+
+model BankAccount {
+  id                   String               @id @default(uuid())
+  clientId             String
+  client               Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bankCode             String // 001=BB, 237=Bradesco, 341=Itaú, etc.
+  bankName             String
+  agency               String
+  account              String
+  type                 String               @default("corrente") // corrente | poupanca | pagamento
+  currentBalance       Decimal              @default(0) @db.Decimal(18, 2)
+  isManual             Boolean              @default(true)
+  // Open Finance (Fase 3)
+  openFinanceItemId    String? // Pluggy item ID
+  openFinanceConnected Boolean              @default(false)
+  lastSyncAt           DateTime?
+  active               Boolean              @default(true)
+  suppliersDefault     Supplier[]           @relation("SupplierDefaultBankAccount")
+  payments             PaymentTransaction[]
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([clientId])
+}
+
+model FinancialCategory {
+  id               String              @id @default(uuid())
+  clientId         String
+  client           Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name             String
+  type             String // receita | despesa
+  parentId         String?
+  parent           FinancialCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children         FinancialCategory[] @relation("CategoryHierarchy")
+  dreGroup         String? // cmv | despesa_op | taxa_venda | imposto | pro_labore | receita | outros
+  color            String? // hex pra dashboard
+  active           Boolean             @default(true)
+  suppliersDefault Supplier[]          @relation("SupplierDefaultCategory")
+  payables         Payable[]
+  receivables      Receivable[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([clientId])
+}
+
+model BpoEmployee {
+  id             String    @id @default(uuid())
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name           String
+  cpf            String
+  email          String?
+  phone          String?
+  // Dados bancários
+  bankCode       String?
+  agency         String?
+  account        String?
+  pixKey         String?
+  // Cargo
+  role           String // Cozinha | Salão | Administrativo | Entrega
+  isFreelancer   Boolean   @default(false)
+  isMotoboy      Boolean   @default(false)
+  baseSalary     Decimal?  @db.Decimal(18, 2)
+  // Variáveis (mensal)
+  commissionPct  Decimal?  @db.Decimal(5, 2)
+  tipsAmount     Decimal?  @db.Decimal(18, 2)
+  overtimeAmount Decimal?  @db.Decimal(18, 2)
+  active         Boolean   @default(true)
+  hiredAt        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([clientId, cpf])
+  @@index([clientId])
+}
+
+model BpoPartner {
+  id                    String   @id @default(uuid())
+  clientId              String
+  client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name                  String
+  cpf                   String
+  email                 String?
+  phone                 String?
+  prolaboreAmount       Decimal  @db.Decimal(18, 2)
+  // Conta corrente pessoal — depois do prolabore atingido, vira "Retirada de Capital"
+  personalAccountBank   String?
+  personalAccountAgency String?
+  personalAccountNumber String?
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([clientId, cpf])
+  @@index([clientId])
+}
+
+model PaymentMethod {
+  id             String       @id @default(uuid())
+  clientId       String
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name           String // iFood, Aiqfome, Crédito, Débito, PIX, Dinheiro
+  type           String // marketplace | card_credit | card_debit | pix | cash | transfer
+  feePercent     Decimal      @default(0) @db.Decimal(5, 2)
+  settlementDays Int          @default(0)
+  active         Boolean      @default(true)
+  receivables    Receivable[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([clientId])
+}
+
+model Payable {
+  id                String               @id @default(uuid())
+  clientId          String
+  client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  supplierId        String?
+  supplier          Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  amount            Decimal              @db.Decimal(18, 2)
+  remainingAmount   Decimal              @db.Decimal(18, 2) // pra pagamento parcial
+  dueDate           DateTime
+  paymentForecast   DateTime
+  emissionDate      DateTime?
+  invoiceNumber     String?
+  description       String?
+  categoryId        String?
+  category          FinancialCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  department        String?
+  status            String               @default("pending") // pending | scheduled | paid_partial | paid | cancelled
+  // Recorrência / Parcelamento
+  recurrenceId      String?
+  recurrence        Recurrence?          @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+  parentId          String? // pra parcelas (parcela 2/12 → parent é a 1ª)
+  parent            Payable?             @relation("PayableInstallments", fields: [parentId], references: [id], onDelete: Cascade)
+  installments      Payable[]            @relation("PayableInstallments")
+  installmentNumber Int?
+  // Anexos & impostos retidos
+  attachments       String? // JSON array: [{ filename, url, type, sizeKb }]
+  taxesRetained     String? // JSON: { ir, csll, pis, cofins, iss }
+  // Agendamento bancário
+  scheduledAt       DateTime?
+  scheduledBankId   String?
+  scheduledStatus   String? // none | sent | approved | rejected
+  // Audit
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  payments          PaymentTransaction[] @relation("PaymentToPayable")
+
+  @@index([clientId, status, dueDate])
+  @@index([supplierId])
+}
+
+model Receivable {
+  id                String               @id @default(uuid())
+  clientId          String
+  client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  payerName         String // cliente final do restaurante (pode ser "iFood", "Cliente avulso", etc.)
+  payerDocument     String?
+  amount            Decimal              @db.Decimal(18, 2)
+  remainingAmount   Decimal              @db.Decimal(18, 2)
+  dueDate           DateTime
+  receiptForecast   DateTime
+  emissionDate      DateTime?
+  invoiceNumber     String?
+  description       String?
+  categoryId        String?
+  category          FinancialCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  paymentMethodId   String?
+  paymentMethod     PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  department        String?
+  status            String               @default("pending") // pending | received_partial | received | cancelled
+  recurrenceId      String?
+  recurrence        Recurrence?          @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+  parentId          String?
+  parent            Receivable?          @relation("ReceivableInstallments", fields: [parentId], references: [id], onDelete: Cascade)
+  installments      Receivable[]         @relation("ReceivableInstallments")
+  installmentNumber Int?
+  // PDV (Fase 5)
+  pdvSaleId         String?
+  attachments       String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  payments          PaymentTransaction[] @relation("PaymentToReceivable")
+
+  @@index([clientId, status, dueDate])
+}
+
+model Recurrence {
+  id               String       @id @default(uuid())
+  frequency        String // weekly | monthly | quarterly | semiannual | yearly
+  intervalCount    Int          @default(1)
+  startDate        DateTime
+  endDate          DateTime?
+  occurrencesCount Int? // null = indefinido
+  payables         Payable[]
+  receivables      Receivable[]
+  createdAt        DateTime     @default(now())
+}
+
+model PaymentTransaction {
+  id            String      @id @default(uuid())
+  payableId     String?
+  payable       Payable?    @relation("PaymentToPayable", fields: [payableId], references: [id], onDelete: Cascade)
+  receivableId  String?
+  receivable    Receivable? @relation("PaymentToReceivable", fields: [receivableId], references: [id], onDelete: Cascade)
+  amount        Decimal     @db.Decimal(18, 2)
+  paidAt        DateTime
+  bankAccountId String
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  isPartial     Boolean     @default(false)
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  @@index([payableId])
+  @@index([receivableId])
+  @@index([bankAccountId, paidAt])
 }

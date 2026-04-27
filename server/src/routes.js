@@ -92,7 +92,7 @@ router.post('/admin/clients', async (req, res) => {
 router.get('/admin/clients', async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
-      select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true }
+      select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true }
     });
     const lightweight = clients.map(c => {
       try {
