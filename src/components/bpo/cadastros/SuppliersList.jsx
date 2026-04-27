@@ -19,18 +19,25 @@ const SuppliersList = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null); // null | 'new' | supplier object
+  const [error, setError] = useState(null);
 
   const fetchSuppliers = useCallback(async () => {
     if (!selectedClient) return;
     setLoading(true);
+    setError(null);
     try {
       const url = bpoUrl(`/suppliers${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+      if (!url) throw new Error('Cliente não selecionado');
       const res = await fetch(url);
-      if (!res.ok) throw new Error('Falha ao carregar fornecedores');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Erro ${res.status}`);
+      }
       const data = await res.json();
       setItems(data.items || []);
     } catch (err) {
       console.error('[SuppliersList]', err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -81,6 +88,14 @@ const SuppliersList = () => {
           icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>}
         />
       </Card>
+
+      {error && (
+        <div className="bg-danger-soft border border-danger/30 rounded-md px-3 py-2 text-xs text-danger flex items-center gap-2">
+          <span>⚠️</span>
+          <span className="flex-1">{error}</span>
+          <button onClick={fetchSuppliers} className="text-xs font-semibold text-danger hover:underline">Tentar de novo</button>
+        </div>
+      )}
 
       {/* Lista */}
       {loading ? (

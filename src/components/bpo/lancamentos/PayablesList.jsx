@@ -21,6 +21,7 @@ const PayablesList = () => {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);
   const [paying, setPaying] = useState(null);
+  const [scheduling, setScheduling] = useState(null);
 
   const fetchItems = useCallback(async () => {
     if (!selectedClient) return;
@@ -98,7 +99,12 @@ const PayablesList = () => {
                   <Td><Badge variant={STATUS_BADGES[p.status]?.variant || 'default'}>{STATUS_BADGES[p.status]?.label || p.status}</Badge></Td>
                   <Td align="right">
                     {p.status !== 'paid' && p.status !== 'cancelled' && (
-                      <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); setPaying(p); }}>Baixar</Button>
+                      <div className="flex gap-2 justify-end">
+                        {p.status !== 'scheduled' && (
+                          <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); setScheduling(p); }}>Agendar</Button>
+                        )}
+                        <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); setPaying(p); }}>Baixar</Button>
+                      </div>
                     )}
                   </Td>
                 </Tr>
@@ -110,7 +116,84 @@ const PayablesList = () => {
 
       {editing && <PayableModal item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); fetchItems(); }} />}
       {paying && <PayModal item={paying} onClose={() => setPaying(null)} onSaved={() => { setPaying(null); fetchItems(); }} />}
+      {scheduling && <ScheduleModal item={scheduling} onClose={() => setScheduling(null)} onSaved={() => { setScheduling(null); fetchItems(); }} />}
     </div>
+  );
+};
+
+// ============ Modal Agendar Pagamento ============
+const ScheduleModal = ({ item, onClose, onSaved }) => {
+  const { bpoUrl } = useBpo();
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [form, setForm] = useState({
+    scheduledAt: item.dueDate ? new Date(item.dueDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    bankAccountId: '',
+    requiresApproval: true,  // default: requer aprovação do dono
+  });
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch(bpoUrl('/bank-accounts')).then((r) => r.json()).then((d) => setBankAccounts(d.items || []));
+  }, [bpoUrl]);
+
+  const handleSave = async () => {
+    setError(null);
+    if (!form.bankAccountId) { setError('Selecione a conta bancária'); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(bpoUrl(`/payables/${item.id}/schedule`), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'Erro');
+      onSaved();
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Agendar pagamento no banco" subtitle={item.description || item.supplier?.name} size="md"
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={handleSave} loading={saving}>Agendar</Button>
+      </>}>
+      <div className="flex flex-col gap-4">
+        {error && <div className="bg-danger-soft border border-danger/30 rounded-md px-3 py-2 text-xs text-danger">{error}</div>}
+
+        <div className="bg-bg-elevated border border-border rounded-md p-3 flex justify-between items-center">
+          <span className="text-xs text-text-muted">Valor a pagar</span>
+          <span className="text-base font-bold text-danger tabular-nums">{fmtBRL(item.remainingAmount)}</span>
+        </div>
+
+        <Input label="Data agendada" type="date" value={form.scheduledAt} onChange={(v) => setForm({ ...form, scheduledAt: v })} />
+
+        <div>
+          <label className="text-xs text-text-muted font-medium mb-1.5 block">Conta de débito *</label>
+          <select value={form.bankAccountId} onChange={(e) => setForm({ ...form, bankAccountId: e.target.value })}
+            className="w-full bg-bg-input border border-border rounded-md px-3 py-2 text-sm text-text-strong outline-none">
+            <option value="">Selecione...</option>
+            {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.bankName} — {b.account} ({fmtBRL(b.currentBalance)})</option>)}
+          </select>
+        </div>
+
+        <label className="flex items-start gap-2 bg-warning-soft border border-warning/30 rounded-md p-3 cursor-pointer">
+          <input type="checkbox" checked={form.requiresApproval} onChange={(e) => setForm({ ...form, requiresApproval: e.target.checked })} className="mt-0.5 accent-brand" />
+          <div className="flex-1">
+            <div className="text-xs font-semibold text-text-strong">Requer aprovação antes de executar</div>
+            <div className="text-[10px] text-text-muted mt-0.5">
+              {form.requiresApproval
+                ? 'Pagamento fica pendente até o dono aprovar via dashboard.'
+                : '⚠️ Pagamento será enviado direto pro banco sem confirmação.'}
+            </div>
+          </div>
+        </label>
+
+        <p className="text-[10px] text-text-subtle">
+          Por enquanto, o agendamento só marca o status. Quando integrar com APIs de banco (Inter/BTG/Sicoob), enviará pagamento automático.
+        </p>
+      </div>
+    </Modal>
   );
 };
 

@@ -3,7 +3,7 @@
  * Renderiza children dentro da área principal.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useBpo } from '../../context/BpoContext';
 import { Button, EmptyState } from '../ui/primitives';
 import BpoClientSelector from './BpoClientSelector';
@@ -55,9 +55,9 @@ const Icon = ({ name }) => {
 
 const BpoLayout = ({ activeSection, onNavigate, children, clientMode = false }) => {
   const { selectedClient, fetchBpoClients, bpoClients } = useBpo();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
-    // No client mode, não puxa lista de clientes BPO (não tem permissão)
     if (!clientMode) fetchBpoClients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientMode]);
@@ -65,25 +65,51 @@ const BpoLayout = ({ activeSection, onNavigate, children, clientMode = false }) 
   // Em client mode, esconde sidebar de seções multi-cliente
   const NAV = clientMode ? NAV_COMMON : [...NAV_COMMON, ...NAV_OPERATOR_ONLY];
 
+  // Fecha drawer ao trocar de seção em mobile
+  const handleNavigate = (id) => {
+    onNavigate(id);
+    setMobileSidebarOpen(false);
+  };
+
   return (
     <div className="flex flex-col w-full h-screen bg-background text-text font-jakarta overflow-hidden">
       {/* Topbar — em clientMode, sem seletor de cliente (e título diferente) */}
-      <header className="h-14 border-b border-border bg-bg-card flex items-center justify-between px-4 shrink-0">
+      <header className="h-14 border-b border-border bg-bg-card flex items-center justify-between px-3 md:px-4 shrink-0">
         <div className="flex items-center gap-3">
+          {/* Hamburger só no mobile */}
+          <button
+            onClick={() => setMobileSidebarOpen((v) => !v)}
+            className="md:hidden w-9 h-9 flex items-center justify-center rounded-md hover:bg-bg-input"
+            aria-label="Menu"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
           <span className="text-sm font-bold text-text-strong">{clientMode ? 'Financeiro' : 'Breakr BPO'}</span>
-          <span className="text-xs text-text-subtle">{clientMode ? selectedClient?.name : 'BPO'}</span>
+          <span className="text-xs text-text-subtle hidden sm:inline truncate max-w-[200px]">{clientMode ? selectedClient?.name : 'BPO'}</span>
         </div>
         {!clientMode && <BpoClientSelector />}
       </header>
 
-      <div className="flex flex-1 min-h-0">
-        {/* Sidebar */}
-        <aside className="w-56 border-r border-border bg-bg-card shrink-0 overflow-y-auto py-3">
+      <div className="flex flex-1 min-h-0 relative">
+        {/* Backdrop mobile */}
+        {mobileSidebarOpen && (
+          <div className="md:hidden fixed inset-0 top-14 bg-black/60 z-40" onClick={() => setMobileSidebarOpen(false)} />
+        )}
+
+        {/* Sidebar — drawer no mobile, fixa no desktop */}
+        <aside className={`
+          ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          fixed md:static top-14 md:top-auto bottom-0 left-0 z-50
+          w-64 md:w-56 border-r border-border bg-bg-card overflow-y-auto py-3
+          transition-transform duration-200 ease-out shrink-0
+        `}>
           <nav className="flex flex-col gap-0.5 px-2">
             {NAV.map((item) => (
               <div key={item.id}>
                 <button
-                  onClick={() => !item.disabled && !item.children && onNavigate(item.id)}
+                  onClick={() => !item.disabled && !item.children && handleNavigate(item.id)}
                   disabled={item.disabled}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
                     activeSection === item.id ? 'bg-bg-input text-text-strong' : 'text-text-muted hover:bg-bg-input/50 hover:text-text-strong'
@@ -100,7 +126,7 @@ const BpoLayout = ({ activeSection, onNavigate, children, clientMode = false }) 
                     {item.children.map((sub) => (
                       <button
                         key={sub.id}
-                        onClick={() => !sub.disabled && onNavigate(sub.id)}
+                        onClick={() => !sub.disabled && handleNavigate(sub.id)}
                         disabled={sub.disabled}
                         className={`text-left px-3 py-1.5 rounded text-[11px] transition-colors ${
                           activeSection === sub.id ? 'text-brand font-semibold' : 'text-text-muted hover:text-text-strong'
@@ -117,7 +143,7 @@ const BpoLayout = ({ activeSection, onNavigate, children, clientMode = false }) 
         </aside>
 
         {/* Main */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-3 md:p-6 w-full md:w-auto">
           {!selectedClient && !clientMode && !['painel', 'tasks', 'whatsapp'].includes(activeSection) ? (
             <EmptyState
               icon={

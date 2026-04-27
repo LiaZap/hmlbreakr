@@ -21,18 +21,36 @@ const BpoDashboard = () => {
   const fetchAll = useCallback(async () => {
     if (!selectedClient) return;
     setLoading(true);
+    // BUG #10 FIX: Promise.allSettled — se um endpoint falhar, mostra os outros
+    const safeFetch = async (path) => {
+      try {
+        const url = bpoUrl(path);
+        if (!url) return null;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (err) {
+        console.warn('[BpoDashboard] fetch falhou:', path, err);
+        return null;
+      }
+    };
     try {
       const [banks, payables, receivables, cashflow, dre, transactions] = await Promise.all([
-        fetch(bpoUrl('/bank-accounts')).then((r) => r.json()),
-        fetch(bpoUrl(`/reports/payables?from=${todayISO()}&to=${datePlusDays(30)}`)).then((r) => r.json()),
-        fetch(bpoUrl(`/reports/receivables?from=${todayISO()}&to=${datePlusDays(30)}`)).then((r) => r.json()),
-        fetch(bpoUrl(`/reports/cashflow?from=${todayISO()}&to=${datePlusDays(30)}&groupBy=week`)).then((r) => r.json()),
-        fetch(bpoUrl(`/reports/dre?from=${dateMinusDays(30)}&to=${todayISO()}`)).then((r) => r.json()),
-        fetch(bpoUrl(`/reports/transactions?from=${dateMinusDays(7)}&to=${todayISO()}`)).then((r) => r.json()),
+        safeFetch('/bank-accounts'),
+        safeFetch(`/reports/payables?from=${todayISO()}&to=${datePlusDays(30)}`),
+        safeFetch(`/reports/receivables?from=${todayISO()}&to=${datePlusDays(30)}`),
+        safeFetch(`/reports/cashflow?from=${todayISO()}&to=${datePlusDays(30)}&groupBy=week`),
+        safeFetch(`/reports/dre?from=${dateMinusDays(30)}&to=${todayISO()}`),
+        safeFetch(`/reports/transactions?from=${dateMinusDays(7)}&to=${todayISO()}`),
       ]);
-      setData({ banks: banks.items || [], payables, receivables, cashflow, dre, transactions });
-    } catch (err) {
-      console.error('[BpoDashboard]', err);
+      setData({
+        banks: banks?.items || [],
+        payables: payables || { items: [], summary: {} },
+        receivables: receivables || { items: [], summary: {} },
+        cashflow: cashflow || { series: [], summary: {} },
+        dre: dre || { lines: [], counts: { received: 0, paid: 0 } },
+        transactions: transactions || { items: [] },
+      });
     } finally {
       setLoading(false);
     }

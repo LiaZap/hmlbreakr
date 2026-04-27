@@ -347,18 +347,21 @@ export const Tooltip = ({ content, children, position = 'top', className = '' })
 
 export const Table = ({ children, className = '' }) => (
   <div className={`bg-bg-card border border-border-strong rounded-2xl overflow-hidden ${className}`}>
-    <table className="w-full">{children}</table>
+    {/* overflow-x-auto pra scrollar tabela larga em vez de quebrar layout */}
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px]">{children}</table>
+    </div>
   </div>
 );
 
 export const Th = ({ children, className = '', align = 'left' }) => (
-  <th className={`text-${align} text-[10px] uppercase tracking-wider font-semibold text-text-muted px-4 py-3 border-b border-border ${className}`}>
+  <th className={`text-${align} text-[10px] uppercase tracking-wider font-semibold text-text-muted px-3 md:px-4 py-3 border-b border-border whitespace-nowrap ${className}`}>
     {children}
   </th>
 );
 
 export const Td = ({ children, className = '', align = 'left' }) => (
-  <td className={`text-${align} text-sm text-text px-4 py-3 border-b border-border-subtle ${className}`}>
+  <td className={`text-${align} text-xs md:text-sm text-text px-3 md:px-4 py-3 border-b border-border-subtle ${className}`}>
     {children}
   </td>
 );
