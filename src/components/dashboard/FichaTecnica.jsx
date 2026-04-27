@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components, no-unused-vars */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ============ DATA ============
@@ -1781,8 +1781,92 @@ import CategoriesModal from './CategoriesModal';
 
 // ... (keep Modals and sub-components as is)
 
+// ============ AUX COMPONENTS ============
+
+// Numeric pagination with prev/next + page numbers (auto-collapses with ellipsis)
+const NumericPagination = ({ page, totalPages, onChange, totalItems }) => {
+  // Build a windowed page list: 1 ... (page-1) page (page+1) ... totalPages
+  const buildPages = () => {
+    const pages = new Set([0, totalPages - 1, page]);
+    if (page - 1 >= 0) pages.add(page - 1);
+    if (page + 1 <= totalPages - 1) pages.add(page + 1);
+    const sorted = Array.from(pages).sort((a, b) => a - b);
+    const result = [];
+    sorted.forEach((p, idx) => {
+      if (idx > 0 && p - sorted[idx - 1] > 1) result.push('ellipsis-' + idx);
+      result.push(p);
+    });
+    return result;
+  };
+  const pages = buildPages();
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t border-[#2A2A2C]">
+      <div className="text-[11px] text-[#555]">
+        {totalItems} {totalItems === 1 ? 'item' : 'itens'}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onChange((p) => Math.max(0, p - 1))}
+          disabled={page === 0}
+          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="Página anterior"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        {pages.map((p) =>
+          typeof p === 'string' ? (
+            <span key={p} className="text-[11px] text-[#555] px-1">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onChange(p)}
+              className={`min-w-[32px] h-8 rounded-[8px] text-[12px] font-medium transition-colors ${
+                p === page
+                  ? 'bg-[#F5A623] text-black'
+                  : 'bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white'
+              }`}
+            >
+              {p + 1}
+            </button>
+          )
+        )}
+        <button
+          onClick={() => onChange((p) => Math.min(totalPages - 1, p + 1))}
+          disabled={page === totalPages - 1}
+          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          aria-label="Próxima página"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Empty state when search/filter returns no results
+const EmptyState = ({ searchTerm, filterCategory, type }) => {
+  const hasFilter = searchTerm !== '' || filterCategory !== 'all';
+  const label = type === 'insumos' ? 'insumo' : 'ficha';
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="w-[56px] h-[56px] rounded-[14px] bg-[#252527] flex items-center justify-center mb-3">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="#868686" strokeWidth="1.5"/><path d="M21 21l-4.35-4.35" stroke="#868686" strokeWidth="1.5" strokeLinecap="round"/></svg>
+      </div>
+      <div className="text-[14px] font-medium text-white mb-1">
+        {hasFilter ? `Nenhum ${label} encontrado` : `Nenhum ${label} cadastrado ainda`}
+      </div>
+      <div className="text-[12px] text-[#868686]">
+        {hasFilter
+          ? 'Tente ajustar busca ou categoria'
+          : `Use o botão + ou Importar pra criar o primeiro ${label}`}
+      </div>
+    </div>
+  );
+};
+
 // ============ MAIN COMPONENT ============
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 12;
 
 const FichaTecnica = () => {
   const { dashboardData, updateDashboardData } = useDashboard();
@@ -1796,6 +1880,22 @@ const FichaTecnica = () => {
   // Pagination
   const [fichasPage, setFichasPage] = useState(0);
   const [insumoPage, setInsumoPage] = useState(0);
+
+  // Search and filter
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+
+  // Reset page and clear search when switching tabs
+  useEffect(() => {
+    setSearchTerm('');
+    setFilterCategory('all');
+  }, [activeTab]);
+
+  // Reset to first page when search/filter changes
+  useEffect(() => {
+    setInsumoPage(0);
+    setFichasPage(0);
+  }, [searchTerm, filterCategory]);
 
   const [editingInsumo, setEditingInsumo] = useState(null);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
@@ -2455,68 +2555,131 @@ const FichaTecnica = () => {
             </div>
 
             {/* Cards Grid with grey background */}
-            <div className="bg-[#1B1B1D] mx-4 rounded-[16px] p-4 flex-1">
+            <div className="bg-[#1B1B1D] mx-4 mb-4 rounded-[16px] p-4 flex-1">
+              {/* Search + Category Filter */}
+              {(() => {
+                const items = activeTab === 'insumos' ? insumos : fichas;
+                const defaultInsumoCats = ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
+                const allCategories = activeTab === 'insumos'
+                  ? (dashboardData.operational?.categories?.insumos || defaultInsumoCats)
+                  : (dashboardData.operational?.categories?.fichas || []);
+                // Only show categories that have at least one item
+                const usedCategories = allCategories.filter(cat =>
+                  items.some(it => (it.category || '').toLowerCase() === cat.toLowerCase())
+                );
+
+                return (
+                  <div className="flex flex-col gap-3 mb-4">
+                    {/* Search input */}
+                    <div className="relative">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#868686]"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder={`Buscar ${activeTab === 'insumos' ? 'insumo' : 'ficha'} por nome...`}
+                        className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] pl-9 pr-9 py-2 text-[13px] text-white placeholder:text-[#555] outline-none focus:border-[#F5A623] transition-colors"
+                      />
+                      {searchTerm && (
+                        <button
+                          onClick={() => setSearchTerm('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#868686] hover:text-white transition-colors"
+                          aria-label="Limpar busca"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Category chips */}
+                    {usedCategories.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          onClick={() => setFilterCategory('all')}
+                          className={`text-[11px] font-medium px-3 py-1.5 rounded-[8px] transition-colors ${
+                            filterCategory === 'all'
+                              ? 'bg-[#F5A623] text-black'
+                              : 'bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white'
+                          }`}
+                        >
+                          Todas
+                        </button>
+                        {usedCategories.map((cat) => (
+                          <button
+                            key={cat}
+                            onClick={() => setFilterCategory(cat)}
+                            className={`text-[11px] font-medium px-3 py-1.5 rounded-[8px] transition-colors ${
+                              filterCategory === cat
+                                ? 'bg-[#F5A623] text-black'
+                                : 'bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-white'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {activeTab === 'insumos' ? (() => {
-                const totalPages = Math.ceil(insumos.length / ITEMS_PER_PAGE);
+                const filtered = insumos.filter((it) => {
+                  const matchesSearch = searchTerm === '' || (it.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+                  const matchesCategory = filterCategory === 'all' || (it.category || '').toLowerCase() === filterCategory.toLowerCase();
+                  return matchesSearch && matchesCategory;
+                });
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
                 const page = Math.min(insumoPage, Math.max(0, totalPages - 1));
-                const pageItems = insumos.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+                const pageItems = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
                 return (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
-                      {pageItems.map((item) => (
-                        <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} onDelete={handleDeleteInsumo} />
-                      ))}
-                    </div>
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-[#2A2A2C]">
-                        <button
-                          onClick={() => setInsumoPage(p => Math.max(0, p - 1))}
-                          disabled={page === 0}
-                          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 transition-colors"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </button>
-                        <span className="text-[12px] text-[#868686]">{page + 1} / {totalPages}</span>
-                        <button
-                          onClick={() => setInsumoPage(p => Math.min(totalPages - 1, p + 1))}
-                          disabled={page === totalPages - 1}
-                          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 transition-colors"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </button>
+                    {filtered.length === 0 ? (
+                      <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="insumos" />
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+                        {pageItems.map((item) => (
+                          <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} onDelete={handleDeleteInsumo} />
+                        ))}
                       </div>
+                    )}
+                    {totalPages > 1 && (
+                      <NumericPagination
+                        page={page}
+                        totalPages={totalPages}
+                        onChange={setInsumoPage}
+                        totalItems={filtered.length}
+                      />
                     )}
                   </>
                 );
               })() : (() => {
-                const totalPages = Math.ceil(fichas.length / ITEMS_PER_PAGE);
+                const filtered = fichas.filter((it) => {
+                  const matchesSearch = searchTerm === '' || (it.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+                  const matchesCategory = filterCategory === 'all' || (it.category || '').toLowerCase() === filterCategory.toLowerCase();
+                  return matchesSearch && matchesCategory;
+                });
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
                 const page = Math.min(fichasPage, Math.max(0, totalPages - 1));
-                const pageItems = fichas.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+                const pageItems = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
                 return (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {pageItems.map((item) => (
-                        <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
-                      ))}
-                    </div>
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-[#2A2A2C]">
-                        <button
-                          onClick={() => setFichasPage(p => Math.max(0, p - 1))}
-                          disabled={page === 0}
-                          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 transition-colors"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </button>
-                        <span className="text-[12px] text-[#868686]">{page + 1} / {totalPages}</span>
-                        <button
-                          onClick={() => setFichasPage(p => Math.min(totalPages - 1, p + 1))}
-                          disabled={page === totalPages - 1}
-                          className="w-8 h-8 rounded-[8px] bg-[#252527] flex items-center justify-center text-[#868686] hover:bg-[#333] disabled:opacity-30 transition-colors"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </button>
+                    {filtered.length === 0 ? (
+                      <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="fichas" />
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {pageItems.map((item) => (
+                          <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
+                        ))}
                       </div>
+                    )}
+                    {totalPages > 1 && (
+                      <NumericPagination
+                        page={page}
+                        totalPages={totalPages}
+                        onChange={setFichasPage}
+                        totalItems={filtered.length}
+                      />
                     )}
                   </>
                 );
@@ -2524,8 +2687,8 @@ const FichaTecnica = () => {
             </div>
           </div>
 
-          {/* FAB Button */}
-          <div className="fixed bottom-20 md:bottom-8 right-6 md:right-auto md:left-[60%] z-40">
+          {/* FAB Button — fica no canto inferior direito sem cobrir paginação */}
+          <div className="fixed bottom-20 md:bottom-8 right-6 md:right-8 z-40">
             <button
               onClick={() => {
                 if (activeTab === 'insumos') {
@@ -2534,6 +2697,8 @@ const FichaTecnica = () => {
                   setModalFicha('new');
                 }
               }}
+              title={activeTab === 'insumos' ? 'Novo insumo' : 'Nova ficha'}
+              aria-label={activeTab === 'insumos' ? 'Novo insumo' : 'Nova ficha'}
               className="w-[52px] h-[52px] rounded-[14px] bg-[#F5A623] flex items-center justify-center shadow-lg hover:bg-[#E5961E] transition-colors hover:scale-105 active:scale-95"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
