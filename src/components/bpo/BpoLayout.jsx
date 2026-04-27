@@ -106,39 +106,56 @@ const BpoLayout = ({ activeSection, onNavigate, children, clientMode = false }) 
           transition-transform duration-200 ease-out shrink-0
         `}>
           <nav className="flex flex-col gap-0.5 px-2">
-            {NAV.map((item) => (
-              <div key={item.id}>
-                <button
-                  onClick={() => !item.disabled && !item.children && handleNavigate(item.id)}
-                  disabled={item.disabled}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                    activeSection === item.id ? 'bg-bg-input text-text-strong' : 'text-text-muted hover:bg-bg-input/50 hover:text-text-strong'
-                  } ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <Icon name={item.icon} />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {item.soon && (
-                    <span className="text-[8px] uppercase font-bold bg-bg-input text-text-subtle px-1 py-0.5 rounded">em breve</span>
+            {NAV.map((item) => {
+              const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+              const childActive = hasChildren && item.children.some((c) => c.id === activeSection);
+              const isActive = activeSection === item.id || childActive;
+
+              const handleParentClick = () => {
+                if (item.disabled) return;
+                if (hasChildren) {
+                  // Clica no título → vai pro primeiro filho não-disabled (UX consistente)
+                  const firstChild = item.children.find((c) => !c.disabled);
+                  if (firstChild) handleNavigate(firstChild.id);
+                } else {
+                  handleNavigate(item.id);
+                }
+              };
+
+              return (
+                <div key={item.id}>
+                  <button
+                    onClick={handleParentClick}
+                    disabled={item.disabled}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                      isActive ? 'bg-bg-input text-text-strong' : 'text-text-muted hover:bg-bg-input/50 hover:text-text-strong'
+                    } ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <Icon name={item.icon} />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {item.soon && (
+                      <span className="text-[8px] uppercase font-bold bg-bg-input text-text-subtle px-1 py-0.5 rounded">em breve</span>
+                    )}
+                  </button>
+                  {hasChildren && (
+                    <div className="ml-7 flex flex-col gap-0.5 mt-0.5">
+                      {item.children.map((sub) => (
+                        <button
+                          key={sub.id}
+                          onClick={() => !sub.disabled && handleNavigate(sub.id)}
+                          disabled={sub.disabled}
+                          className={`text-left px-3 py-1.5 rounded text-[11px] transition-colors ${
+                            activeSection === sub.id ? 'text-brand font-semibold' : 'text-text-muted hover:text-text-strong'
+                          } ${sub.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
                   )}
-                </button>
-                {item.children && (
-                  <div className="ml-7 flex flex-col gap-0.5 mt-0.5">
-                    {item.children.map((sub) => (
-                      <button
-                        key={sub.id}
-                        onClick={() => !sub.disabled && handleNavigate(sub.id)}
-                        disabled={sub.disabled}
-                        className={`text-left px-3 py-1.5 rounded text-[11px] transition-colors ${
-                          activeSection === sub.id ? 'text-brand font-semibold' : 'text-text-muted hover:text-text-strong'
-                        } ${sub.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        {sub.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </nav>
         </aside>
 
