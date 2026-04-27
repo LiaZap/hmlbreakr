@@ -2368,10 +2368,10 @@ const FichaTecnica = () => {
   };
 
   return (
-    <div className="flex flex-col w-full h-full min-h-screen bg-[#101010] font-jakarta text-white">
+    <div className="flex flex-col w-full h-full min-h-screen lg:h-screen lg:min-h-0 lg:overflow-hidden bg-[#101010] font-jakarta text-white">
 
       {/* TOP AREA: Left Panel + Right Content */}
-      <div className="flex flex-col lg:flex-row flex-1">
+      <div className="flex flex-col lg:flex-row flex-1 lg:min-h-0">
 
         {/* LEFT PANEL - Summary (hidden on mobile — stats shown in compact form) */}
         <div className="hidden lg:flex w-full lg:w-[320px] xl:w-[380px] shrink-0 bg-[#101010] p-6 lg:p-8 flex-col gap-5 lg:border-r border-[#1E1E1E]">
@@ -2499,12 +2499,12 @@ const FichaTecnica = () => {
         </div>
 
         {/* RIGHT PANEL - Content */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 lg:min-h-0 lg:overflow-hidden">
 
           {/* Content Area */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            {/* Breadcrumb + Title + Actions */}
-            <div className="px-6 pt-6 pb-4">
+          <div className="flex-1 lg:overflow-hidden flex flex-col">
+            {/* Breadcrumb + Title + Actions — fixo no topo */}
+            <div className="px-6 pt-6 pb-4 shrink-0">
               <div className="text-[11px] text-[#868686] mb-2">
                 <span className="text-[#555]">Breakr</span>
                 <span className="mx-1.5 text-[#555]">›</span>
@@ -2589,9 +2589,9 @@ const FichaTecnica = () => {
               </div>
             </div>
 
-            {/* Cards Grid with grey background */}
-            <div className="bg-[#1B1B1D] mx-4 mb-4 rounded-[16px] p-4 flex-1">
-              {/* Search + Category Filter */}
+            {/* Cards Grid with grey background — agora flex column com scroll interno e paginação sticky */}
+            <div className="bg-[#1B1B1D] mx-4 mb-4 rounded-[16px] p-4 flex-1 lg:min-h-0 flex flex-col">
+              {/* Search + Category Filter — fixo no topo do cards container */}
               {(() => {
                 const items = activeTab === 'insumos' ? insumos : fichas;
                 const defaultInsumoCats = ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
@@ -2604,7 +2604,7 @@ const FichaTecnica = () => {
                 );
 
                 return (
-                  <div className="flex flex-col gap-3 mb-4">
+                  <div className="flex flex-col gap-3 mb-4 shrink-0">
                     {/* Search input */}
                     <div className="relative">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#868686]"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -2669,22 +2669,26 @@ const FichaTecnica = () => {
                 const pageItems = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
                 return (
                   <>
-                    {filtered.length === 0 ? (
-                      <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="insumos" />
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
-                        {pageItems.map((item) => (
-                          <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} onDelete={handleDeleteInsumo} />
-                        ))}
-                      </div>
-                    )}
+                    <div className="flex-1 lg:min-h-0 lg:overflow-y-auto pr-1 -mr-1">
+                      {filtered.length === 0 ? (
+                        <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="insumos" />
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+                          {pageItems.map((item) => (
+                            <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} onDelete={handleDeleteInsumo} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     {totalPages > 1 && (
-                      <NumericPagination
-                        page={page}
-                        totalPages={totalPages}
-                        onChange={setInsumoPage}
-                        totalItems={filtered.length}
-                      />
+                      <div className="shrink-0">
+                        <NumericPagination
+                          page={page}
+                          totalPages={totalPages}
+                          onChange={setInsumoPage}
+                          totalItems={filtered.length}
+                        />
+                      </div>
                     )}
                   </>
                 );
@@ -2699,22 +2703,26 @@ const FichaTecnica = () => {
                 const pageItems = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
                 return (
                   <>
-                    {filtered.length === 0 ? (
-                      <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="fichas" />
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {pageItems.map((item) => (
-                          <FichaTecnicaCard key={item.id} item={item} onClick={() => item.isModular ? setModalFichaModular(item) : setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
-                        ))}
-                      </div>
-                    )}
+                    <div className="flex-1 lg:min-h-0 lg:overflow-y-auto pr-1 -mr-1">
+                      {filtered.length === 0 ? (
+                        <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="fichas" />
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                          {pageItems.map((item) => (
+                            <FichaTecnicaCard key={item.id} item={item} onClick={() => item.isModular ? setModalFichaModular(item) : setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     {totalPages > 1 && (
-                      <NumericPagination
-                        page={page}
-                        totalPages={totalPages}
-                        onChange={setFichasPage}
-                        totalItems={filtered.length}
-                      />
+                      <div className="shrink-0">
+                        <NumericPagination
+                          page={page}
+                          totalPages={totalPages}
+                          onChange={setFichasPage}
+                          totalItems={filtered.length}
+                        />
+                      </div>
                     )}
                   </>
                 );
