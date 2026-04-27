@@ -1778,6 +1778,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
 
 import { useDashboard } from '../../context/DashboardContext';
 import CategoriesModal from './CategoriesModal';
+import SimuladorPrecificacao from './SimuladorPrecificacao';
 
 // ... (keep Modals and sub-components as is)
 
@@ -1899,6 +1900,7 @@ const FichaTecnica = () => {
 
   const [editingInsumo, setEditingInsumo] = useState(null);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
+  const [showSimulador, setShowSimulador] = useState(false);
 
   const handleSaveFicha = (fichaData, isEditing) => {
     let newFichas;
@@ -2537,6 +2539,15 @@ const FichaTecnica = () => {
                   ) : (
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                           <button
+                              onClick={() => setShowSimulador(true)}
+                              className="bg-[#F5A623]/15 hover:bg-[#F5A623]/25 border border-[#F5A623]/30 text-[#F5A623] text-[11px] font-medium px-3 py-1.5 rounded-[8px] flex items-center gap-1.5 transition-colors"
+                              title="Simulador de precificação (BASE + CMV + Lucro)"
+                          >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 12l4-4 4 4 5-5"/></svg>
+                              Simular Preço
+                          </button>
+
+                          <button
                               onClick={handleDownloadFichasTemplate}
                               className="text-[11px] font-medium text-[#F5A623] hover:text-[#E5961E] transition-colors flex items-center gap-1.5"
                           >
@@ -2733,6 +2744,11 @@ const FichaTecnica = () => {
       {/* Categories Modal */}
       {showCategoriesModal && (
         <CategoriesModal onClose={() => setShowCategoriesModal(false)} />
+      )}
+
+      {/* Simulador de Precificação (BAH-039) */}
+      {showSimulador && (
+        <SimuladorPrecificacao onClose={() => setShowSimulador(false)} />
       )}
     </div>
   );

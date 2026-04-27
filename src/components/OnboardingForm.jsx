@@ -626,32 +626,41 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
   };
 
   const calculateCLT = (baseSalary) => {
-    if (!baseSalary) return { total: 0, breakdown: [] };
+    if (!baseSalary) return { total: 0, totalEfetivo: 0, totalProvisionamento: 0, breakdown: [] };
     const salary = parseFloat(baseSalary.toString().replace(/\D/g, '')) / 100;
-    
-    // Formula items
+
+    // Efetivo: caixa que sai todo mês (salário + FGTS)
     const fgts = salary * 0.08;
+    const totalEfetivo = salary + fgts;
+
+    // Provisionamento: reservas que viram caixa em datas específicas (13º, férias, rescisão)
     const prov13 = salary / 12;
     const provFerias = (salary * 1.3333) / 12;
     const fgtsProv = (prov13 + provFerias) * 0.08;
     const multa = (fgts + fgtsProv) * 0.50; // 40% employee + 10% social
     const aviso = salary / 12;
-    
-    const total = salary + fgts + prov13 + provFerias + fgtsProv + multa + aviso;
+    const totalProvisionamento = prov13 + provFerias + fgtsProv + multa + aviso;
+
+    const total = totalEfetivo + totalProvisionamento;
 
     return {
         total,
+        totalEfetivo,
+        totalProvisionamento,
         breakdown: [
-            { item: '01', comp: 'Salário Base', formula: 'Valor Nominal', val: salary, desc: 'Valor bruto em contrato.' },
-            { item: '02', comp: 'FGTS Mensal', formula: 'Salário * 0.08', val: fgts, desc: 'Depósito mensal obrigatório.' },
-            { item: '03', comp: 'Provisão 13º', formula: 'Salário / 12', val: prov13, desc: 'Reserva para 13º salário.' },
-            { item: '04', comp: 'Provisão Férias', formula: '(Salário * 1.3333)/12', val: provFerias, desc: 'Férias + 1/3 constitucional.' },
-            { item: '05', comp: 'FGTS s/ Prov.', formula: '(13º + Férias) * 0.08', val: fgtsProv, desc: 'FGTS sobre provisões.' },
-            { item: '06', comp: 'Reserva Multa', formula: '(FGTS Total) * 0.50', val: multa, desc: 'Multa rescisória (40% + 10%).' },
-            { item: '07', comp: 'Aviso Prévio', formula: 'Salário / 12', val: aviso, desc: 'Provisão para indenização.' },
+            { item: '01', comp: 'Salário Base', formula: 'Valor Nominal', val: salary, desc: 'Valor bruto em contrato.', type: 'efetivo' },
+            { item: '02', comp: 'FGTS Mensal', formula: 'Salário * 0.08', val: fgts, desc: 'Depósito mensal obrigatório.', type: 'efetivo' },
+            { item: '03', comp: 'Provisão 13º', formula: 'Salário / 12', val: prov13, desc: 'Reserva para 13º salário.', type: 'provisao' },
+            { item: '04', comp: 'Provisão Férias', formula: '(Salário * 1.3333)/12', val: provFerias, desc: 'Férias + 1/3 constitucional.', type: 'provisao' },
+            { item: '05', comp: 'FGTS s/ Prov.', formula: '(13º + Férias) * 0.08', val: fgtsProv, desc: 'FGTS sobre provisões.', type: 'provisao' },
+            { item: '06', comp: 'Reserva Multa', formula: '(FGTS Total) * 0.50', val: multa, desc: 'Multa rescisória (40% + 10%).', type: 'provisao' },
+            { item: '07', comp: 'Aviso Prévio', formula: 'Salário / 12', val: aviso, desc: 'Provisão para indenização.', type: 'provisao' },
         ]
     };
   };
+
+  // Helper: formata BRL
+  const fmtBRL = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const calculateDepreciation = (value, lifespan) => {
       if(!value || !lifespan) return 0;
@@ -756,18 +765,55 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                   // Calculate Display Values based on type
                   let costDisplay = null;
                   let cltData = null;
+                  let employeeBreakdown = null; // detalhe efetivo/provisionamento + alerta de risco
+                  let riskWarning = null;       // alerta PJ/Freela
 
                   if (question.calcType === 'pro_labore') {
                       const cost = calculateProLabore(item.pro_labore);
-                      if (cost > 0) costDisplay = `Custo Real: ${cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
-                  } else if (question.calcType === 'clt_cost' && item.regime === 'CLT') {
-                      cltData = calculateCLT(item.base_salary);
+                      if (cost > 0) costDisplay = `Custo Real: ${fmtBRL(cost)}`;
+                  } else if (question.calcType === 'clt_cost') {
                       const premio = parseFloat((item.premio || '0').toString().replace(/\D/g, '')) / 100 || 0;
-                      const totalWithPremio = cltData.total + premio;
-                      if (totalWithPremio > 0) costDisplay = `Custo Fantasma: ${totalWithPremio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}${premio > 0 ? ` (inclui prêmio ${premio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})` : ''}`;
+                      const baseSal = parseFloat((item.base_salary || '0').toString().replace(/\D/g, '')) / 100 || 0;
+
+                      if (item.regime === 'CLT' && baseSal > 0) {
+                          cltData = calculateCLT(item.base_salary);
+                          const efetivoMensal = cltData.totalEfetivo + premio;
+                          const totalCompleto = cltData.total + premio;
+                          costDisplay = `Custo Total: ${fmtBRL(totalCompleto)}${premio > 0 ? ` (inclui prêmio ${fmtBRL(premio)})` : ''}`;
+                          employeeBreakdown = {
+                              regime: 'CLT',
+                              efetivoMensal,
+                              totalProvisionamento: cltData.totalProvisionamento,
+                              totalCompleto,
+                              percentProv: efetivoMensal > 0 ? (cltData.totalProvisionamento / efetivoMensal) * 100 : 0,
+                          };
+                      } else if (item.regime === 'PJ' && baseSal > 0) {
+                          const total = baseSal + premio;
+                          costDisplay = `Custo PJ: ${fmtBRL(total)}`;
+                          employeeBreakdown = {
+                              regime: 'PJ',
+                              efetivoMensal: total,
+                              totalProvisionamento: 0,
+                              totalCompleto: total,
+                              percentProv: 0,
+                          };
+                          riskWarning = '⚠️ Atenção: exclusividade + subordinação + habitualidade pode gerar passivo trabalhista por vínculo disfarçado.';
+                      } else if (item.regime && item.regime !== 'CLT' && item.regime !== 'PJ' && baseSal > 0) {
+                          // Freelancer ou outros
+                          const total = baseSal + premio;
+                          costDisplay = `Custo ${item.regime}: ${fmtBRL(total)}`;
+                          employeeBreakdown = {
+                              regime: item.regime,
+                              efetivoMensal: total,
+                              totalProvisionamento: 0,
+                              totalCompleto: total,
+                              percentProv: 0,
+                          };
+                          riskWarning = '⚠️ Risco trabalhista: relação contínua com freelancer pode ser caracterizada como vínculo CLT pela Justiça do Trabalho.';
+                      }
                   } else if (question.calcType === 'depreciation') {
                       const dep = calculateDepreciation(item.value, item.lifespan);
-                      if(dep > 0) costDisplay = `Depreciação Mensal: ${dep.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
+                      if(dep > 0) costDisplay = `Depreciação Mensal: ${fmtBRL(dep)}`;
                   }
 
                   return (
@@ -862,14 +908,46 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                             <div className="mt-3 p-2 bg-[#151515] rounded border border-[#FFC100]/30 flex items-center justify-between">
                                 <span className="text-[#FFC100] text-xs font-semibold">{costDisplay}</span>
                                 {question.calcType === 'clt_cost' && item.regime === 'CLT' && (
-                                    <button 
+                                    <button
                                         onClick={() => setShowCLTHelp(cltData)}
                                         className="w-5 h-5 rounded-full bg-[#333] flex items-center justify-center text-[10px] text-white hover:bg-white hover:text-black transition-colors"
-                                        title="Ver cálculo detalahdo"
+                                        title="Ver cálculo detalhado"
                                     >
                                         ?
                                     </button>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Breakdown CLT/PJ/Freela: efetivo + provisionamento + total */}
+                        {employeeBreakdown && (
+                            <div className="mt-2 p-2.5 bg-[#0F0F0F] rounded border border-[#2A2A2A]">
+                                <div className="grid grid-cols-3 gap-2 text-[10px]">
+                                    <div>
+                                        <div className="text-[#7E7E7E] mb-0.5">Efetivo (caixa/mês)</div>
+                                        <div className="text-[#E1E1E1] font-semibold">{fmtBRL(employeeBreakdown.efetivoMensal)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[#7E7E7E] mb-0.5">Provisionamento</div>
+                                        <div className="text-[#F5A623] font-semibold">
+                                            {fmtBRL(employeeBreakdown.totalProvisionamento)}
+                                            {employeeBreakdown.percentProv > 0 && (
+                                                <span className="text-[#7E7E7E] font-normal ml-1">(+{employeeBreakdown.percentProv.toFixed(0)}%)</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[#7E7E7E] mb-0.5">Custo Total</div>
+                                        <div className="text-white font-bold">{fmtBRL(employeeBreakdown.totalCompleto)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Aviso de risco para PJ/Freela */}
+                        {riskWarning && (
+                            <div className="mt-2 p-2 bg-[#FF4560]/10 border border-[#FF4560]/30 rounded">
+                                <div className="text-[10px] text-[#FF8A9C] leading-snug">{riskWarning}</div>
                             </div>
                         )}
                     </div>

@@ -126,17 +126,18 @@ export const onboardingQuestions = [
     ]
   },
 
-  // Etapa 08: Gás e Óleo (Operacional Fixo)
+  // Etapa 08: Gás, Óleo e Descartáveis (Operacional Fixo)
   {
     id: 'operational_fixed',
     section: 'Infraestrutura',
     title: 'Custos Operacionais Fixos',
-    description: 'Gás de cozinha e Óleo. Recomendamos considerar fixo para simplificação.',
+    description: 'Gás de cozinha, Óleo e Descartáveis. Recomendamos considerar fixo para simplificação.',
     type: 'composite',
     infoText: 'Estes custos são normalmente considerados como custos variáveis, portanto use a metodologia Breaker para aumentar a precificação.',
     fields: [
       { id: 'kitchen_gas', label: 'Gás de Cozinha (Média)', type: 'currency', placeholder: 'R$ 0,00' },
-      { id: 'kitchen_oil', label: 'Óleo / Gordura (Média)', type: 'currency', placeholder: 'R$ 0,00' }
+      { id: 'kitchen_oil', label: 'Óleo / Gordura (Média)', type: 'currency', placeholder: 'R$ 0,00' },
+      { id: 'disposables', label: 'Descartáveis (Média)', type: 'currency', placeholder: 'R$ 0,00', helpText: 'Embalagens delivery/salão, copos, talheres, guardanapos. Média dos últimos 3 meses.' }
     ]
   },
 

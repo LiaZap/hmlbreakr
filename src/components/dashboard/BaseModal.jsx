@@ -1,14 +1,25 @@
+import { useState } from 'react';
+
 const BaseModal = ({ base, onClose }) => {
+  // Toggle: incluir provisionamento no cálculo (default OFF — só salário + FGTS)
+  const [incluirProv, setIncluirProv] = useState(false);
+
   if (!base) return null;
 
-  const baseValue = parseFloat(base.valueRaw || base.value) || 0;
-  const bd = base.breakdown || {};
+  // Switcheia entre versão padrão (sem prov) e completa (com prov)
+  const activeBase = incluirProv && base.comProvisionamento ? base.comProvisionamento : base;
+  const baseValue = parseFloat(activeBase.valueRaw || activeBase.value) || 0;
+  const bd = activeBase.breakdown || {};
+  const status = activeBase.status || base.status;
 
   const breakdownItems = [
     { label: 'Custos Fixos', value: bd.custosFixos, color: '#F5A623' },
     { label: 'Impostos', value: bd.impostos, color: '#868686' },
     { label: 'Taxas de Cartão', value: bd.taxasCartao, color: '#868686' },
   ];
+
+  const provInfo = base.provisionamento;
+  const hasProv = provInfo && parseFloat(provInfo.valorRaw || 0) > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -34,18 +45,46 @@ const BaseModal = ({ base, onClose }) => {
         </div>
 
         {/* Current BASE value */}
-        <div className="flex items-center justify-between bg-[#FF9406]/10 border border-[#FF9406]/30 rounded-[14px] px-4 py-3 mb-5">
+        <div className="flex items-center justify-between bg-[#FF9406]/10 border border-[#FF9406]/30 rounded-[14px] px-4 py-3 mb-3">
           <div>
             <div className="text-[10px] text-[#FF9406]/70 font-medium mb-0.5">Sua BASE atual</div>
-            <div className="text-[28px] font-bold text-[#FF9406] leading-none">{parseFloat(base.value).toFixed(0)}%</div>
+            <div className="text-[28px] font-bold text-[#FF9406] leading-none">{parseFloat(activeBase.value).toFixed(0)}%</div>
           </div>
           <span className={`px-3 py-1 rounded-full text-[11px] font-semibold border ${
-            base.status === 'Crítico' ? 'bg-[#FF4560]/15 text-[#FF4560] border-[#FF4560]/30' :
-            base.status === 'Alerta'  ? 'bg-[#F5A623]/15 text-[#F5A623] border-[#F5A623]/30' :
-            base.status === 'Saudável' ? 'bg-[#00B37E]/15 text-[#00B37E] border-[#00B37E]/30' :
+            status === 'Crítico' ? 'bg-[#FF4560]/15 text-[#FF4560] border-[#FF4560]/30' :
+            status === 'Alerta'  ? 'bg-[#F5A623]/15 text-[#F5A623] border-[#F5A623]/30' :
+            status === 'Saudável' ? 'bg-[#00B37E]/15 text-[#00B37E] border-[#00B37E]/30' :
                                         'bg-[#555]/20 text-[#888] border-[#555]/30'
-          }`}>{base.status}</span>
+          }`}>{status}</span>
         </div>
+
+        {/* Toggle: incluir provisionamento */}
+        {hasProv && (
+          <label className="flex items-center justify-between gap-3 bg-[#161616] border border-[#2A2A2C] rounded-[12px] px-3 py-2.5 mb-5 cursor-pointer hover:border-[#333] transition-colors">
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+              <span className="text-[12px] text-white font-medium">Incluir provisionamento</span>
+              <span className="text-[10px] text-[#868686] leading-snug">
+                {incluirProv
+                  ? `BASE com 13º, férias, FGTS s/ prov, multa e aviso prévio (+${provInfo.percentual}%)`
+                  : `Mostrando só salário + FGTS (caixa real). Provisionamento: R$ ${provInfo.valor} (+${provInfo.percentual}%)`}
+              </span>
+            </div>
+            <button
+              role="switch"
+              aria-checked={incluirProv}
+              onClick={() => setIncluirProv(v => !v)}
+              className={`relative inline-flex shrink-0 h-5 w-9 items-center rounded-full transition-colors ${
+                incluirProv ? 'bg-[#F5A623]' : 'bg-[#3A3A3C]'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  incluirProv ? 'translate-x-[18px]' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </label>
+        )}
 
         {/* Breakdown */}
         <div className="mb-5">

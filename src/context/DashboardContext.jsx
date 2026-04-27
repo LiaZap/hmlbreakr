@@ -309,7 +309,7 @@ export const DashboardProvider = ({ children }) => {
     // Utilities (with new split fields), Recurring, Operational Fixed
     sumComposite('utilities', ['energy', 'water', 'internet', 'telefone', 'security', 'security_guard']);
     sumComposite('recurring_services', ['pest_control', 'waste_removal', 'cleaning_supplies']);
-    sumComposite('operational_fixed', ['kitchen_gas', 'kitchen_oil']);
+    sumComposite('operational_fixed', ['kitchen_gas', 'kitchen_oil', 'disposables']);
 
     // Monthly Services (dynamic list)
     if (formData.monthly_services && Array.isArray(formData.monthly_services)) {
@@ -364,13 +364,18 @@ export const DashboardProvider = ({ children }) => {
     }
 
     // Personnel Costs
-    let personnelCosts = 0;
-    let employeeReserves = 0; // CLT provisions: 13°, férias, FGTS, multa, aviso prévio
+    // Separados em "efetivo" (caixa todo mês) e "provisionamento" (reservas pra 13º, férias, rescisão).
+    // BASE usa apenas efetivo por padrão (toggle no BaseModal pode incluir provisionamento).
+    let personnelEfetivo = 0;             // Salário + FGTS + benefícios + prêmio (caixa mensal real)
+    let personnelProvisionamento = 0;     // 13º, férias, FGTS sobre prov, multa, aviso (reservas)
+    let employeeReserves = 0;             // legado: total de provisões CLT (alias de personnelProvisionamento dos funcionários)
+    const employeesWithProvision = [];    // detalhamento por funcionário pra UI
 
     if (formData.partners && Array.isArray(formData.partners)) {
         formData.partners.forEach(p => {
              const pl = parseCurrency(p.pro_labore);
-             personnelCosts += pl + (pl * 0.11);
+             // Pró-labore + 11% (INSS) é caixa mensal real, conta como efetivo
+             personnelEfetivo += pl + (pl * 0.11);
         });
     }
 
@@ -379,7 +384,10 @@ export const DashboardProvider = ({ children }) => {
              const base = parseCurrency(e.base_salary);
              const premio = parseCurrency(e.premio);
              if (e.regime === 'CLT') {
+                 // Efetivo (caixa mensal)
                  const fgts = base * 0.08;
+                 const efetivo = base + fgts;
+                 // Provisionamento (reservas pra datas específicas)
                  const prov13 = base / 12;
                  const provFerias = (base * 1.3333) / 12;
                  const fgtsProv = (prov13 + provFerias) * 0.08;
@@ -388,14 +396,54 @@ export const DashboardProvider = ({ children }) => {
                  const aviso13 = aviso / 12;
                  const avisoFerias = (aviso + aviso / 3) / 12;
                  const avisoFgts = (aviso13 + avisoFerias) * 0.08;
-                 const reserves = fgts + prov13 + provFerias + fgtsProv + multa + aviso + aviso13 + avisoFerias + avisoFgts;
-                 employeeReserves += reserves;
-                 personnelCosts += base + reserves + premio;
+                 const provisao = prov13 + provFerias + fgtsProv + multa + aviso + aviso13 + avisoFerias + avisoFgts;
+
+                 personnelEfetivo += efetivo + premio;
+                 personnelProvisionamento += provisao;
+                 employeeReserves += provisao + fgts; // legado: mantém soma anterior pra compatibilidade
+
+                 employeesWithProvision.push({
+                     name: e.name || `Funcionário ${employeesWithProvision.length + 1}`,
+                     regime: 'CLT',
+                     base,
+                     efetivoMensal: efetivo + premio,
+                     totalProvisionamento: provisao,
+                     custoTotal: efetivo + premio + provisao,
+                     riskWarning: null,
+                 });
+             } else if (e.regime === 'PJ') {
+                 // PJ: sem encargos, mas risco de vínculo disfarçado se trabalhar como CLT
+                 personnelEfetivo += base + premio;
+                 employeesWithProvision.push({
+                     name: e.name || `Funcionário ${employeesWithProvision.length + 1}`,
+                     regime: 'PJ',
+                     base,
+                     efetivoMensal: base + premio,
+                     totalProvisionamento: 0,
+                     custoTotal: base + premio,
+                     riskWarning: 'Atenção a vínculo disfarçado — exclusividade + subordinação + habitualidade pode gerar passivo trabalhista.',
+                 });
              } else {
-                 personnelCosts += base + premio;
+                 // Freelancer ou outro: pagamento direto
+                 personnelEfetivo += base + premio;
+                 employeesWithProvision.push({
+                     name: e.name || `Funcionário ${employeesWithProvision.length + 1}`,
+                     regime: e.regime || 'Freela',
+                     base,
+                     efetivoMensal: base + premio,
+                     totalProvisionamento: 0,
+                     custoTotal: base + premio,
+                     riskWarning: '⚠️ Risco trabalhista — relação contínua de freelancer pode ser caracterizada como vínculo CLT.',
+                 });
              }
         });
     }
+
+    // Total de pessoal — versão efetiva (sem provisionamento) e completa (com)
+    const personnelCostsEfetivo = personnelEfetivo;
+    const personnelCostsCompleto = personnelEfetivo + personnelProvisionamento;
+    // Mantém personnelCosts como o efetivo (default = sem provisionamento, conforme ticket)
+    let personnelCosts = personnelCostsEfetivo;
     
     // Benefits per employee (embedded in each employee card)
     if (formData.employees && Array.isArray(formData.employees)) {
@@ -420,6 +468,8 @@ export const DashboardProvider = ({ children }) => {
     }
 
     const totalFixedCosts = fixedCosts + personnelCosts;
+    // Versão alternativa que inclui provisionamento — usada quando toggle do BaseModal está ON
+    const totalFixedCostsCompleto = fixedCosts + personnelCostsCompleto;
 
     // CMV Teórico: only from fichas técnicas (menuEngineering data)
     // If no fichas exist, CMV = 0 (not 35% default)
@@ -559,6 +609,7 @@ export const DashboardProvider = ({ children }) => {
 
     // Fixed Cost % over revenue
     const fixedCostPercentage = currentRevenue > 0 ? (totalFixedCosts / currentRevenue) * 100 : 0;
+    const fixedCostPercentageCompleto = currentRevenue > 0 ? (totalFixedCostsCompleto / currentRevenue) * 100 : 0;
     const cmvPercentageDisplay = cmvPercentage * 100;
 
     // CMV effective: mirrors exactly what cmvTeorico panel shows
@@ -584,7 +635,10 @@ export const DashboardProvider = ({ children }) => {
         });
     }
     // BASE = Custos Fixos + Impostos + Taxas de Cartão (marketplace NÃO entra na base)
+    // Por padrão NÃO inclui provisionamento (só salário + FGTS — caixa real mensal)
     const basePercentage = fixedCostPercentage + (percentTaxSimples * 100) + (cardFeePercentage * 100);
+    // Versão "com provisionamento" pra quando o usuário ativar o toggle no BaseModal
+    const basePercentageCompleto = fixedCostPercentageCompleto + (percentTaxSimples * 100) + (cardFeePercentage * 100);
 
     // "Dinheiro na Mesa" calculation:
     // Sum excess % above thresholds: iFood>23%, CF>33%, CMV>30%
@@ -704,14 +758,22 @@ export const DashboardProvider = ({ children }) => {
                     value: `R$ ${formatMoney(totalFixedCosts)}`,
                     percentage: currentRevenue > 0 ? Math.round((totalFixedCosts / currentRevenue) * 100) + "%" : "0%",
                     status: "neutral",
-                    icon: "wallet"
+                    icon: "wallet",
+                    tooltip: "Custos que existem independente das vendas: pessoal, infraestrutura, admin, marketing, etc."
                 },
                 {
-                    label: "Custos Variáveis Estimados",
+                    label: "Custos Variáveis Totais",
                     value: `R$ ${formatMoney(totalVariableCosts)}`,
                     percentage: currentRevenue > 0 ? `${((totalVariableCosts / currentRevenue) * 100).toFixed(1)}%` : "0%",
                     status: "neutral",
-                    icon: "pie"
+                    icon: "pie",
+                    tooltip: "Custos que sobem/descem com o faturamento. Composição:",
+                    breakdown: [
+                        { label: "CMV (insumos)", value: currentRevenue > 0 ? `${((cmvCost / currentRevenue) * 100).toFixed(1)}%` : "0%" },
+                        { label: "Taxa de cartão", value: `${(cardFeePercentage * 100).toFixed(1)}%` },
+                        { label: "Comissão marketplace", value: currentRevenue > 0 ? `${((marketplaceCommissionCost / currentRevenue) * 100).toFixed(1)}%` : "0%" },
+                        { label: "Impostos (Simples)", value: `${(percentTaxSimples * 100).toFixed(1)}%` },
+                    ]
                 }
             ]
         },
@@ -786,9 +848,36 @@ export const DashboardProvider = ({ children }) => {
                         custosFixos: fixedCostPercentage.toFixed(1),
                         impostos: (percentTaxSimples * 100).toFixed(1),
                         taxasCartao: (cardFeePercentage * 100).toFixed(1),
-                    }
+                    },
+                    // Versão "com provisionamento" — pra toggle no BaseModal
+                    comProvisionamento: {
+                        value: basePercentageCompleto.toFixed(0),
+                        valueRaw: basePercentageCompleto,
+                        status: basePercentageCompleto > 60 ? "Crítico" : (basePercentageCompleto > 55 ? "Alerta" : (basePercentageCompleto >= 45 ? "Saudável" : "Baixo")),
+                        breakdown: {
+                            custosFixos: fixedCostPercentageCompleto.toFixed(1),
+                            impostos: (percentTaxSimples * 100).toFixed(1),
+                            taxasCartao: (cardFeePercentage * 100).toFixed(1),
+                        },
+                    },
+                    // Detalhes do provisionamento pro UI mostrar
+                    provisionamento: {
+                        valor: formatMoney(personnelProvisionamento),
+                        valorRaw: personnelProvisionamento,
+                        percentual: currentRevenue > 0 ? ((personnelProvisionamento / currentRevenue) * 100).toFixed(1) : "0",
+                    },
                 },
-                taxPercent: ((percentTaxSimples + cardFeePercentage) * 100).toFixed(2)
+                taxPercent: ((percentTaxSimples + cardFeePercentage) * 100).toFixed(2),
+                // Comissão média de marketplace (ponderada por % vendas) — usada no SimuladorPrecificacao
+                marketplaceFeePct: marketplaceFeePct.toFixed(2),
+                // Detalhamento de custo por funcionário (pra Tab "Funcionários" / FuncionariosCard)
+                funcionarios: employeesWithProvision.map(emp => ({
+                    ...emp,
+                    baseFmt: formatMoney(emp.base),
+                    efetivoMensalFmt: formatMoney(emp.efetivoMensal),
+                    totalProvisionamentoFmt: formatMoney(emp.totalProvisionamento),
+                    custoTotalFmt: formatMoney(emp.custoTotal),
+                })),
             };
         })(),
         cardComparison: {

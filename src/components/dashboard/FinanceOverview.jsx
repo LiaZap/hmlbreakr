@@ -187,9 +187,29 @@ const FinanceOverview = ({ data, onSelectMonth }) => {
               </div>
               <div>
                  <div className="text-[14px] font-bold text-[#E1E1E1] mb-0.5">{card.value}</div>
-                 <div className="flex items-center gap-1.5">
+                 <div className="flex items-center gap-1.5 relative">
                     <span className="text-[10px] text-[#595959] font-medium">{card.label}</span>
-                    <div className="w-3 h-3 rounded-full bg-[#262626] flex items-center justify-center text-[8px] text-[#595959] font-bold">?</div>
+                    {(card.tooltip || card.breakdown) && (
+                      <div className="relative inline-block">
+                        <div className="w-3 h-3 rounded-full bg-[#262626] flex items-center justify-center text-[8px] text-[#595959] font-bold cursor-help peer">?</div>
+                        {/* Tooltip on hover */}
+                        <div className="absolute bottom-full left-0 mb-2 hidden peer-hover:block z-50 w-[220px] bg-[#1F1F1F] border border-[#2F2F2F] rounded-[8px] p-2.5 shadow-xl pointer-events-none">
+                          {card.tooltip && (
+                            <div className="text-[10px] text-[#B0B0B0] mb-1.5 leading-snug">{card.tooltip}</div>
+                          )}
+                          {card.breakdown && card.breakdown.length > 0 && (
+                            <div className="flex flex-col gap-1 pt-1.5 border-t border-[#2F2F2F]">
+                              {card.breakdown.map((b, i) => (
+                                <div key={i} className="flex items-center justify-between text-[10px]">
+                                  <span className="text-[#868686]">{b.label}</span>
+                                  <span className="text-[#E1E1E1] font-semibold">{b.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                  </div>
               </div>
            </div>
