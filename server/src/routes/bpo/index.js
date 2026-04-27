@@ -22,6 +22,13 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 const suppliersRoutes = require('./suppliers');
+const banksRoutes = require('./banks');
+const categoriesRoutes = require('./categories');
+const employeesRoutes = require('./employees');
+const partnersRoutes = require('./partners');
+const paymentMethodsRoutes = require('./payment-methods');
+const payablesRoutes = require('./payables');
+const receivablesRoutes = require('./receivables');
 
 // Toggle BPO pra um cliente (admin only — TODO: validar role)
 router.post('/admin/clients/:hash/bpo-toggle', async (req, res) => {
@@ -61,5 +68,14 @@ router.get('/admin/bpo-clients', async (req, res) => {
 
 // Cadastros (mounted under /bpo/:clientHash/...)
 router.use('/:clientHash/suppliers', suppliersRoutes);
+router.use('/:clientHash/bank-accounts', banksRoutes);
+router.use('/:clientHash/categories', categoriesRoutes);
+router.use('/:clientHash/employees', employeesRoutes);
+router.use('/:clientHash/partners', partnersRoutes);
+router.use('/:clientHash/payment-methods', paymentMethodsRoutes);
+
+// Lançamentos
+router.use('/:clientHash/payables', payablesRoutes);
+router.use('/:clientHash/receivables', receivablesRoutes);
 
 module.exports = router;

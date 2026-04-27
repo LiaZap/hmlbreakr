@@ -1,6 +1,5 @@
 /**
  * BpoApp — orquestra navegação entre seções do módulo BPO.
- * Deve ser renderizado dentro de <BpoProvider>.
  */
 
 import { useState } from 'react';
@@ -8,6 +7,13 @@ import { BpoProvider } from '../../context/BpoContext';
 import BpoLayout from './BpoLayout';
 import { EmptyState } from '../ui/primitives';
 import SuppliersList from './cadastros/SuppliersList';
+import BankAccountsList from './cadastros/BankAccountsList';
+import CategoriesList from './cadastros/CategoriesList';
+import EmployeesList from './cadastros/EmployeesList';
+import PartnersList from './cadastros/PartnersList';
+import PaymentMethodsList from './cadastros/PaymentMethodsList';
+import PayablesList from './lancamentos/PayablesList';
+import ReceivablesList from './lancamentos/ReceivablesList';
 
 const ComingSoon = ({ section }) => (
   <EmptyState
@@ -18,7 +24,7 @@ const ComingSoon = ({ section }) => (
       </svg>
     }
     title={`${section} — em desenvolvimento`}
-    description="Esta seção será liberada conforme o roadmap das fases. Veja o doc de plano de ação no Obsidian."
+    description="Esta seção será liberada nas próximas fases. Veja [[Breakr V2.0 - Plano de Acao BPO Financeiro]]."
   />
 );
 
@@ -28,14 +34,14 @@ const BpoAppInner = () => {
   const renderSection = () => {
     switch (section) {
       case 'suppliers': return <SuppliersList />;
+      case 'bank-accounts': return <BankAccountsList />;
+      case 'categories': return <CategoriesList />;
+      case 'employees': return <EmployeesList />;
+      case 'partners': return <PartnersList />;
+      case 'payment-methods': return <PaymentMethodsList />;
+      case 'payables': return <PayablesList />;
+      case 'receivables': return <ReceivablesList />;
       case 'overview': return <ComingSoon section="Visão Geral" />;
-      case 'bank-accounts': return <ComingSoon section="Contas Bancárias" />;
-      case 'categories': return <ComingSoon section="Categorias" />;
-      case 'employees': return <ComingSoon section="Funcionários" />;
-      case 'partners': return <ComingSoon section="Sócios" />;
-      case 'payment-methods': return <ComingSoon section="Meios de Pagamento" />;
-      case 'payables': return <ComingSoon section="Contas a Pagar" />;
-      case 'receivables': return <ComingSoon section="Contas a Receber" />;
       default: return <ComingSoon section={section} />;
     }
   };
