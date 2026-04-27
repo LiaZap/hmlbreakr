@@ -17,6 +17,8 @@ import ReceivablesList from './lancamentos/ReceivablesList';
 import ImportsHub from './imports/ImportsHub';
 import ReportsHub from './relatorios/ReportsHub';
 import BpoDashboard from './dashboard/BpoDashboard';
+import BpoOpsPanel from './painel/BpoOpsPanel';
+import BankManagement from './bancario/BankManagement';
 
 const ComingSoon = ({ section }) => (
   <EmptyState
@@ -47,6 +49,8 @@ const BpoAppInner = () => {
       case 'receivables': return <ReceivablesList />;
       case 'imports': return <ImportsHub />;
       case 'relatorios': return <ReportsHub />;
+      case 'bancario': return <BankManagement />;
+      case 'painel': return <BpoOpsPanel />;
       default: return <ComingSoon section={section} />;
     }
   };

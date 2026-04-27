@@ -24,8 +24,8 @@ const NAV = [
     { id: 'imports', label: 'Importar (NF-e/Boleto/Excel)' },
   ]},
   { id: 'relatorios', label: 'Relatórios', icon: 'chart' },
-  { id: 'bancario', label: 'Gestão Bancária', icon: 'bank', disabled: true, soon: true },
-  { id: 'painel', label: 'Painel BPO', icon: 'dashboard', disabled: true, soon: true },
+  { id: 'bancario', label: 'Gestão Bancária', icon: 'bank' },
+  { id: 'painel', label: 'Painel BPO (multi-cliente)', icon: 'dashboard' },
 ];
 
 const Icon = ({ name }) => {
@@ -99,9 +99,9 @@ const BpoLayout = ({ activeSection, onNavigate, children }) => {
           </nav>
         </aside>
 
-        {/* Main */}
+        {/* Main — seção 'painel' (multi-cliente) não exige cliente selecionado */}
         <main className="flex-1 overflow-y-auto p-6">
-          {!selectedClient ? (
+          {!selectedClient && activeSection !== 'painel' ? (
             <EmptyState
               icon={
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -113,7 +113,7 @@ const BpoLayout = ({ activeSection, onNavigate, children }) => {
               description={
                 bpoClients.length === 0
                   ? 'Ative BPO em algum cliente no Painel Admin (toggle por cliente).'
-                  : 'Use o seletor no topo pra escolher qual cliente trabalhar.'
+                  : 'Use o seletor no topo pra escolher qual cliente trabalhar — ou clique em "Painel BPO" pra ver visão multi-cliente.'
               }
             />
           ) : (

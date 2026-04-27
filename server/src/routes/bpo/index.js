@@ -31,6 +31,9 @@ const payablesRoutes = require('./payables');
 const receivablesRoutes = require('./receivables');
 const importsRoutes = require('./imports');
 const reportsRoutes = require('./reports');
+const transfersRoutes = require('./transfers');
+const reconciliationRoutes = require('./reconciliation');
+const opsPanelRoutes = require('./ops-panel');
 
 // Toggle BPO pra um cliente (admin only — TODO: validar role)
 router.post('/admin/clients/:hash/bpo-toggle', async (req, res) => {
@@ -83,5 +86,10 @@ router.use('/:clientHash/receivables', receivablesRoutes);
 // Fase 2: Importações + Relatórios
 router.use('/:clientHash/imports', importsRoutes);
 router.use('/:clientHash/reports', reportsRoutes);
+
+// Fase 3 (parcial) + Fase 4
+router.use('/:clientHash/transfers', transfersRoutes);
+router.use('/:clientHash/reconciliation', reconciliationRoutes);
+router.use('/:clientHash/ops-panel', opsPanelRoutes);
 
 module.exports = router;
