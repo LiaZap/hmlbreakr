@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
 import { BRAZILIAN_BANKS } from '../shared/brazilianBanks';
 
 const ROLES = ['Cozinha', 'Salão', 'Administrativo', 'Entrega', 'Outro'];
@@ -9,15 +9,23 @@ const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency'
 
 const EmployeesList = () => {
   const { bpoUrl, selectedClient } = useBpo();
+  const toast = useToast();
   const [items, setItems] = useState([]);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);
 
   const fetchItems = useCallback(async () => {
     if (!selectedClient) return;
-    const res = await fetch(bpoUrl(`/employees${search ? `?search=${encodeURIComponent(search)}` : ''}`));
-    const data = await res.json();
-    setItems(data.items || []);
+    setError(null);
+    try {
+      const url = bpoUrl(`/employees${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+      if (!url) return;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error((await res.json()).error || `Erro ${res.status}`);
+      const data = await res.json();
+      setItems(data.items || []);
+    } catch (err) { setError(err.message); }
   }, [bpoUrl, selectedClient, search]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
@@ -39,6 +47,8 @@ const EmployeesList = () => {
         <Input value={search} onChange={setSearch} placeholder="Buscar por nome ou CPF..."
           icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2"/></svg>} />
       </Card>
+
+      <ErrorBanner message={error} onRetry={fetchItems} />
 
       {items.length === 0 ? (
         <Card><EmptyState

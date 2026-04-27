@@ -1,22 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
 
 const fmtCpf = (cpf) => String(cpf || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const PartnersList = () => {
   const { bpoUrl, selectedClient } = useBpo();
+  const toast = useToast();
   const [items, setItems] = useState([]);
+  const [error, setError] = useState(null);
   const [totalProlabore, setTotalProlabore] = useState(0);
   const [editing, setEditing] = useState(null);
 
   const fetchItems = useCallback(async () => {
     if (!selectedClient) return;
-    const res = await fetch(bpoUrl('/partners'));
-    const data = await res.json();
-    setItems(data.items || []);
-    setTotalProlabore(data.totalProlabore || 0);
+    setError(null);
+    try {
+      const url = bpoUrl('/partners');
+      if (!url) return;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error((await res.json()).error || `Erro ${res.status}`);
+      const data = await res.json();
+      setItems(data.items || []);
+      setTotalProlabore(data.totalProlabore || 0);
+    } catch (err) { setError(err.message); }
   }, [bpoUrl, selectedClient]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
@@ -39,6 +47,8 @@ const PartnersList = () => {
       <div className="bg-warning-soft border border-warning/30 rounded-md px-3 py-2 text-xs text-warning">
         ⚠️ <strong>Regra Retirada de Capital:</strong> após atingir o pró-labore mensal informado, pagamentos extras pro CPF do sócio serão lançados como "Retirada de Capital" automaticamente.
       </div>
+
+      <ErrorBanner message={error} onRetry={fetchItems} />
 
       {items.length === 0 ? (
         <Card><EmptyState

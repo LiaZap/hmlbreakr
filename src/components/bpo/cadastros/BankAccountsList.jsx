@@ -1,33 +1,25 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
+import { useBpoList } from '../useBpoList';
 import { BRAZILIAN_BANKS, findBank } from '../shared/brazilianBanks';
 
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const BankAccountsList = () => {
-  const { bpoUrl, selectedClient } = useBpo();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const { bpoUrl } = useBpo();
+  const toast = useToast();
+  const { items, loading, error, refresh } = useBpoList('/bank-accounts');
   const [editing, setEditing] = useState(null);
-
-  const fetchItems = useCallback(async () => {
-    if (!selectedClient) return;
-    setLoading(true);
-    try {
-      const res = await fetch(bpoUrl('/bank-accounts'));
-      const data = await res.json();
-      setItems(data.items || []);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  }, [bpoUrl, selectedClient]);
-
-  useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const handleDelete = async (item) => {
     if (!confirm(`Excluir conta "${item.bankName}"?`)) return;
-    await fetch(bpoUrl(`/bank-accounts/${item.id}`), { method: 'DELETE' });
-    fetchItems();
+    try {
+      const res = await fetch(bpoUrl(`/bank-accounts/${item.id}`), { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error || 'Falha ao excluir');
+      toast.success(`Conta "${item.bankName}" excluída`);
+      refresh();
+    } catch (err) { toast.error(err.message); }
   };
 
   const totalBalance = items.reduce((s, i) => s + Number(i.currentBalance || 0), 0);
@@ -44,6 +36,8 @@ const BankAccountsList = () => {
           Nova Conta
         </Button>
       </div>
+
+      <ErrorBanner message={error} onRetry={refresh} />
 
       {loading ? (
         <Card><div className="text-center py-8 text-xs text-text-muted">Carregando...</div></Card>
@@ -92,7 +86,7 @@ const BankAccountsList = () => {
         <BankAccountModal
           item={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); fetchItems(); }}
+          onSaved={() => { setEditing(null); refresh(); toast.success('Conta salva'); }}
         />
       )}
     </div>

@@ -6,7 +6,7 @@
  * Doc: [[Breakr V2.0 - Plano de Acao BPO Financeiro]]
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback, createContext, useContext } from 'react';
 
 // ============================================================================
 // MODAL
@@ -374,3 +374,140 @@ export const Tr = ({ children, className = '', onClick }) => (
     {children}
   </tr>
 );
+
+// ============================================================================
+// ERROR BANNER — usado em listas pra mostrar erro de fetch
+// ============================================================================
+
+export const ErrorBanner = ({ message, onRetry, className = '' }) => {
+  if (!message) return null;
+  return (
+    <div className={`bg-danger-soft border border-danger/30 rounded-md px-3 py-2 text-xs text-danger flex items-center gap-2 ${className}`}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
+      <span className="flex-1">{message}</span>
+      {onRetry && (
+        <button onClick={onRetry} className="text-xs font-semibold text-danger hover:underline shrink-0">
+          Tentar de novo
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// SKELETON — placeholder animado durante loading
+// ============================================================================
+
+export const Skeleton = ({ className = '', children }) => (
+  <div className={`animate-pulse bg-bg-input rounded-md ${className}`}>{children}</div>
+);
+
+export const SkeletonText = ({ width = 'w-32', className = '' }) => (
+  <Skeleton className={`h-4 ${width} ${className}`} />
+);
+
+export const SkeletonCard = ({ className = '' }) => (
+  <div className={`bg-bg-card border border-border-strong rounded-2xl p-4 ${className}`}>
+    <div className="animate-pulse flex flex-col gap-3">
+      <div className="h-4 bg-bg-input rounded w-2/3" />
+      <div className="h-8 bg-bg-input rounded w-1/3" />
+      <div className="h-3 bg-bg-input rounded w-1/2" />
+    </div>
+  </div>
+);
+
+// ============================================================================
+// TOAST — Provider + hook + componente. Substitui alert() spam.
+// ============================================================================
+
+const ToastContext = createContext(null);
+
+let toastIdCounter = 0;
+
+export const ToastProvider = ({ children }) => {
+  const [toasts, setToasts] = useState([]);
+
+  const removeToast = useCallback((id) => {
+    setToasts((t) => t.filter((x) => x.id !== id));
+  }, []);
+
+  const toast = useCallback((message, opts = {}) => {
+    const id = ++toastIdCounter;
+    const item = {
+      id,
+      message,
+      type: opts.type || 'info', // info | success | warning | danger
+      duration: opts.duration ?? 4000,
+    };
+    setToasts((t) => [...t, item]);
+    if (item.duration > 0) setTimeout(() => removeToast(id), item.duration);
+    return id;
+  }, [removeToast]);
+
+  const api = {
+    toast,
+    success: (msg, opts) => toast(msg, { ...opts, type: 'success' }),
+    error: (msg, opts) => toast(msg, { ...opts, type: 'danger' }),
+    warning: (msg, opts) => toast(msg, { ...opts, type: 'warning' }),
+    info: (msg, opts) => toast(msg, { ...opts, type: 'info' }),
+    remove: removeToast,
+  };
+
+  return (
+    <ToastContext.Provider value={api}>
+      {children}
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none max-w-sm">
+        {toasts.map((t) => (
+          <ToastItem key={t.id} item={t} onDismiss={() => removeToast(t.id)} />
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+};
+
+export const useToast = () => {
+  const ctx = useContext(ToastContext);
+  if (!ctx) {
+    // Fallback safe: se não tem provider, usa console
+    return {
+      toast: (m) => console.log('[toast]', m),
+      success: (m) => console.log('[toast success]', m),
+      error: (m) => console.error('[toast error]', m),
+      warning: (m) => console.warn('[toast warning]', m),
+      info: (m) => console.log('[toast info]', m),
+      remove: () => {},
+    };
+  }
+  return ctx;
+};
+
+const ToastItem = ({ item, onDismiss }) => {
+  const colorClass = {
+    success: 'bg-success-soft border-success/30 text-success',
+    danger: 'bg-danger-soft border-danger/30 text-danger',
+    warning: 'bg-warning-soft border-warning/30 text-warning',
+    info: 'bg-info-soft border-info/30 text-info',
+  }[item.type] || 'bg-bg-card border-border';
+
+  const icon = {
+    success: <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />,
+    danger: <><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/><path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></>,
+    warning: <><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></>,
+    info: <><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/><path d="M12 16v-4M12 8h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></>,
+  }[item.type];
+
+  return (
+    <div className={`pointer-events-auto bg-bg-card border ${colorClass} rounded-xl p-3 shadow-2xl flex items-start gap-3 min-w-[280px] animate-in slide-in-from-right`}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-0.5">{icon}</svg>
+      <span className="flex-1 text-sm">{item.message}</span>
+      <button onClick={onDismiss} className="text-text-muted hover:text-text-strong shrink-0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </button>
+    </div>
+  );
+};

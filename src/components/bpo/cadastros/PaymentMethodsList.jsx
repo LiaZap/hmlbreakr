@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
 
 const TYPES = [
   { id: 'marketplace', label: 'Marketplace (iFood, Aiqfome)' },
@@ -22,14 +22,22 @@ const TEMPLATES = [
 
 const PaymentMethodsList = () => {
   const { bpoUrl, selectedClient } = useBpo();
+  const toast = useToast();
   const [items, setItems] = useState([]);
+  const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null);
 
   const fetchItems = useCallback(async () => {
     if (!selectedClient) return;
-    const res = await fetch(bpoUrl('/payment-methods'));
-    const data = await res.json();
-    setItems(data.items || []);
+    setError(null);
+    try {
+      const url = bpoUrl('/payment-methods');
+      if (!url) return;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error((await res.json()).error || `Erro ${res.status}`);
+      const data = await res.json();
+      setItems(data.items || []);
+    } catch (err) { setError(err.message); }
   }, [bpoUrl, selectedClient]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
@@ -63,6 +71,8 @@ const PaymentMethodsList = () => {
           </Button>
         </div>
       </div>
+
+      <ErrorBanner message={error} onRetry={fetchItems} />
 
       {items.length === 0 ? (
         <Card><EmptyState

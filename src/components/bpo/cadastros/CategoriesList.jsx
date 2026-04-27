@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
 
 const DRE_GROUPS = [
   { id: 'cmv', label: 'CMV' },
@@ -14,23 +14,35 @@ const DRE_GROUPS = [
 
 const CategoriesList = () => {
   const { bpoUrl, selectedClient } = useBpo();
+  const toast = useToast();
   const [items, setItems] = useState([]);
+  const [error, setError] = useState(null);
   const [filterType, setFilterType] = useState('all');
   const [editing, setEditing] = useState(null);
 
   const fetchItems = useCallback(async () => {
     if (!selectedClient) return;
-    const res = await fetch(bpoUrl(`/categories${filterType !== 'all' ? `?type=${filterType}` : ''}`));
-    const data = await res.json();
-    setItems(data.items || []);
+    setError(null);
+    try {
+      const url = bpoUrl(`/categories${filterType !== 'all' ? `?type=${filterType}` : ''}`);
+      if (!url) return;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error((await res.json()).error || `Erro ${res.status}`);
+      const data = await res.json();
+      setItems(data.items || []);
+    } catch (err) { setError(err.message); }
   }, [bpoUrl, selectedClient, filterType]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const handleDelete = async (item) => {
     if (!confirm(`Excluir categoria "${item.name}"?`)) return;
-    await fetch(bpoUrl(`/categories/${item.id}`), { method: 'DELETE' });
-    fetchItems();
+    try {
+      const res = await fetch(bpoUrl(`/categories/${item.id}`), { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+      toast.success(`Categoria "${item.name}" excluída`);
+      fetchItems();
+    } catch (err) { toast.error(err.message); }
   };
 
   return (
@@ -55,6 +67,8 @@ const CategoriesList = () => {
           </button>
         ))}
       </Card>
+
+      <ErrorBanner message={error} onRetry={fetchItems} />
 
       {items.length === 0 ? (
         <Card>

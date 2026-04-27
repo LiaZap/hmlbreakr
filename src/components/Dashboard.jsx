@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import Sidebar from './dashboard/Sidebar';
 import DashboardHeader from './dashboard/DashboardHeader';
@@ -17,8 +17,9 @@ import RankingGeralIcon from './dashboard/RankingGeralIcon';
 import MatrizPreco from './dashboard/MatrizPreco';
 import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
-import BpoClientApp from './bpo/BpoClientApp';
 import BpoClientAlerts from './dashboard/BpoClientAlerts';
+// Code-splitting: BPO carrega só quando usuário entra na seção
+const BpoClientApp = lazy(() => import('./bpo/BpoClientApp'));
 import DRE from './dashboard/DRE';
 import CardRateComparison from './dashboard/CardRateComparison';
 import InfoTooltip from './dashboard/InfoTooltip';
@@ -101,7 +102,9 @@ const Dashboard = () => {
         </div>
       ) : activePage === 'financeiro' ? (
         <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
-          <BpoClientApp />
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-xs text-[#868686]">Carregando Financeiro...</div>}>
+            <BpoClientApp />
+          </Suspense>
         </div>
       ) : (
       <>

@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Card, Badge, Button } from '../../ui/primitives';
+import { Card, Badge, Button, Skeleton, SkeletonCard } from '../../ui/primitives';
 
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -58,7 +58,25 @@ const BpoDashboard = () => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  if (loading) return <div className="text-center py-8 text-xs text-text-muted">Carregando dashboard...</div>;
+  if (loading) return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <Skeleton className="h-6 w-40 mb-2" />
+        <Skeleton className="h-3 w-64" />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <SkeletonCard className="lg:col-span-2 h-64" />
+        <SkeletonCard className="h-64" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SkeletonCard className="h-72" />
+        <SkeletonCard className="h-72" />
+      </div>
+    </div>
+  );
 
   const totalBanks = data.banks?.reduce((s, b) => s + Number(b.currentBalance), 0) || 0;
   const overduePayables = data.payables?.items?.filter((p) => new Date(p.dueDate) < new Date() && p.status !== 'paid').length || 0;

@@ -6,6 +6,7 @@ import { ptBR } from '@clerk/localizations'
 import './index.css'
 import App from './App.jsx'
 import { DashboardProvider } from './context/DashboardContext'
+import { ToastProvider } from './components/ui/primitives'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
@@ -49,7 +50,9 @@ createRoot(document.getElementById('root')).render(
       }}
     >
       <DashboardProvider>
-        <App />
+        <ToastProvider>
+          <App />
+        </ToastProvider>
       </DashboardProvider>
     </ClerkProvider>
   </StrictMode>,
