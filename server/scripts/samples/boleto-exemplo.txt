@@ -1,0 +1,18 @@
+# Boleto Bancario - Exemplo SEED para testes E2E
+# Banco: Banco do Brasil (001)
+# Valor: R$ 100,00
+# Vencimento: 2026-05-15
+
+# Linha digitavel (47 digitos com DVs validos)
+00190000090281762200886680026046891070000010000
+
+# Codigo de barras (44 digitos)
+00191070000010000281768866802604689100000010000
+
+# ATENCAO:
+# - Esse codigo e baseado num exemplo classico de demonstracao do BB.
+# - Pode dar "checksum invalido" no validador do Breaker se ele for muito estrito;
+#   caso de erro, gerar boleto real do internet banking pra testar.
+# - O fator de vencimento aqui pode estar fixo no passado;
+#   Pra teste E2E do fluxo de "criar payable a partir de boleto",
+#   o importante e que o sistema parseie banco+valor mesmo se a data nao for futura.

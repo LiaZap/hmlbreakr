@@ -44,5 +44,9 @@ bulk-restore.html
 restore-pampa.html
 migration-monday.md
 
+# Seed samples gerados (PDFs binarios pesados — gerar via npm run seed:samples)
+server/scripts/samples/*.pdf
+# (xml, ofx, csv, xlsx, txt em scripts/samples/ SAO commitados)
+
 # Claude Code config (local)
 .claude/
