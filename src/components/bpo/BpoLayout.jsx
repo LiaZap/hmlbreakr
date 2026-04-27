@@ -8,7 +8,8 @@ import { useBpo } from '../../context/BpoContext';
 import { Button, EmptyState } from '../ui/primitives';
 import BpoClientSelector from './BpoClientSelector';
 
-const NAV = [
+// Seções comuns (cliente + operador)
+const NAV_COMMON = [
   { id: 'overview', label: 'Visão Geral', icon: 'home' },
   { id: 'cadastros', label: 'Cadastros', icon: 'users', children: [
     { id: 'suppliers', label: 'Fornecedores' },
@@ -28,6 +29,10 @@ const NAV = [
     { id: 'bancario', label: 'Saldos / Conciliação / Transferências' },
     { id: 'reconciliation-rules', label: 'Regras de Conciliação' },
   ]},
+];
+
+// Seções só do operador BPO (multi-cliente)
+const NAV_OPERATOR_ONLY = [
   { id: 'whatsapp', label: 'WhatsApp Inbox', icon: 'list' },
   { id: 'painel', label: 'Painel BPO (multi-cliente)', icon: 'dashboard', children: [
     { id: 'painel', label: 'Visão Multi-cliente' },
@@ -47,23 +52,27 @@ const Icon = ({ name }) => {
   return <svg width="16" height="16" viewBox="0 0 24 24">{paths[name]}</svg>;
 };
 
-const BpoLayout = ({ activeSection, onNavigate, children }) => {
+const BpoLayout = ({ activeSection, onNavigate, children, clientMode = false }) => {
   const { selectedClient, fetchBpoClients, bpoClients } = useBpo();
 
   useEffect(() => {
-    fetchBpoClients();
+    // No client mode, não puxa lista de clientes BPO (não tem permissão)
+    if (!clientMode) fetchBpoClients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clientMode]);
+
+  // Em client mode, esconde sidebar de seções multi-cliente
+  const NAV = clientMode ? NAV_COMMON : [...NAV_COMMON, ...NAV_OPERATOR_ONLY];
 
   return (
     <div className="flex flex-col w-full h-screen bg-background text-text font-jakarta overflow-hidden">
-      {/* Topbar */}
+      {/* Topbar — em clientMode, sem seletor de cliente (e título diferente) */}
       <header className="h-14 border-b border-border bg-bg-card flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-bold text-text-strong">Breakr BPO</span>
-          <span className="text-xs text-text-subtle">Financeiro</span>
+          <span className="text-sm font-bold text-text-strong">{clientMode ? 'Financeiro' : 'Breakr BPO'}</span>
+          <span className="text-xs text-text-subtle">{clientMode ? selectedClient?.name : 'BPO'}</span>
         </div>
-        <BpoClientSelector />
+        {!clientMode && <BpoClientSelector />}
       </header>
 
       <div className="flex flex-1 min-h-0">
@@ -106,9 +115,9 @@ const BpoLayout = ({ activeSection, onNavigate, children }) => {
           </nav>
         </aside>
 
-        {/* Main — seções multi-cliente não exigem cliente selecionado */}
+        {/* Main */}
         <main className="flex-1 overflow-y-auto p-6">
-          {!selectedClient && !['painel', 'tasks', 'whatsapp'].includes(activeSection) ? (
+          {!selectedClient && !clientMode && !['painel', 'tasks', 'whatsapp'].includes(activeSection) ? (
             <EmptyState
               icon={
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">

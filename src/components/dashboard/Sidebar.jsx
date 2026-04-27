@@ -31,6 +31,12 @@ const Sidebar = ({ activePage = 'home', onNavigate, isOwner = true }) => {
         <circle cx="17" cy="18" r="2" fill={active ? '#F5A623' : '#959387'} fillOpacity="0.5"/>
       </svg>
     )},
+    // BPO Financeiro V2.0 — acesso do dono do restaurante
+    { id: 'financeiro', label: 'Financeiro', icon: (active) => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" stroke={active ? '#F5A623' : '#959387'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    )},
   ];
 
   // Add Equipe if owner

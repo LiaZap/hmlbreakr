@@ -17,6 +17,7 @@ import RankingGeralIcon from './dashboard/RankingGeralIcon';
 import MatrizPreco from './dashboard/MatrizPreco';
 import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
+import BpoClientApp from './bpo/BpoClientApp';
 import DRE from './dashboard/DRE';
 import CardRateComparison from './dashboard/CardRateComparison';
 import InfoTooltip from './dashboard/InfoTooltip';
@@ -96,6 +97,10 @@ const Dashboard = () => {
       ) : activePage === 'equipe' ? (
         <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
           <Equipe />
+        </div>
+      ) : activePage === 'financeiro' ? (
+        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
+          <BpoClientApp />
         </div>
       ) : (
       <>
