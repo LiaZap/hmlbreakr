@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import boltIcon from '../../assets/bolt.svg';
+import AdminDREModal from './AdminDREModal';
 
 // Tiny sparkline SVG component
 const Sparkline = ({ data = [], color = '#F5A623', width = 60, height = 24 }) => {
@@ -56,6 +57,7 @@ const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState(isCommercial ? 'commercial' : 'dashboard'); // 'clients' | 'broadcasts' | 'commercial'
   const [broadcasts, setBroadcasts] = useState([]);
   const [broadcastModal, setBroadcastModal] = useState(null); // null | 'new' | broadcast object (edit)
+  const [dreModal, setDreModal] = useState(null); // { client, dre } — BAH-026
   const [broadcastForm, setBroadcastForm] = useState({ title: '', message: '', type: 'popup', targetCategory: '', imageUrl: '', expiresAt: '' });
   const [financialFilter, setFinancialFilter] = useState('all'); // 'all' | 'cf_high' | 'no_revenue' | 'complete' | 'inactive'
   const [adminPhoto, setAdminPhoto] = useState(() => localStorage.getItem('breakr-admin-photo') || null);
@@ -1114,6 +1116,16 @@ const AdminPanel = () => {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 justify-end">
+                      {/* BAH-026: ver DRE Aberto do cliente */}
+                      {fin?.dre && (
+                        <button
+                          onClick={() => setDreModal({ client: { ...client, name: getClientDisplay(client).displayName }, dre: fin.dre })}
+                          className="p-2 rounded-[8px] text-[#868686] hover:text-[#F5A623] hover:bg-[#252527] transition-colors"
+                          title="Ver DRE Aberto"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      )}
                       <button
                         onClick={() => openClientAsAdmin(client.hash)}
                         className="p-2 rounded-[8px] text-[#868686] hover:text-white hover:bg-[#252527] transition-colors"
@@ -2021,6 +2033,15 @@ const AdminPanel = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* DRE Aberto Modal — BAH-026 */}
+      {dreModal && (
+        <AdminDREModal
+          client={dreModal.client}
+          dre={dreModal.dre}
+          onClose={() => setDreModal(null)}
+        />
       )}
     </div>
   );

@@ -68,8 +68,15 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent, t
           </svg>
         </div>
         <div className="min-w-0">
-          <div className="font-semibold text-[13px] text-white truncate max-w-[150px]">{item.name}</div>
-          <div className="text-[10px] text-[#868686]">{item.type}</div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="font-semibold text-[13px] text-white truncate max-w-[150px]">{item.name}</div>
+            {item.isModular && (
+              <span className="px-1.5 py-0.5 bg-[#F5A623]/15 text-[#F5A623] text-[8px] font-bold rounded uppercase tracking-wider whitespace-nowrap">Modular</span>
+            )}
+          </div>
+          <div className="text-[10px] text-[#868686]">
+            {item.isModular ? `${item.modules?.length || 0} módulos` : item.type}
+          </div>
         </div>
       </div>
       {pv > 0 && displayPct !== null && (
@@ -102,7 +109,11 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent, t
             <rect x="4" y="2" width="16" height="20" rx="2" stroke="#959387" strokeWidth="2"/>
           </svg>
         </div>
-        <span className="text-[11px] text-[#868686]">{item.insumos} Insumos</span>
+        <span className="text-[11px] text-[#868686]">
+          {item.isModular
+            ? `${(item.modules || []).reduce((s, m) => s + (m.options?.length || 0), 0)} opções`
+            : `${item.insumos || (item.ingredients?.length || 0)} Insumos`}
+        </span>
       </div>
       <div className="flex items-center gap-2">
         {onDelete && (
@@ -1779,6 +1790,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
 import { useDashboard } from '../../context/DashboardContext';
 import CategoriesModal from './CategoriesModal';
 import SimuladorPrecificacao from './SimuladorPrecificacao';
+import CriarFichaModularModal from './CriarFichaModularModal';
 
 // ... (keep Modals and sub-components as is)
 
@@ -1901,6 +1913,8 @@ const FichaTecnica = () => {
   const [editingInsumo, setEditingInsumo] = useState(null);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
   const [showSimulador, setShowSimulador] = useState(false);
+  // BAH-037: ficha modular (pizzas, combos)
+  const [modalFichaModular, setModalFichaModular] = useState(null); // null | 'new' | ficha object
 
   const handleSaveFicha = (fichaData, isEditing) => {
     let newFichas;
@@ -2547,6 +2561,16 @@ const FichaTecnica = () => {
                               Simular Preço
                           </button>
 
+                          {/* BAH-037: Nova ficha modular (pizzas, combos) */}
+                          <button
+                              onClick={() => setModalFichaModular('new')}
+                              className="bg-[#252527] hover:bg-[#333] border border-[#2A2A2C] text-white text-[11px] font-medium px-3 py-1.5 rounded-[8px] flex items-center gap-1.5 transition-colors"
+                              title="Ficha modular pra pizzas, combos e produtos compostos"
+                          >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                              Nova Modular
+                          </button>
+
                           <button
                               onClick={handleDownloadFichasTemplate}
                               className="text-[11px] font-medium text-[#F5A623] hover:text-[#E5961E] transition-colors flex items-center gap-1.5"
@@ -2680,7 +2704,7 @@ const FichaTecnica = () => {
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                         {pageItems.map((item) => (
-                          <FichaTecnicaCard key={item.id} item={item} onClick={() => setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
+                          <FichaTecnicaCard key={item.id} item={item} onClick={() => item.isModular ? setModalFichaModular(item) : setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
                         ))}
                       </div>
                     )}
@@ -2749,6 +2773,16 @@ const FichaTecnica = () => {
       {/* Simulador de Precificação (BAH-039) */}
       {showSimulador && (
         <SimuladorPrecificacao onClose={() => setShowSimulador(false)} />
+      )}
+
+      {/* Ficha Modular Modal (BAH-037) — pizza, combos, compostos */}
+      {modalFichaModular && (
+        <CriarFichaModularModal
+          editingFicha={modalFichaModular !== 'new' ? modalFichaModular : null}
+          onClose={() => setModalFichaModular(null)}
+          onSave={handleSaveFicha}
+          onDelete={handleDeleteFicha}
+        />
       )}
     </div>
   );

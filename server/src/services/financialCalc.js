@@ -35,7 +35,7 @@ function calculateFixedCosts(formData) {
   // === Utilities, Recurring, Operational ===
   sumComposite('utilities', ['energy', 'water', 'internet', 'telefone', 'security', 'security_guard']);
   sumComposite('recurring_services', ['pest_control', 'waste_removal', 'cleaning_supplies']);
-  sumComposite('operational_fixed', ['kitchen_gas', 'kitchen_oil']);
+  sumComposite('operational_fixed', ['kitchen_gas', 'kitchen_oil', 'disposables']);
 
   // === Monthly Services (lista dinâmica) ===
   if (Array.isArray(formData.monthly_services)) {
@@ -162,6 +162,125 @@ function calculateRevenue(formData) {
   };
 }
 
+// Pró-labore total (soma dos sócios com +11% INSS) — separado para o DRE
+function calculateProLabore(formData) {
+  if (!Array.isArray(formData?.partners)) return 0;
+  return formData.partners.reduce((acc, p) => {
+    const pl = parseCurrency(p.pro_labore);
+    return acc + pl + (pl * 0.11);
+  }, 0);
+}
+
+// Estimativa de impostos sobre faturamento (Simples Nacional Anexo I) ou MEI fixo
+function estimateTaxRate(formData, revenue) {
+  if (formData.identity?.is_mei === 'Sim') return 0; // MEI: imposto fixo já entra em DAS (custo fixo), não percentual aqui
+  if (formData.identity?.tax_regime !== 'Simples Nacional') return 0;
+  const userRate = formData.admin_systems?.simples_rate;
+  const cleanRate = userRate ? parseFloat(String(userRate).replace(',', '.')) : 0;
+  if (cleanRate > 0) return cleanRate / 100;
+  // Fallback: tabela Anexo I (Comércio) com RBT12 anualizado
+  const rbt12 = revenue * 12;
+  if (rbt12 <= 180000) return 0.04;
+  if (rbt12 <= 360000) return ((rbt12 * 0.073) - 5940) / rbt12;
+  if (rbt12 <= 720000) return ((rbt12 * 0.095) - 13860) / rbt12;
+  if (rbt12 <= 1800000) return ((rbt12 * 0.107) - 22500) / rbt12;
+  if (rbt12 <= 3600000) return ((rbt12 * 0.143) - 87300) / rbt12;
+  return ((rbt12 * 0.19) - 378000) / rbt12;
+}
+
+// Taxa média ponderada de cartão (débito + crédito)
+function estimateCardFeeRate(formData) {
+  if (!Array.isArray(formData?.fees_cards)) return 0;
+  const valid = formData.fees_cards.filter(c => c?.rate);
+  if (valid.length === 0) return 0;
+  const total = valid.reduce((s, c) => s + (parseFloat(String(c.rate).replace(',', '.')) || 0), 0);
+  return total / valid.length / 100;
+}
+
+// Comissão média ponderada de marketplace (commission * sales_pct)
+function estimateMarketplaceFeeRate(formData) {
+  if (!Array.isArray(formData?.fees_marketplaces)) return 0;
+  let weighted = 0;
+  formData.fees_marketplaces.forEach(m => {
+    const comm = parseFloat(String(m.commission || '0').replace(',', '.').replace('%', '')) || 0;
+    const sales = parseFloat(String(m.sales_percentage || '0').replace(',', '.').replace('%', '')) || 0;
+    weighted += (comm * sales) / 100;
+  });
+  return weighted / 100;
+}
+
+// CMV teórico (% sobre receita) calculado a partir das fichas técnicas
+function estimateCMVRate(data) {
+  const fichas = data?.operational?.fichas || [];
+  const withPrice = fichas.filter(f => parseCurrency(f.precoVenda) > 0 && parseCurrency(f.custoTotal) > 0);
+  if (withPrice.length === 0) return 0;
+  const avg = withPrice.reduce((s, f) => s + (parseCurrency(f.custoTotal) / parseCurrency(f.precoVenda)), 0) / withPrice.length;
+  return avg;
+}
+
+// Calcula DRE aberto pra exibição no Painel ADM (BAH-026)
+function calculateDRE(clientData) {
+  const data = typeof clientData === 'string' ? JSON.parse(clientData) : clientData;
+  if (!data?.formData) return null;
+  const fd = data.formData;
+  const rev = calculateRevenue(fd);
+  const receitaBruta = rev.latest;
+  if (receitaBruta === 0) return null;
+
+  const costs = calculateFixedCosts(fd);
+  const proLabore = calculateProLabore(fd);
+  const despesasFixas = costs.totalFixedCosts - proLabore; // separa pró-labore das despesas
+
+  const taxRate = estimateTaxRate(fd, receitaBruta);
+  const cardRate = estimateCardFeeRate(fd);
+  const mpRate = estimateMarketplaceFeeRate(fd);
+  const cmvRate = estimateCMVRate(data);
+
+  const impostos = receitaBruta * taxRate;
+  const taxasCartao = receitaBruta * cardRate;
+  const taxasMarketplace = receitaBruta * mpRate;
+  const taxasVenda = taxasCartao + taxasMarketplace;
+  const deducoes = impostos + taxasVenda;
+  const receitaLiquida = receitaBruta - deducoes;
+
+  const cmv = receitaBruta * cmvRate;
+  const margemContribuicao = receitaLiquida - cmv;
+
+  const resultadoOperacional = margemContribuicao - despesasFixas;
+  const lucroLiquido = resultadoOperacional - proLabore;
+
+  const pct = (v) => receitaBruta > 0 ? (v / receitaBruta) * 100 : 0;
+
+  return {
+    receitaBruta,
+    deducoes,
+    impostos,
+    taxasVenda,
+    taxasCartao,
+    taxasMarketplace,
+    receitaLiquida,
+    cmv,
+    cmvRate: cmvRate * 100,
+    margemContribuicao,
+    despesasFixas,
+    proLabore,
+    resultadoOperacional,
+    lucroLiquido,
+    isProfit: lucroLiquido >= 0,
+    // Percentuais
+    deducoesPct: pct(deducoes),
+    impostosPct: pct(impostos),
+    taxasVendaPct: pct(taxasVenda),
+    receitaLiquidaPct: pct(receitaLiquida),
+    cmvPct: pct(cmv),
+    margemContribuicaoPct: pct(margemContribuicao),
+    despesasFixasPct: pct(despesasFixas),
+    proLaborePct: pct(proLabore),
+    resultadoOperacionalPct: pct(resultadoOperacional),
+    lucroLiquidoPct: pct(lucroLiquido),
+  };
+}
+
 function calculateClientFinancials(clientData) {
   const data = typeof clientData === 'string' ? JSON.parse(clientData) : clientData;
   if (!data || !data.formData) return null;
@@ -181,6 +300,8 @@ function calculateClientFinancials(clientData) {
     cfPct: Math.round(cfPct * 10) / 10,
     fichas: (data.operational?.fichas || []).length,
     insumos: (data.operational?.insumos || []).length,
+    // DRE Aberto (BAH-026)
+    dre: calculateDRE(data),
   };
 }
 
@@ -189,4 +310,5 @@ module.exports = {
   calculateFixedCosts,
   calculateRevenue,
   calculateClientFinancials,
+  calculateDRE,
 };
