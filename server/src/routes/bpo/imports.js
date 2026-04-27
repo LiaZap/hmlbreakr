@@ -13,6 +13,7 @@
 const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const { PDFParse } = require('pdf-parse');
 const { PrismaClient } = require('@prisma/client');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
@@ -465,6 +466,180 @@ router.get('/excel/template/:type', (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="template_${type}.xlsx"`);
   res.send(buf);
+});
+
+// ============================================================================
+// 4. IMPORT PDF (Beta) — heurísticas regex sobre texto extraído
+// ============================================================================
+
+/**
+ * Heurísticas pra detectar campos comuns em boletos/notas/contratos PDF.
+ * Trabalha só sobre PDFs digitais (texto). PDFs escaneados retornam texto
+ * vazio — nesse caso devolvemos 422 com mensagem clara.
+ */
+const extractPdfFields = (text) => {
+  const result = { cnpj: null, valor: null, vencimento: null, descricao: null, invoiceNumber: null };
+
+  // CNPJ — formatado (xx.xxx.xxx/xxxx-xx) ou só números (14 dígitos)
+  const cnpjFormatted = text.match(/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/);
+  if (cnpjFormatted) {
+    result.cnpj = cnpjFormatted[1].replace(/\D/g, '');
+  } else {
+    // Procura 14 dígitos consecutivos (mas não confundir com cód. de barras de 44+)
+    const cnpjRaw = text.match(/(?<!\d)(\d{14})(?!\d)/);
+    if (cnpjRaw) result.cnpj = cnpjRaw[1];
+  }
+
+  // Valor — prioriza "Total: R$ x" / "Valor do Documento: R$ x" / "R$ x,yy"
+  const valorPatterns = [
+    /(?:valor\s+(?:total|do\s+documento|a\s+pagar|cobrado)|total\s+(?:geral|a\s+pagar)?|montante)\s*[:\-]?\s*R?\$?\s*([\d\.]+,\d{2})/i,
+    /R\$\s*([\d\.]+,\d{2})/,
+    /(?:^|\s)([\d\.]+,\d{2})(?:\s|$)/m,
+  ];
+  for (const re of valorPatterns) {
+    const m = text.match(re);
+    if (m) {
+      const raw = m[1].replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(raw);
+      if (!isNaN(num) && num > 0) {
+        result.valor = num;
+        break;
+      }
+    }
+  }
+
+  // Vencimento — "Vencimento: dd/mm/aaaa" / "Data de Pagamento" / "Vence em"
+  const vencPatterns = [
+    /(?:vencimento|data\s+de\s+(?:pagamento|vencimento)|vence\s+em|venc\.?)\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})/i,
+    /(?:vencimento|data\s+de\s+(?:pagamento|vencimento))\s*[:\-]?\s*(\d{4}-\d{2}-\d{2})/i,
+    /(\d{2}\/\d{2}\/\d{4})/, // fallback: primeira data dd/mm/aaaa
+  ];
+  for (const re of vencPatterns) {
+    const m = text.match(re);
+    if (m) {
+      const raw = m[1];
+      let iso;
+      if (raw.includes('/')) {
+        const [d, mo, y] = raw.split('/');
+        iso = `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      } else {
+        iso = raw;
+      }
+      const dt = new Date(iso);
+      if (!isNaN(dt.getTime())) {
+        result.vencimento = dt.toISOString();
+        break;
+      }
+    }
+  }
+
+  // Razão Social / Descrição
+  const razaoMatch = text.match(/(?:raz[aã]o\s+social|emitente|fornecedor|cedente|benefici[aá]rio)\s*[:\-]?\s*([^\n\r]{3,80})/i);
+  if (razaoMatch) {
+    result.descricao = razaoMatch[1].trim().replace(/\s{2,}/g, ' ');
+  } else {
+    // Fallback: primeira linha não vazia, limitada
+    const firstLine = text.split(/[\r\n]+/).map((l) => l.trim()).find((l) => l.length > 5 && l.length < 100);
+    if (firstLine) result.descricao = firstLine;
+  }
+
+  // Número da NF
+  const nfMatch = text.match(/(?:nota\s+fiscal\s+(?:eletr[oô]nica)?\s*(?:n[ºo°]\.?|num(?:ero)?)?|nfe?\s*[:\-]?)\s*(\d{1,12})/i);
+  if (nfMatch) result.invoiceNumber = nfMatch[1];
+
+  return result;
+};
+
+router.post('/pdf', upload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Arquivo PDF obrigatório (campo "pdf")', items: [], errors: [] });
+
+    // 1. Extrai texto via pdf-parse
+    let text = '';
+    try {
+      const parser = new PDFParse({ data: req.file.buffer });
+      const parsed = await parser.getText();
+      text = (parsed.text || '').trim();
+    } catch (err) {
+      return res.status(400).json({
+        error: `Falha ao ler PDF: ${err.message}`,
+        items: [], errors: [{ error: err.message }],
+      });
+    }
+
+    // 2. PDF escaneado / sem texto
+    if (!text || text.length < 50) {
+      return res.status(422).json({
+        error: 'PDF parece ser escaneado. OCR de imagem não está disponível ainda — converta pra texto ou use o XML/código de barras.',
+        items: [], errors: [{ error: 'no_text_layer' }],
+        textLength: text.length,
+      });
+    }
+
+    // 3. Aplica heurísticas
+    const extracted = extractPdfFields(text);
+
+    // 4. Modo preview — só retorna dados extraídos, não cria nada
+    if (req.query.preview === '1' || req.query.preview === 'true') {
+      return res.json({ items: [], errors: [], extracted, textPreview: text.substring(0, 500) });
+    }
+
+    // 5. Permite override de campos via body (form-data)
+    const cnpj = (req.body.cnpj || extracted.cnpj || '').toString().replace(/\D/g, '');
+    const valor = parseFloat(String(req.body.valor || extracted.valor || '').toString().replace(',', '.'));
+    const vencimento = req.body.vencimento || extracted.vencimento;
+    const descricao = req.body.descricao || extracted.descricao || 'Importado via PDF';
+    const invoiceNumber = req.body.invoiceNumber || extracted.invoiceNumber || null;
+
+    const errors = [];
+    if (!valor || isNaN(valor)) errors.push({ field: 'valor', error: 'Valor não detectado / inválido' });
+    if (!vencimento) errors.push({ field: 'vencimento', error: 'Vencimento não detectado' });
+    if (errors.length > 0) {
+      return res.status(400).json({
+        error: 'Campos obrigatórios ausentes — corrija manualmente no preview',
+        items: [], errors, extracted,
+      });
+    }
+
+    // 6. Resolve / cria Supplier (stub se CNPJ desconhecido)
+    let supplier = null;
+    if (cnpj && cnpj.length === 14) {
+      supplier = await prisma.supplier.findUnique({
+        where: { clientId_cnpj: { clientId: req.bpoClient.id, cnpj } },
+      });
+      if (!supplier) {
+        supplier = await prisma.supplier.create({
+          data: {
+            clientId: req.bpoClient.id,
+            cnpj,
+            name: descricao.substring(0, 80),
+            notes: '[STUB] Criado automaticamente via import PDF — revisar dados',
+          },
+        });
+      }
+    }
+
+    // 7. Cria Payable (pending + requiresApproval pra cliente revisar)
+    const payable = await prisma.payable.create({
+      data: {
+        clientId: req.bpoClient.id,
+        supplierId: supplier ? supplier.id : null,
+        amount: valor,
+        remainingAmount: valor,
+        dueDate: new Date(vencimento),
+        paymentForecast: new Date(vencimento),
+        invoiceNumber,
+        description: descricao,
+        status: 'pending',
+        requiresApproval: true,
+      },
+    });
+
+    return res.json({ items: [payable], errors: [], extracted, supplier });
+  } catch (err) {
+    console.error('[bpo imports pdf]', err);
+    res.status(500).json({ error: 'Erro ao importar PDF: ' + err.message, items: [], errors: [{ error: err.message }] });
+  }
 });
 
 module.exports = router;

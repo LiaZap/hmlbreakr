@@ -288,13 +288,25 @@ const ReconcileModal = ({ tx, onClose, onSaved }) => {
             {suggestions.map((s, i) => (
               <button key={i} onClick={() => handleReconcile(s)} disabled={confirming}
                 className="text-left bg-bg-elevated hover:border-brand border border-border rounded-md p-3 transition-colors disabled:opacity-50">
-                <div className="flex items-center justify-between mb-1">
-                  <Badge variant={s.type === 'payable' ? 'danger' : 'success'}>{s.type === 'payable' ? 'A Pagar' : 'A Receber'}</Badge>
+                <div className="flex items-center justify-between mb-1 gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant={s.type === 'payable' ? 'danger' : 'success'}>{s.type === 'payable' ? 'A Pagar' : 'A Receber'}</Badge>
+                    {s.aiSuggested && (
+                      <Badge variant="info" size="xs" title={s.aiReason || 'Sugerido por IA (gpt-4o-mini)'}>
+                        ✨ IA
+                      </Badge>
+                    )}
+                  </div>
                   <Badge variant={s.confidence > 80 ? 'success' : s.confidence > 60 ? 'warning' : 'default'} size="xs">
                     {s.confidence}% match
                   </Badge>
                 </div>
                 <div className="text-sm font-medium text-text-strong">{s.label}</div>
+                {s.aiSuggested && s.aiReason && (
+                  <div className="text-[11px] text-text-muted mt-1 italic">
+                    {s.aiReason}
+                  </div>
+                )}
               </button>
             ))}
           </div>

@@ -37,6 +37,7 @@ server/.env.prod-backup
 server/.env.*-backup
 server/backup-*.json
 TEST_BPO_LOCAL.md
+BPO_E2E_TESTS.md
 
 # Ad-hoc scripts/docs locais
 bulk-restore.html

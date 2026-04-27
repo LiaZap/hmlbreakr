@@ -25,6 +25,8 @@
     "helmet": "^8.1.0",
     "multer": "^2.0.2",
     "nodemailer": "^8.0.4",
+    "openai": "^6.34.0",
+    "pdf-parse": "^2.4.5",
     "prisma": "^5.22.0",
     "stripe": "^22.0.0",
     "xlsx": "^0.18.5"

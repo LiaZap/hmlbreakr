@@ -24,6 +24,91 @@ const router = express.Router({ mergeParams: true });
 const prisma = new PrismaClient();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
+// ============================================================================
+// IA helper (OpenAI gpt-4o-mini) — opcional, fallback gracioso pra word-match
+// ============================================================================
+let openaiClient = null;
+const getOpenAI = () => {
+  if (!process.env.OPENAI_API_KEY) return null;
+  if (openaiClient) return openaiClient;
+  try {
+    const OpenAI = require('openai');
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    return openaiClient;
+  } catch (err) {
+    console.warn('[reconciliation] OpenAI SDK indisponível:', err.message);
+    return null;
+  }
+};
+
+/**
+ * suggestWithAI — Refina sugestões usando gpt-4o-mini.
+ * @param {object} transaction — { description, amount, date, type }
+ * @param {Array} candidates  — top-N candidatos do word-match (max 5 ideal)
+ * @returns {Promise<{payableId|receivableId, confidence, reason} | null>}
+ */
+const suggestWithAI = async (transaction, candidates) => {
+  const client = getOpenAI();
+  if (!client) return null;
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+
+  const top = candidates.slice(0, 5);
+  const candidateLines = top.map((c, i) => {
+    const dueDate = c.dueDate ? new Date(c.dueDate).toISOString().slice(0, 10) : '—';
+    const name = c.supplierName || c.payerName || 'Sem fornecedor';
+    return `${i + 1}. id=${c.id} | nome="${name}" | valor=R$${Number(c.remainingAmount).toFixed(2)} | vencimento=${dueDate} | descricao="${c.description || ''}"`;
+  }).join('\n');
+
+  const txDate = transaction.date ? new Date(transaction.date).toISOString().slice(0, 10) : '—';
+  const userPrompt = [
+    `Transação bancária:`,
+    `- descrição: "${transaction.description}"`,
+    `- valor: R$${Number(transaction.amount).toFixed(2)}`,
+    `- data: ${txDate}`,
+    `- tipo: ${transaction.type}`,
+    ``,
+    `Candidatos (${top.length}):`,
+    candidateLines,
+    ``,
+    `Escolha o MELHOR match e retorne JSON: {"payableId": "<id>", "confidence": 0-100, "reason": "<motivo curto em pt-BR>"}.`,
+    `Se nenhum candidato for plausível, retorne {"payableId": null, "confidence": 0, "reason": "<motivo>"}.`,
+  ].join('\n');
+
+  try {
+    console.log(`[reconciliation] Using OpenAI for ${top.length} candidates`);
+    const completion = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+      temperature: 0.2,
+      max_tokens: 200,
+      messages: [
+        {
+          role: 'system',
+          content: 'Você é assistente de conciliação bancária. Recebe descrição de transação bancária e lista de contas a pagar/receber pendentes. Retorne JSON com {payableId, confidence: 0-100, reason}. Considere: similaridade de descrição, fornecedor, valor próximo (margem 5%), data próxima (±3 dias).',
+        },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+
+    const raw = completion.choices?.[0]?.message?.content || '{}';
+    const parsed = JSON.parse(raw);
+    const chosenId = parsed.payableId || parsed.receivableId || null;
+    if (!chosenId) return null;
+
+    const matched = top.find((c) => c.id === chosenId);
+    if (!matched) return null;
+
+    return {
+      id: matched.id,
+      confidence: Math.max(0, Math.min(100, Number(parsed.confidence) || 0)),
+      reason: typeof parsed.reason === 'string' ? parsed.reason.slice(0, 240) : '',
+    };
+  } catch (err) {
+    console.warn('[reconciliation] OpenAI fallback (word-match):', err.message);
+    return null;
+  }
+};
+
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
 
@@ -197,6 +282,9 @@ router.get('/suggest/:transactionId', async (req, res) => {
 
     const suggestions = [];
 
+    let aiCandidatePool = []; // pool enriquecido pra alimentar IA (ids + metadados)
+    const targetType = tx.type === 'debit' ? 'payable' : 'receivable';
+
     if (tx.type === 'debit') {
       // Provavelmente uma conta a pagar
       const candidates = await prisma.payable.findMany({
@@ -214,6 +302,13 @@ router.get('/suggest/:transactionId', async (req, res) => {
         if (Number(c.remainingAmount) === amountNum) confidence += 30;
         if (c.supplier?.name && tx.description.toLowerCase().includes(c.supplier.name.toLowerCase().split(' ')[0])) confidence += 20;
         suggestions.push({ type: 'payable', id: c.id, label: `${c.supplier?.name || 'Sem fornecedor'} — R$ ${c.remainingAmount}`, confidence });
+        aiCandidatePool.push({
+          id: c.id,
+          supplierName: c.supplier?.name || null,
+          remainingAmount: c.remainingAmount,
+          dueDate: c.dueDate,
+          description: c.description || c.notes || '',
+        });
       });
     } else {
       // Crédito = conta a receber
@@ -231,6 +326,13 @@ router.get('/suggest/:transactionId', async (req, res) => {
         if (Number(c.remainingAmount) === amountNum) confidence += 30;
         if (c.payerName && tx.description.toLowerCase().includes(c.payerName.toLowerCase().split(' ')[0])) confidence += 20;
         suggestions.push({ type: 'receivable', id: c.id, label: `${c.payerName} — R$ ${c.remainingAmount}`, confidence });
+        aiCandidatePool.push({
+          id: c.id,
+          payerName: c.payerName || null,
+          remainingAmount: c.remainingAmount,
+          dueDate: c.dueDate,
+          description: c.description || c.notes || '',
+        });
       });
     }
 
@@ -248,6 +350,42 @@ router.get('/suggest/:transactionId', async (req, res) => {
 
     // Ordena por confidence decrescente
     suggestions.sort((a, b) => b.confidence - a.confidence);
+
+    // === IA refinement (gpt-4o-mini) ===
+    // Aciona quando: tem candidatos, a melhor sugestão tem confiança baixa (sem
+    // valor exato) OU múltiplos candidatos empatados perto do topo.
+    const top = suggestions[0];
+    const hasExactValue = top && top.confidence >= 80;
+    const tieAtTop = suggestions.length > 1 && top && (top.confidence - suggestions[1].confidence) < 15;
+    const lowConfidence = top && top.confidence < 80;
+    const shouldCallAI = process.env.OPENAI_API_KEY
+      && suggestions.length > 0
+      && (lowConfidence || tieAtTop || !hasExactValue);
+
+    if (shouldCallAI) {
+      // Reordena pool pra match a ordem do suggestions (top-N primeiro)
+      const orderedPool = suggestions
+        .map((s) => aiCandidatePool.find((c) => c.id === s.id))
+        .filter(Boolean);
+      const aiPick = await suggestWithAI(
+        { description: tx.description, amount: tx.amount, date: tx.date, type: tx.type },
+        orderedPool,
+      );
+      if (aiPick) {
+        const idx = suggestions.findIndex((s) => s.id === aiPick.id);
+        if (idx >= 0) {
+          suggestions[idx] = {
+            ...suggestions[idx],
+            confidence: aiPick.confidence,
+            aiSuggested: true,
+            aiReason: aiPick.reason,
+          };
+          // Move pra topo da lista
+          const promoted = suggestions.splice(idx, 1)[0];
+          suggestions.unshift(promoted);
+        }
+      }
+    }
 
     res.json({ transaction: tx, suggestions, matchedRules });
   } catch (err) {

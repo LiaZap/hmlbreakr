@@ -5,22 +5,22 @@
 
 import { useState } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Card, Button, Modal, Input, Badge, EmptyState } from '../../ui/primitives';
+import { Card, Button, Modal, Input, Badge, EmptyState, ErrorBanner, useToast } from '../../ui/primitives';
 
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
 const ImportsHub = () => {
-  const [modal, setModal] = useState(null); // 'nfe' | 'boleto' | 'excel'
+  const [modal, setModal] = useState(null); // 'nfe' | 'boleto' | 'excel' | 'pdf'
 
   return (
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-xl font-bold text-text-strong">Importações</h1>
-        <p className="text-xs text-text-muted mt-0.5">Importe lançamentos a partir de NF-e, boletos ou planilhas Excel.</p>
+        <p className="text-xs text-text-muted mt-0.5">Importe lançamentos a partir de NF-e, boletos, PDFs ou planilhas Excel.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <ImportCard
           title="Nota Fiscal Eletrônica"
           description="Upload de XML de NF-e (modelo 55). Cria fornecedor automaticamente e gera contas a pagar (incluindo parcelas se houver duplicatas)."
@@ -38,6 +38,15 @@ const ImportsHub = () => {
           onClick={() => setModal('boleto')}
         />
         <ImportCard
+          title="PDF (Beta)"
+          description="Upload de PDF digital (boleto, NF, contrato). Detecta CNPJ, valor, vencimento e descrição. Você revisa antes de criar."
+          color="warning"
+          badge="Beta"
+          icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5"/><path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5"/><text x="7" y="18" fontSize="6" fontWeight="bold" fill="currentColor">PDF</text></svg>}
+          buttonLabel="Importar PDF"
+          onClick={() => setModal('pdf')}
+        />
+        <ImportCard
           title="Planilha Excel"
           description="Upload em massa de fornecedores, categorias, contas a pagar ou receber. Baixe template pra ver o formato."
           color="info"
@@ -49,21 +58,26 @@ const ImportsHub = () => {
 
       {modal === 'nfe' && <NfeImportModal onClose={() => setModal(null)} />}
       {modal === 'boleto' && <BoletoImportModal onClose={() => setModal(null)} />}
+      {modal === 'pdf' && <PdfImportModal onClose={() => setModal(null)} />}
       {modal === 'excel' && <ExcelImportModal onClose={() => setModal(null)} />}
     </div>
   );
 };
 
-const ImportCard = ({ title, description, icon, color, buttonLabel, onClick }) => {
+const ImportCard = ({ title, description, icon, color, buttonLabel, onClick, badge }) => {
   const colorClass = {
     brand: 'text-brand bg-brand-soft border-brand/30',
     success: 'text-success bg-success-soft border-success/30',
     info: 'text-info bg-info-soft border-info/30',
+    warning: 'text-warning bg-warning-soft border-warning/30',
   }[color];
 
   return (
     <Card className="flex flex-col gap-3 hover:border-brand/40 transition-colors">
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colorClass}`}>{icon}</div>
+      <div className="flex items-start justify-between">
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colorClass}`}>{icon}</div>
+        {badge && <Badge variant="warning">{badge}</Badge>}
+      </div>
       <h3 className="text-sm font-semibold text-text-strong">{title}</h3>
       <p className="text-xs text-text-muted leading-relaxed flex-1">{description}</p>
       <Button variant="primary" onClick={onClick}>{buttonLabel}</Button>
@@ -272,7 +286,149 @@ const BoletoImportModal = ({ onClose }) => {
 };
 
 // =================================================================
-// 3. Excel import modal
+// 3. PDF import modal (Beta) — extrai texto + heurísticas regex
+// =================================================================
+const PdfImportModal = ({ onClose }) => {
+  const { bpoUrl } = useBpo();
+  const toast = useToast();
+  const [file, setFile] = useState(null);
+  const [extracted, setExtracted] = useState(null);
+  const [form, setForm] = useState({ cnpj: '', valor: '', vencimento: '', descricao: '', invoiceNumber: '' });
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handlePreview = async () => {
+    if (!file) { setError('Selecione um arquivo PDF'); return; }
+    setLoading(true); setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('pdf', file);
+      const res = await fetch(bpoUrl('/imports/pdf?preview=1'), { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao analisar PDF');
+      setExtracted(data.extracted);
+      // Pré-preenche o form com o que foi detectado (usuário corrige se errado)
+      const venc = data.extracted.vencimento ? data.extracted.vencimento.substring(0, 10) : '';
+      setForm({
+        cnpj: data.extracted.cnpj || '',
+        valor: data.extracted.valor != null ? String(data.extracted.valor).replace('.', ',') : '',
+        vencimento: venc,
+        descricao: data.extracted.descricao || '',
+        invoiceNumber: data.extracted.invoiceNumber || '',
+      });
+    } catch (err) {
+      setError(err.message);
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!form.valor || !form.vencimento) {
+      setError('Valor e vencimento são obrigatórios');
+      return;
+    }
+    setLoading(true); setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('pdf', file);
+      fd.append('cnpj', form.cnpj);
+      fd.append('valor', form.valor);
+      fd.append('vencimento', form.vencimento);
+      fd.append('descricao', form.descricao);
+      fd.append('invoiceNumber', form.invoiceNumber);
+      const res = await fetch(bpoUrl('/imports/pdf'), { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar lançamento');
+      setResult(data);
+      toast.success('Lançamento criado a partir do PDF!');
+    } catch (err) {
+      setError(err.message);
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Importar PDF (Beta)" size="lg"
+      footer={result ? (
+        <Button variant="primary" onClick={onClose}>Fechar</Button>
+      ) : extracted ? (
+        <>
+          <Button variant="secondary" onClick={() => { setExtracted(null); setError(null); }}>Voltar</Button>
+          <Button variant="primary" onClick={handleConfirm} loading={loading}>Criar lançamento</Button>
+        </>
+      ) : (
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" onClick={handlePreview} loading={loading}>Analisar PDF</Button>
+        </>
+      )}>
+      <div className="flex flex-col gap-4">
+        {error && <ErrorBanner message={error} />}
+
+        {result ? (
+          <div className="text-center py-6">
+            <div className="w-14 h-14 rounded-full bg-success-soft flex items-center justify-center mx-auto mb-3">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" className="text-success"/></svg>
+            </div>
+            <h3 className="text-base font-semibold text-text-strong mb-2">Lançamento criado!</h3>
+            <p className="text-sm text-text-muted">
+              Conta a pagar de <strong className="text-text-strong">{fmtBRL(result.items[0]?.amount)}</strong> com vencimento em {fmtDate(result.items[0]?.dueDate)}.<br />
+              <span className="text-xs text-warning">Status: aguardando aprovação (revise antes de pagar).</span>
+            </p>
+          </div>
+        ) : extracted ? (
+          <>
+            <div className="bg-warning-soft border border-warning/30 rounded-md px-3 py-2 text-xs text-warning">
+              Revise os campos detectados abaixo. A extração por PDF é heurística — corrija o que estiver errado antes de criar.
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="CNPJ" value={form.cnpj} onChange={(v) => setForm({ ...form, cnpj: v })} placeholder="14 dígitos" />
+              <Input label="Nº Nota Fiscal" value={form.invoiceNumber} onChange={(v) => setForm({ ...form, invoiceNumber: v })} placeholder="opcional" />
+              <Input label="Valor (R$)" value={form.valor} onChange={(v) => setForm({ ...form, valor: v })} placeholder="1234,56" />
+              <Input label="Vencimento" type="date" value={form.vencimento} onChange={(v) => setForm({ ...form, vencimento: v })} />
+              <div className="col-span-2">
+                <Input label="Descrição / Razão Social" value={form.descricao} onChange={(v) => setForm({ ...form, descricao: v })} />
+              </div>
+            </div>
+            {(!extracted.cnpj || !extracted.valor || !extracted.vencimento) && (
+              <p className="text-xs text-text-muted">
+                Campos não detectados:{' '}
+                {[
+                  !extracted.cnpj && 'CNPJ',
+                  !extracted.valor && 'valor',
+                  !extracted.vencimento && 'vencimento',
+                ].filter(Boolean).join(', ')}
+                . Preencha manualmente.
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="text-xs text-text-muted font-medium mb-1.5 block">Arquivo PDF</label>
+              <input
+                type="file" accept=".pdf,application/pdf"
+                onChange={(e) => setFile(e.target.files[0])}
+                className="block w-full text-xs text-text-muted file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-brand file:text-black file:font-bold file:cursor-pointer file:hover:bg-brand-hover"
+              />
+            </div>
+            <p className="text-xs text-text-subtle">
+              Apenas PDFs digitais (texto). PDFs escaneados (imagem) ainda não são suportados — use NF-e XML ou boleto. Tamanho máximo 10MB.
+            </p>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+};
+
+// =================================================================
+// 4. Excel import modal
 // =================================================================
 const ExcelImportModal = ({ onClose }) => {
   const { bpoUrl } = useBpo();
