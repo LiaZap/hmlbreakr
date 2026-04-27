@@ -14,6 +14,9 @@ import PartnersList from './cadastros/PartnersList';
 import PaymentMethodsList from './cadastros/PaymentMethodsList';
 import PayablesList from './lancamentos/PayablesList';
 import ReceivablesList from './lancamentos/ReceivablesList';
+import ImportsHub from './imports/ImportsHub';
+import ReportsHub from './relatorios/ReportsHub';
+import BpoDashboard from './dashboard/BpoDashboard';
 
 const ComingSoon = ({ section }) => (
   <EmptyState
@@ -29,10 +32,11 @@ const ComingSoon = ({ section }) => (
 );
 
 const BpoAppInner = () => {
-  const [section, setSection] = useState('suppliers');
+  const [section, setSection] = useState('overview');
 
   const renderSection = () => {
     switch (section) {
+      case 'overview': return <BpoDashboard />;
       case 'suppliers': return <SuppliersList />;
       case 'bank-accounts': return <BankAccountsList />;
       case 'categories': return <CategoriesList />;
@@ -41,7 +45,8 @@ const BpoAppInner = () => {
       case 'payment-methods': return <PaymentMethodsList />;
       case 'payables': return <PayablesList />;
       case 'receivables': return <ReceivablesList />;
-      case 'overview': return <ComingSoon section="Visão Geral" />;
+      case 'imports': return <ImportsHub />;
+      case 'relatorios': return <ReportsHub />;
       default: return <ComingSoon section={section} />;
     }
   };

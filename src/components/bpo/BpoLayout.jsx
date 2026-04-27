@@ -21,8 +21,9 @@ const NAV = [
   { id: 'lancamentos', label: 'Lançamentos', icon: 'list', children: [
     { id: 'payables', label: 'Contas a Pagar' },
     { id: 'receivables', label: 'Contas a Receber' },
+    { id: 'imports', label: 'Importar (NF-e/Boleto/Excel)' },
   ]},
-  { id: 'relatorios', label: 'Relatórios', icon: 'chart', disabled: true, soon: true },
+  { id: 'relatorios', label: 'Relatórios', icon: 'chart' },
   { id: 'bancario', label: 'Gestão Bancária', icon: 'bank', disabled: true, soon: true },
   { id: 'painel', label: 'Painel BPO', icon: 'dashboard', disabled: true, soon: true },
 ];
