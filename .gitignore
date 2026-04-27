@@ -33,7 +33,15 @@ test-local.bat
 test-local-stop.bat
 server/.env.local
 server/.env.production.backup
+server/.env.prod-backup
+server/.env.*-backup
 server/backup-*.json
+TEST_BPO_LOCAL.md
+
+# Ad-hoc scripts/docs locais
+bulk-restore.html
+restore-pampa.html
+migration-monday.md
 
 # Claude Code config (local)
 .claude/
