@@ -953,10 +953,17 @@ router.get('/client/:hash', async (req, res) => {
     }
 
     // Include credential status and profile data for frontend
-    // Clerk users (with clerkUserId) are considered authenticated — no need for local password
     dashboardData._hasCredentials = !!(client.email && client.password) || !!client.clerkUserId;
     dashboardData._clientEmail = client.email || null;
     dashboardData._profile = dashboardData.profile || {};
+
+    // BPO V2.0 — info pra Sidebar mostrar/esconder "Financeiro"
+    dashboardData._bpo = {
+      enabled: !!client.bpoEnabled,
+      activatedAt: client.bpoActivatedAt,
+      clientId: client.id,
+      hash: client.hash,
+    };
 
     // SEGURANÇA: se request vem de admin visualizando (header x-admin-viewing),
     // stripar dados pessoais sensíveis antes de enviar (email, CPF, telefone, aniversário, foto pessoal)

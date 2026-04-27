@@ -269,6 +269,24 @@ router.post('/:transactionId/reconcile', async (req, res) => {
     });
     if (!tx) return res.status(404).json({ error: 'Transação não encontrada' });
 
+    // BUG #7 FIX: valida saldo antes de conciliar (evita saldo negativo)
+    if (createPayment && (type === 'payable' || type === 'receivable')) {
+      const target = type === 'payable'
+        ? await prisma.payable.findUnique({ where: { id } })
+        : await prisma.receivable.findUnique({ where: { id } });
+      if (!target) return res.status(404).json({ error: `${type} não encontrado` });
+      const txAmount = Number(tx.amount);
+      const remaining = Number(target.remainingAmount);
+      const allowOverpay = req.body.allowOverpay === true;
+      if (txAmount > remaining + 0.01 && !allowOverpay) {
+        return res.status(400).json({
+          error: `Valor da transação (R$ ${txAmount.toFixed(2)}) é maior que o saldo (R$ ${remaining.toFixed(2)}).`,
+          txAmount, remaining, diff: txAmount - remaining,
+          hint: 'Confirme com allowOverpay=true se for intencional.',
+        });
+      }
+    }
+
     const result = await prisma.$transaction(async (txdb) => {
       // Marca como conciliada
       const updated = await txdb.bankTransaction.update({
@@ -276,7 +294,6 @@ router.post('/:transactionId/reconcile', async (req, res) => {
         data: { reconciledType: type, reconciledId: id, reconciledAt: new Date() },
       });
 
-      // Se for payable/receivable e createPayment=true, cria PaymentTransaction também
       if (createPayment && (type === 'payable' || type === 'receivable')) {
         const paymentData = {
           amount: Number(tx.amount),
@@ -288,14 +305,13 @@ router.post('/:transactionId/reconcile', async (req, res) => {
         else paymentData.receivableId = id;
         await txdb.paymentTransaction.create({ data: paymentData });
 
-        // Atualiza status do payable/receivable
         if (type === 'payable') {
           const p = await txdb.payable.findUnique({ where: { id } });
           if (p) {
             const newRemaining = Math.max(0, Number(p.remainingAmount) - Number(tx.amount));
             await txdb.payable.update({
               where: { id },
-              data: { remainingAmount: newRemaining, status: newRemaining > 0.01 ? 'paid_partial' : 'paid' },
+              data: { remainingAmount: newRemaining, status: newRemaining >= 0.01 ? 'paid_partial' : 'paid' },
             });
           }
         } else {
@@ -304,7 +320,7 @@ router.post('/:transactionId/reconcile', async (req, res) => {
             const newRemaining = Math.max(0, Number(r.remainingAmount) - Number(tx.amount));
             await txdb.receivable.update({
               where: { id },
-              data: { remainingAmount: newRemaining, status: newRemaining > 0.01 ? 'received_partial' : 'received' },
+              data: { remainingAmount: newRemaining, status: newRemaining >= 0.01 ? 'received_partial' : 'received' },
             });
           }
         }

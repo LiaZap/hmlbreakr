@@ -229,7 +229,7 @@ const PayableModal = ({ item, onClose, onSaved }) => {
                       <option value="yearly">Anual</option>
                     </select>
                   </div>
-                  <Input label="Quantas ocorrências" type="number" value={form.recurrenceCount} onChange={(v) => update('recurrenceCount', v)} />
+                  <Input label="Quantas ocorrências" type="number" value={form.recurrenceCount} onChange={(v) => update('recurrenceCount', Math.max(1, parseInt(v, 10) || 1))} min="1" />
                 </div>
               )}
 

@@ -38,10 +38,13 @@ export const BpoProvider = ({ children }) => {
       if (!res.ok) throw new Error('Falha ao listar clientes BPO');
       const data = await res.json();
       setBpoClients(data);
-      // Auto-seleciona primeiro se não houver seleção
-      if (!selectedClient && data.length > 0) {
-        setSelectedClient(data[0]);
-      }
+      // Auto-seleciona primeiro APENAS se não houver seleção válida (BUG #5: respeita localStorage)
+      setSelectedClient((current) => {
+        if (current && data.find((c) => c.id === current.id || c.hash === current.hash)) {
+          return current; // mantém o que estava no localStorage
+        }
+        return data.length > 0 ? data[0] : null;
+      });
       return data;
     } catch (err) {
       console.error('[BpoContext]', err);
@@ -49,7 +52,7 @@ export const BpoProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [selectedClient]);
+  }, []);
 
   const toggleBpoForClient = useCallback(async (clientHash, enabled) => {
     const res = await fetch(`${API_URL}/api/bpo/admin/clients/${clientHash}/bpo-toggle`, {
@@ -63,8 +66,9 @@ export const BpoProvider = ({ children }) => {
   }, [fetchBpoClients]);
 
   // Helper pra montar URL do cliente atual
+  // BUG #1 FIX: retorna null em vez de throw se sem cliente. Componentes devem checar.
   const bpoUrl = useCallback((path) => {
-    if (!selectedClient) throw new Error('Nenhum cliente BPO selecionado');
+    if (!selectedClient) return null;
     return `${API_URL}/api/bpo/${selectedClient.hash}${path.startsWith('/') ? '' : '/'}${path}`;
   }, [selectedClient]);
 

@@ -220,7 +220,7 @@ router.post('/:id/receive', async (req, res) => {
     }
 
     const newRemaining = Number(receivable.remainingAmount) - amountNum;
-    const isPartial = newRemaining > 0.001;
+    const isPartial = newRemaining >= 0.01;  // BUG #2 FIX: threshold consistente
 
     const result = await prisma.$transaction(async (tx) => {
       const txn = await tx.paymentTransaction.create({

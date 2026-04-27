@@ -141,15 +141,23 @@ router.post('/', async (req, res) => {
 
     // === RECORRÊNCIA ===
     if (recurrence?.frequency) {
+      // BUG #3 FIX: validar mínimo 1 e máximo razoável
+      const requestedCount = parseInt(recurrence.occurrencesCount, 10);
+      if (recurrence.occurrencesCount !== undefined && (isNaN(requestedCount) || requestedCount < 1)) {
+        return res.status(400).json({ error: 'occurrencesCount deve ser >= 1' });
+      }
+      if (requestedCount > 120) {
+        return res.status(400).json({ error: 'Máximo 120 ocorrências por vez' });
+      }
       const rec = await prisma.recurrence.create({
         data: {
           frequency: recurrence.frequency,
           intervalCount: recurrence.intervalCount || 1,
           startDate: new Date(dueDate),
-          occurrencesCount: recurrence.occurrencesCount || null,
+          occurrencesCount: requestedCount || null,
         },
       });
-      const count = recurrence.occurrencesCount || 12;
+      const count = requestedCount || 12;
       const created = [];
       for (let i = 0; i < count; i++) {
         const dueDateI = i === 0 ? new Date(dueDate) : advanceDate(dueDate, recurrence.frequency, i * (recurrence.intervalCount || 1));
@@ -253,7 +261,7 @@ router.post('/:id/pay', async (req, res) => {
     }
 
     const newRemaining = Number(payable.remainingAmount) - amountNum;
-    const isPartial = newRemaining > 0.001;
+    const isPartial = newRemaining >= 0.01;  // BUG #2 FIX: threshold consistente (1 centavo)
 
     // Transação: cria PaymentTransaction + atualiza Payable
     const result = await prisma.$transaction(async (tx) => {
@@ -286,7 +294,7 @@ router.post('/:id/pay', async (req, res) => {
 // AGENDAMENTO no banco (Fase 4 — por enquanto só marca como agendado)
 router.post('/:id/schedule', async (req, res) => {
   try {
-    const { scheduledAt, bankAccountId } = req.body;
+    const { scheduledAt, bankAccountId, requiresApproval } = req.body;
     if (!scheduledAt || !bankAccountId) return res.status(400).json({ error: 'scheduledAt e bankAccountId obrigatórios' });
 
     const payable = await prisma.payable.findFirst({
@@ -301,12 +309,73 @@ router.post('/:id/schedule', async (req, res) => {
         scheduledAt: new Date(scheduledAt),
         scheduledBankId: bankAccountId,
         scheduledStatus: 'sent',
+        requiresApproval: requiresApproval === true,
       },
     });
     res.json(item);
   } catch (err) {
     console.error('[bpo payables schedule]', err);
     res.status(500).json({ error: 'Erro ao agendar' });
+  }
+});
+
+// === WORKFLOW DE APROVAÇÃO (dono aprova pagamentos agendados pelo BPO operador) ===
+router.get('/pending-approval', async (req, res) => {
+  try {
+    const items = await prisma.payable.findMany({
+      where: {
+        clientId: req.bpoClient.id,
+        requiresApproval: true,
+        approvedAt: null,
+        rejectedAt: null,
+      },
+      orderBy: { scheduledAt: 'asc' },
+      include: {
+        supplier: { select: { name: true, cnpj: true } },
+        category: { select: { name: true } },
+      },
+    });
+    res.json({ items, total: items.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/approve', async (req, res) => {
+  try {
+    const { approverEmail } = req.body;
+    const item = await prisma.payable.update({
+      where: { id: req.params.id },
+      data: {
+        approvedAt: new Date(),
+        approvedBy: approverEmail || 'dono',
+        scheduledStatus: 'approved',
+      },
+    });
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/reject', async (req, res) => {
+  try {
+    const { reason, approverEmail } = req.body;
+    const item = await prisma.payable.update({
+      where: { id: req.params.id },
+      data: {
+        rejectedAt: new Date(),
+        approvedBy: approverEmail || 'dono',
+        rejectionReason: reason || 'Sem motivo informado',
+        scheduledStatus: 'rejected',
+        // Volta status pra pending pra dono ou BPO operador re-agendar
+        status: 'pending',
+        scheduledAt: null,
+      },
+    });
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

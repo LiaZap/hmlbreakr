@@ -14,6 +14,7 @@ import PartnersList from './cadastros/PartnersList';
 import PaymentMethodsList from './cadastros/PaymentMethodsList';
 import PayablesList from './lancamentos/PayablesList';
 import ReceivablesList from './lancamentos/ReceivablesList';
+import PendingApprovalsList from './lancamentos/PendingApprovalsList';
 import ImportsHub from './imports/ImportsHub';
 import ReportsHub from './relatorios/ReportsHub';
 import BpoDashboard from './dashboard/BpoDashboard';
@@ -50,6 +51,7 @@ const BpoAppInner = () => {
       case 'payment-methods': return <PaymentMethodsList />;
       case 'payables': return <PayablesList />;
       case 'receivables': return <ReceivablesList />;
+      case 'approvals': return <PendingApprovalsList />;
       case 'imports': return <ImportsHub />;
       case 'relatorios': return <ReportsHub />;
       case 'bancario': return <BankManagement />;

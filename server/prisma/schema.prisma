@@ -265,6 +265,12 @@ model Payable {
   scheduledAt       DateTime?
   scheduledBankId   String?
   scheduledStatus   String? // none | sent | approved | rejected
+  // Aprovação pelo dono (workflow BPO operador agenda → dono aprova)
+  requiresApproval  Boolean              @default(false)
+  approvedAt        DateTime?
+  approvedBy        String? // email do aprovador (dono)
+  rejectedAt        DateTime?
+  rejectionReason   String?
   // Audit
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt

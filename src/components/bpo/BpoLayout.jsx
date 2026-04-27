@@ -23,6 +23,7 @@ const NAV_COMMON = [
     { id: 'payables', label: 'Contas a Pagar' },
     { id: 'receivables', label: 'Contas a Receber' },
     { id: 'imports', label: 'Importar (NF-e/Boleto/Excel)' },
+    { id: 'approvals', label: 'Aguardando Aprovação' },
   ]},
   { id: 'relatorios', label: 'Relatórios', icon: 'chart' },
   { id: 'bancario', label: 'Gestão Bancária', icon: 'bank', children: [

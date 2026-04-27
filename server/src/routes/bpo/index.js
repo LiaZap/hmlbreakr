@@ -36,6 +36,7 @@ const reconciliationRoutes = require('./reconciliation');
 const opsPanelRoutes = require('./ops-panel');
 const tasksRoutes = require('./tasks');
 const { webhookRouter, inboxGlobalRouter, inboxRouter } = require('./whatsapp');
+const alertsRoutes = require('./alerts');
 
 // Toggle BPO pra um cliente (admin only — TODO: validar role)
 router.post('/admin/clients/:hash/bpo-toggle', async (req, res) => {
@@ -101,5 +102,8 @@ router.use('/:clientHash/whatsapp', inboxRouter);         // por cliente (auth)
 
 // Tarefas BPO (multi-cliente)
 router.use('/tasks', tasksRoutes);
+
+// Alertas pro Dashboard do dono (counters + top items)
+router.use('/:clientHash/alerts', alertsRoutes);
 
 module.exports = router;

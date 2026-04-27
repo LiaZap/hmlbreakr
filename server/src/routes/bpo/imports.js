@@ -293,6 +293,29 @@ router.post('/excel/:type', upload.single('file'), async (req, res) => {
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
 
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'Planilha vazia' });
+    }
+
+    // BUG #4 FIX: valida colunas antes de processar
+    const REQUIRED_COLS = {
+      payables: ['valor', 'vencimento'],
+      receivables: ['pagador', 'valor', 'vencimento'],
+      suppliers: ['cnpj', 'nome'],
+      categories: ['nome', 'tipo'],
+    };
+    const firstRow = rows[0];
+    const cols = Object.keys(firstRow).map((c) => c.toLowerCase());
+    const missing = REQUIRED_COLS[type].filter((req) => !cols.includes(req));
+    if (missing.length > 0) {
+      return res.status(400).json({
+        error: `Colunas obrigatórias faltando: ${missing.join(', ')}`,
+        expected: REQUIRED_COLS[type],
+        found: cols,
+        hint: 'Use o template (Baixar Modelo) pra ver os nomes corretos.',
+      });
+    }
+
     const created = [];
     const errors = [];
 

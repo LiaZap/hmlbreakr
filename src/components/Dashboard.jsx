@@ -18,6 +18,7 @@ import MatrizPreco from './dashboard/MatrizPreco';
 import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
 import BpoClientApp from './bpo/BpoClientApp';
+import BpoClientAlerts from './dashboard/BpoClientAlerts';
 import DRE from './dashboard/DRE';
 import CardRateComparison from './dashboard/CardRateComparison';
 import InfoTooltip from './dashboard/InfoTooltip';
@@ -80,7 +81,7 @@ const Dashboard = () => {
       )}
 
       <BroadcastPopup restaurantCategory={dashboardData.restaurant?.category} />
-      <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
+      <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} bpoEnabled={!!dashboardData._bpo?.enabled} />
 
       {activePage === 'fichaTecnica' ? (
         <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
@@ -110,6 +111,9 @@ const Dashboard = () => {
         <div className="w-full px-3 md:px-6 2xl:px-10 flex flex-col min-h-0">
         
         <DashboardHeader data={dashboardData} />
+
+        {/* BPO Alerts — só aparece se cliente tem BPO ativado */}
+        <BpoClientAlerts bpoInfo={dashboardData._bpo} onNavigateToFinance={() => setActivePage('financeiro')} />
 
         {/* MAIN GRID - 4 columns layout (responsive fluid) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-4 xl:gap-6 mb-0 min-h-0">
