@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast, useConfirm } from '../../ui/primitives';
 import { useBpoList } from '../useBpoList';
 import { BRAZILIAN_BANKS, findBank } from '../shared/brazilianBanks';
 
@@ -9,11 +9,13 @@ const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency'
 const BankAccountsList = () => {
   const { bpoUrl } = useBpo();
   const toast = useToast();
+  const confirm = useConfirm();
   const { items, loading, error, refresh } = useBpoList('/bank-accounts');
   const [editing, setEditing] = useState(null);
 
   const handleDelete = async (item) => {
-    if (!confirm(`Excluir conta "${item.bankName}"?`)) return;
+    const ok = await confirm({ title: 'Excluir conta?', message: `A conta "${item.bankName}" será removida permanentemente.`, confirmLabel: 'Excluir', variant: 'danger' });
+    if (!ok) return;
     try {
       const res = await fetch(bpoUrl(`/bank-accounts/${item.id}`), { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error || 'Falha ao excluir');

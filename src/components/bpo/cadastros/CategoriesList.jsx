@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast, useConfirm } from '../../ui/primitives';
 
 const DRE_GROUPS = [
   { id: 'cmv', label: 'CMV' },
@@ -15,6 +15,7 @@ const DRE_GROUPS = [
 const CategoriesList = () => {
   const { bpoUrl, selectedClient } = useBpo();
   const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
   const [filterType, setFilterType] = useState('all');
@@ -36,7 +37,8 @@ const CategoriesList = () => {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const handleDelete = async (item) => {
-    if (!confirm(`Excluir categoria "${item.name}"?`)) return;
+    const ok = await confirm({ title: 'Excluir categoria?', message: `A categoria "${item.name}" será removida.`, confirmLabel: 'Excluir', variant: 'danger' });
+    if (!ok) return;
     try {
       const res = await fetch(bpoUrl(`/categories/${item.id}`), { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error || 'Falha');

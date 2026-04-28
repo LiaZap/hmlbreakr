@@ -511,3 +511,68 @@ const ToastItem = ({ item, onDismiss }) => {
     </div>
   );
 };
+
+// ============================================================================
+// CONFIRM — Modal de confirmação (substitui window.confirm() nativo).
+// Uso: const confirm = useConfirm();
+//      const ok = await confirm({ title, message, variant: 'danger' });
+//      if (!ok) return;
+// ============================================================================
+
+const ConfirmContext = createContext(null);
+
+export const ConfirmProvider = ({ children }) => {
+  const [state, setState] = useState({ open: false, opts: {}, resolve: null });
+
+  const confirm = useCallback((opts = {}) => {
+    return new Promise((resolve) => {
+      setState({ open: true, opts, resolve });
+    });
+  }, []);
+
+  const close = (result) => {
+    if (state.resolve) state.resolve(result);
+    setState({ open: false, opts: {}, resolve: null });
+  };
+
+  const {
+    title = 'Confirmar?',
+    message = '',
+    confirmLabel = 'Confirmar',
+    cancelLabel = 'Cancelar',
+    variant = 'primary', // 'primary' | 'danger'
+  } = state.opts;
+
+  return (
+    <ConfirmContext.Provider value={confirm}>
+      {children}
+      <Modal
+        open={state.open}
+        onClose={() => close(false)}
+        title={title}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => close(false)}>{cancelLabel}</Button>
+            <Button variant={variant === 'danger' ? 'danger' : 'primary'} onClick={() => close(true)}>{confirmLabel}</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text">{message}</p>
+      </Modal>
+    </ConfirmContext.Provider>
+  );
+};
+
+export const useConfirm = () => {
+  const ctx = useContext(ConfirmContext);
+  if (!ctx) {
+    // Fallback safe pra dev sem provider: usa window.confirm
+    return async (opts = {}) => {
+      const msg = [opts.title, opts.message].filter(Boolean).join('\n\n');
+      // eslint-disable-next-line no-alert
+      return window.confirm(msg);
+    };
+  }
+  return ctx;
+};

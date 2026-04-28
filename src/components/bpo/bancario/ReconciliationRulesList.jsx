@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Card, Button, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Card, Button, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, useToast, useConfirm } from '../../ui/primitives';
 
 const MATCH_TYPE_LABEL = {
   contains: 'Contém',
@@ -16,6 +16,8 @@ const MATCH_TYPE_LABEL = {
 
 const ReconciliationRulesList = () => {
   const { bpoUrl, selectedClient } = useBpo();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [editing, setEditing] = useState(null);
 
@@ -29,9 +31,14 @@ const ReconciliationRulesList = () => {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const handleDelete = async (id) => {
-    if (!confirm('Excluir regra?')) return;
-    await fetch(bpoUrl(`/reconciliation/rules/${id}`), { method: 'DELETE' });
-    fetchItems();
+    const ok = await confirm({ title: 'Excluir regra?', message: 'A regra de conciliação será removida.', confirmLabel: 'Excluir', variant: 'danger' });
+    if (!ok) return;
+    try {
+      const res = await fetch(bpoUrl(`/reconciliation/rules/${id}`), { method: 'DELETE' });
+      if (!res.ok) throw new Error('Falha ao excluir');
+      toast.success('Regra excluída');
+      fetchItems();
+    } catch (err) { toast.error(err.message); }
   };
 
   return (

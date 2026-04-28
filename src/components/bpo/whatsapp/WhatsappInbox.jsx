@@ -8,11 +8,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Card, Button, Input, Badge, EmptyState, Modal } from '../../ui/primitives';
+import { Card, Button, Input, Badge, EmptyState, Modal, useToast, useConfirm } from '../../ui/primitives';
 
 const fmtDateTime = (d) => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
 const WhatsappInbox = () => {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [bpoClients, setBpoClients] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -42,13 +44,18 @@ const WhatsappInbox = () => {
   };
 
   const discard = async (msg) => {
-    if (!confirm('Descartar essa mensagem?')) return;
     if (!msg.client?.hash) {
-      alert('Associe a um cliente antes de descartar');
+      toast.warning('Associe a um cliente antes de descartar');
       return;
     }
-    await fetch(`/api/bpo/${msg.client.hash}/whatsapp/messages/${msg.id}/discard`, { method: 'POST' });
-    fetchItems();
+    const ok = await confirm({ title: 'Descartar mensagem?', message: 'A mensagem sai da inbox e não pode ser recuperada.', confirmLabel: 'Descartar', variant: 'danger' });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/bpo/${msg.client.hash}/whatsapp/messages/${msg.id}/discard`, { method: 'POST' });
+      if (!res.ok) throw new Error('Falha ao descartar');
+      toast.success('Mensagem descartada');
+      fetchItems();
+    } catch (err) { toast.error(err.message); }
   };
 
   return (

@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, useToast, useConfirm } from '../../ui/primitives';
 
 const fmtCnpj = (cnpj) => {
   const c = String(cnpj || '').replace(/\D/g, '');
@@ -15,6 +15,8 @@ const fmtCnpj = (cnpj) => {
 
 const SuppliersList = () => {
   const { bpoUrl, selectedClient } = useBpo();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -48,17 +50,19 @@ const SuppliersList = () => {
   }, [fetchSuppliers]);
 
   const handleDelete = async (supplier) => {
-    if (!confirm(`Excluir fornecedor "${supplier.name}"?`)) return;
+    const ok = await confirm({ title: 'Excluir fornecedor?', message: `"${supplier.name}" será removido. Lançamentos vinculados ficam preservados.`, confirmLabel: 'Excluir', variant: 'danger' });
+    if (!ok) return;
     try {
       const res = await fetch(bpoUrl(`/suppliers/${supplier.id}`), { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.error || 'Erro ao excluir');
+        toast.error(err.error || 'Erro ao excluir');
         return;
       }
+      toast.success(`Fornecedor "${supplier.name}" excluído`);
       fetchSuppliers();
     } catch (err) {
-      alert('Erro ao excluir: ' + err.message);
+      toast.error('Erro ao excluir: ' + err.message);
     }
   };
 

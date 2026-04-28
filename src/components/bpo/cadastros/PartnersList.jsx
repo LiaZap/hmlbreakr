@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast, useConfirm } from '../../ui/primitives';
 
 const fmtCpf = (cpf) => String(cpf || '').replace(/\D/g, '').replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -8,6 +8,7 @@ const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency'
 const PartnersList = () => {
   const { bpoUrl, selectedClient } = useBpo();
   const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
   const [totalProlabore, setTotalProlabore] = useState(0);
@@ -72,7 +73,14 @@ const PartnersList = () => {
                 <Td align="right">
                   <button onClick={async (e) => {
                     e.stopPropagation();
-                    if (confirm(`Excluir sócio "${p.name}"?`)) { await fetch(bpoUrl(`/partners/${p.id}`), { method: 'DELETE' }); fetchItems(); }
+                    const ok = await confirm({ title: 'Excluir sócio?', message: `O sócio "${p.name}" será removido.`, confirmLabel: 'Excluir', variant: 'danger' });
+                    if (!ok) return;
+                    try {
+                      const res = await fetch(bpoUrl(`/partners/${p.id}`), { method: 'DELETE' });
+                      if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                      toast.success(`Sócio "${p.name}" excluído`);
+                      fetchItems();
+                    } catch (err) { toast.error(err.message); }
                   }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
                 </Td>
               </Tr>

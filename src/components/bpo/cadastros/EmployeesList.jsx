@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast, useConfirm } from '../../ui/primitives';
 import { BRAZILIAN_BANKS } from '../shared/brazilianBanks';
 
 const ROLES = ['Cozinha', 'Salão', 'Administrativo', 'Entrega', 'Outro'];
@@ -10,6 +10,7 @@ const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency'
 const EmployeesList = () => {
   const { bpoUrl, selectedClient } = useBpo();
   const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -77,7 +78,14 @@ const EmployeesList = () => {
                 <Td align="right">
                   <button onClick={async (ev) => {
                     ev.stopPropagation();
-                    if (confirm(`Excluir ${e.name}?`)) { await fetch(bpoUrl(`/employees/${e.id}`), { method: 'DELETE' }); fetchItems(); }
+                    const ok = await confirm({ title: 'Excluir funcionário?', message: `${e.name} será removido do cadastro.`, confirmLabel: 'Excluir', variant: 'danger' });
+                    if (!ok) return;
+                    try {
+                      const res = await fetch(bpoUrl(`/employees/${e.id}`), { method: 'DELETE' });
+                      if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                      toast.success(`${e.name} excluído`);
+                      fetchItems();
+                    } catch (err) { toast.error(err.message); }
                   }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
                 </Td>
               </Tr>

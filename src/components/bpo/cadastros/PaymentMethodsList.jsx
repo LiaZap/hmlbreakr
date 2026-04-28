@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast, useConfirm } from '../../ui/primitives';
 
 const TYPES = [
   { id: 'marketplace', label: 'Marketplace (iFood, Aiqfome)' },
@@ -23,6 +23,7 @@ const TEMPLATES = [
 const PaymentMethodsList = () => {
   const { bpoUrl, selectedClient } = useBpo();
   const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -43,15 +44,19 @@ const PaymentMethodsList = () => {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const seedDefaults = async () => {
-    if (!confirm('Criar 6 meios de pagamento padrão (iFood, Aiqfome, Crédito, Débito, PIX, Dinheiro)?')) return;
-    for (const t of TEMPLATES) {
-      await fetch(bpoUrl('/payment-methods'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(t),
-      });
-    }
-    fetchItems();
+    const ok = await confirm({ title: 'Criar meios padrão?', message: 'Vai cadastrar 6 meios: iFood, Aiqfome, Crédito, Débito, PIX, Dinheiro.', confirmLabel: 'Criar 6 meios', variant: 'primary' });
+    if (!ok) return;
+    try {
+      for (const t of TEMPLATES) {
+        await fetch(bpoUrl('/payment-methods'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(t),
+        });
+      }
+      toast.success('6 meios padrão criados');
+      fetchItems();
+    } catch (err) { toast.error(err.message); }
   };
 
   return (
@@ -97,7 +102,14 @@ const PaymentMethodsList = () => {
                 <Td align="right">
                   <button onClick={async (e) => {
                     e.stopPropagation();
-                    if (confirm(`Excluir "${p.name}"?`)) { await fetch(bpoUrl(`/payment-methods/${p.id}`), { method: 'DELETE' }); fetchItems(); }
+                    const ok = await confirm({ title: 'Excluir meio de pagamento?', message: `"${p.name}" será removido.`, confirmLabel: 'Excluir', variant: 'danger' });
+                    if (!ok) return;
+                    try {
+                      const res = await fetch(bpoUrl(`/payment-methods/${p.id}`), { method: 'DELETE' });
+                      if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                      toast.success(`"${p.name}" excluído`);
+                      fetchItems();
+                    } catch (err) { toast.error(err.message); }
                   }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
                 </Td>
               </Tr>

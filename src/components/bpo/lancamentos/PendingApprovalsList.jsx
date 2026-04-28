@@ -5,13 +5,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Card, Button, Badge, EmptyState, Modal, Input, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Card, Button, Badge, EmptyState, Modal, Input, Table, Th, Td, Tr, useToast, useConfirm } from '../../ui/primitives';
 
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
 const PendingApprovalsList = () => {
   const { bpoUrl, selectedClient } = useBpo();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [rejecting, setRejecting] = useState(null);
@@ -33,12 +35,19 @@ const PendingApprovalsList = () => {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const handleApprove = async (id) => {
-    if (!confirm('Aprovar esse pagamento? O banco vai processar conforme agendado.')) return;
+    const ok = await confirm({
+      title: 'Aprovar pagamento?',
+      message: 'O banco vai processar conforme agendado.',
+      confirmLabel: 'Aprovar',
+      variant: 'primary',
+    });
+    if (!ok) return;
     try {
       const res = await fetch(bpoUrl(`/payables/${id}/approve`), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       if (!res.ok) throw new Error('Falha ao aprovar');
+      toast.success('Pagamento aprovado');
       fetchItems();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
   };
 
   return (
