@@ -228,7 +228,14 @@ const DREReport = ({ from, to }) => {
 
   return (
     <Card>
-      <div className="text-[10px] uppercase text-text-subtle font-semibold mb-3">DRE — {fmtDate(data.from)} a {fmtDate(data.to)}</div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[10px] uppercase text-text-subtle font-semibold">DRE — {fmtDate(data.from)} a {fmtDate(data.to)}</div>
+        <a href={bpoUrl(`/reports/dre/export?from=${from}&to=${to}`)} download
+          className="inline-flex items-center gap-1.5 text-xs text-brand hover:text-brand-hover font-medium">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14m0 0l-5-5m5 5l5-5M5 19h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          Exportar Excel
+        </a>
+      </div>
       <div className="flex flex-col">
         {data.lines.map((l, i) => {
           const isResult = l.type === 'result';
@@ -284,7 +291,7 @@ const CashFlowReport = ({ from, to }) => {
         { label: 'Entradas (real + projetado)', value: fmtBRL(data.summary.totalInflow), color: 'text-success' },
         { label: 'Saídas (real + projetado)', value: fmtBRL(data.summary.totalOutflow), color: 'text-danger' },
         { label: 'Saldo final projetado', value: fmtBRL(data.summary.finalBalance), color: data.summary.finalBalance >= 0 ? 'text-success' : 'text-danger' },
-      ]} />
+      ]} exportUrl={bpoUrl(`/reports/cashflow/export?from=${from}&to=${to}&groupBy=${groupBy}`)} />
 
       <Card padded={false} className="p-3 flex justify-end">
         <div className="flex gap-1">

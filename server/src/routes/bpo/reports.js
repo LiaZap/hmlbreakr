@@ -377,8 +377,101 @@ router.get('/:type/export', async (req, res) => {
         Parcial: t.isPartial ? 'Sim' : 'Não',
         Notas: t.notes || '',
       }));
+    } else if (type === 'dre') {
+      // Reusa a logica do GET /dre via fetch interno seria complicado;
+      // re-monta inline (mesma logica). Em refactor futuro, extrair helper.
+      const { from, to } = parseDateRange(req, 30);
+      const receivedTxns = await prisma.paymentTransaction.findMany({
+        where: { paidAt: { gte: from, lte: to }, receivable: { clientId: req.bpoClient.id } },
+        include: { receivable: { include: { paymentMethod: true, category: true } } },
+      });
+      const paidTxns = await prisma.paymentTransaction.findMany({
+        where: { paidAt: { gte: from, lte: to }, payable: { clientId: req.bpoClient.id } },
+        include: { payable: { include: { category: true } } },
+      });
+      const receitaBruta = receivedTxns.reduce((s, t) => s + Number(t.amount), 0);
+      let taxasVenda = 0;
+      receivedTxns.forEach((t) => {
+        const feePct = t.receivable?.paymentMethod?.feePercent;
+        if (feePct) taxasVenda += Number(t.amount) * (Number(feePct) / 100);
+      });
+      const despesas = {};
+      paidTxns.forEach((t) => {
+        const g = t.payable?.category?.dreGroup || 'outros';
+        despesas[g] = (despesas[g] || 0) + Number(t.amount);
+      });
+      const cmv = despesas.cmv || 0;
+      const impostos = despesas.imposto || 0;
+      const despesasOp = despesas.despesa_op || 0;
+      const proLabore = despesas.pro_labore || 0;
+      const taxaVendaCat = despesas.taxa_venda || 0;
+      const outros = despesas.outros || 0;
+      const totalTaxas = taxasVenda + taxaVendaCat;
+      const recLiquida = receitaBruta - impostos - totalTaxas;
+      const margem = recLiquida - cmv;
+      const resultadoOp = margem - despesasOp - outros;
+      const lucro = resultadoOp - proLabore;
+
+      sheetName = 'DRE';
+      data = [
+        { Linha: 'Receita Bruta', Sinal: '+', Valor: receitaBruta },
+        { Linha: 'Impostos', Sinal: '-', Valor: -impostos },
+        { Linha: 'Taxas de Venda', Sinal: '-', Valor: -totalTaxas },
+        { Linha: 'Receita Líquida', Sinal: '=', Valor: recLiquida },
+        { Linha: 'CMV', Sinal: '-', Valor: -cmv },
+        { Linha: 'Margem de Contribuição', Sinal: '=', Valor: margem },
+        { Linha: 'Despesas Operacionais', Sinal: '-', Valor: -despesasOp },
+        { Linha: 'Outros', Sinal: '-', Valor: -outros },
+        { Linha: 'Resultado Operacional', Sinal: '=', Valor: resultadoOp },
+        { Linha: 'Pró-Labore', Sinal: '-', Valor: -proLabore },
+        { Linha: 'Lucro Líquido', Sinal: '=', Valor: lucro },
+      ];
+    } else if (type === 'cashflow') {
+      const { from, to } = parseDateRange(req, 90);
+      const groupBy = req.query.groupBy || 'day';
+      const txns = await prisma.paymentTransaction.findMany({
+        where: { paidAt: { gte: from, lte: to }, OR: [{ payable: { clientId: req.bpoClient.id } }, { receivable: { clientId: req.bpoClient.id } }] },
+        orderBy: { paidAt: 'asc' },
+        include: { bankAccount: { select: { bankName: true } } },
+      });
+      const futureP = await prisma.payable.findMany({
+        where: { clientId: req.bpoClient.id, dueDate: { gte: from, lte: to }, status: { in: ['pending', 'scheduled', 'paid_partial'] } },
+        select: { dueDate: true, remainingAmount: true, supplier: { select: { name: true } } },
+      });
+      const futureR = await prisma.receivable.findMany({
+        where: { clientId: req.bpoClient.id, dueDate: { gte: from, lte: to }, status: { in: ['pending', 'received_partial'] } },
+        select: { dueDate: true, remainingAmount: true, payerName: true },
+      });
+      const groupKey = (date) => {
+        const d = new Date(date);
+        if (groupBy === 'month') return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (groupBy === 'week') { const s = new Date(d); s.setDate(d.getDate() - d.getDay()); return s.toISOString().slice(0, 10); }
+        return d.toISOString().slice(0, 10);
+      };
+      const buckets = new Map();
+      const add = (date, k, v) => { const key = groupKey(date); if (!buckets.has(key)) buckets.set(key, { period: key, realInflow: 0, realOutflow: 0, projInflow: 0, projOutflow: 0 }); buckets.get(key)[k] += Number(v); };
+      txns.forEach((t) => add(t.paidAt, t.payableId ? 'realOutflow' : 'realInflow', t.amount));
+      futureP.forEach((p) => add(p.dueDate, 'projOutflow', p.remainingAmount));
+      futureR.forEach((r) => add(r.dueDate, 'projInflow', r.remainingAmount));
+      const banks = await prisma.bankAccount.findMany({ where: { clientId: req.bpoClient.id, active: true }, select: { currentBalance: true } });
+      let bal = banks.reduce((s, b) => s + Number(b.currentBalance), 0);
+      const series = Array.from(buckets.values()).sort((a, b) => a.period.localeCompare(b.period));
+
+      sheetName = 'Fluxo de Caixa';
+      data = series.map((s) => {
+        const net = s.realInflow + s.projInflow - s.realOutflow - s.projOutflow;
+        bal += net;
+        return {
+          Período: s.period,
+          'Entrada Realizada': s.realInflow,
+          'Entrada Projetada': s.projInflow,
+          'Saída Realizada': -s.realOutflow,
+          'Saída Projetada': -s.projOutflow,
+          'Saldo Acumulado': bal,
+        };
+      });
     } else {
-      return res.status(400).json({ error: 'Tipo inválido. Use: payables | receivables | transactions' });
+      return res.status(400).json({ error: 'Tipo inválido. Use: payables | receivables | transactions | dre | cashflow' });
     }
 
     const wb = XLSX.utils.book_new();
