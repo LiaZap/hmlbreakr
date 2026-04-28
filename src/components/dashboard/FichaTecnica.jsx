@@ -2595,12 +2595,17 @@ const FichaTecnica = () => {
               {(() => {
                 const items = activeTab === 'insumos' ? insumos : fichas;
                 const defaultInsumoCats = ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
+                const defaultFichaCats = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
                 const allCategories = activeTab === 'insumos'
                   ? (dashboardData.operational?.categories?.insumos || defaultInsumoCats)
-                  : (dashboardData.operational?.categories?.fichas || []);
-                // Only show categories that have at least one item
+                  : (dashboardData.operational?.categories?.fichas?.length
+                      ? dashboardData.operational.categories.fichas
+                      : defaultFichaCats);
+                // Only show categories that have at least one item.
+                // Fichas use the `type` field; insumos use `category`.
+                const itemCatField = activeTab === 'insumos' ? 'category' : 'type';
                 const usedCategories = allCategories.filter(cat =>
-                  items.some(it => (it.category || '').toLowerCase() === cat.toLowerCase())
+                  items.some(it => (it[itemCatField] || it.category || '').toLowerCase() === cat.toLowerCase())
                 );
 
                 return (
