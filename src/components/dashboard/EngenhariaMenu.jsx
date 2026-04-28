@@ -41,7 +41,19 @@ const EngenhariaMenu = () => {
         return res.json();
       })
       .then(menuItems => {
-        // Create fichas técnicas for each imported item
+        // Merge with existing matrix (by name) — never wipe previous items
+        const existingMenu = dashboardData.menuEngineering || [];
+        const mergedMap = new Map(
+          existingMenu.map(m => [m.name?.toLowerCase().trim(), m])
+        );
+        menuItems.forEach(item => {
+          const key = item.name?.toLowerCase().trim();
+          if (!key) return;
+          mergedMap.set(key, { ...(mergedMap.get(key) || {}), ...item });
+        });
+        const mergedMenu = Array.from(mergedMap.values());
+
+        // Create fichas técnicas for each imported item (existing fichas preserved)
         const existingFichas = dashboardData.operational?.fichas || [];
         const newFichas = [...existingFichas];
 
@@ -76,7 +88,7 @@ const EngenhariaMenu = () => {
         });
 
         updateDashboardData({
-          menuEngineering: menuItems,
+          menuEngineering: mergedMenu,
           operational: {
             ...dashboardData.operational,
             fichas: newFichas

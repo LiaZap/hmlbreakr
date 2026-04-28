@@ -2695,7 +2695,8 @@ const FichaTecnica = () => {
               })() : (() => {
                 const filtered = fichas.filter((it) => {
                   const matchesSearch = searchTerm === '' || (it.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-                  const matchesCategory = filterCategory === 'all' || (it.category || '').toLowerCase() === filterCategory.toLowerCase();
+                  const fichaCat = (it.type || it.category || '').toLowerCase();
+                  const matchesCategory = filterCategory === 'all' || fichaCat === filterCategory.toLowerCase();
                   return matchesSearch && matchesCategory;
                 });
                 const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
