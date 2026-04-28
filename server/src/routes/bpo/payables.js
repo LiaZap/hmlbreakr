@@ -64,6 +64,7 @@ router.get('/', async (req, res) => {
         include: {
           supplier: { select: { id: true, name: true } },
           category: { select: { id: true, name: true, color: true } },
+          recurrence: { select: { id: true, frequency: true, occurrencesCount: true } },
           _count: { select: { payments: true, installments: true } },
         },
       }),
@@ -83,6 +84,43 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('[bpo payables list]', err);
     res.status(500).json({ error: 'Erro ao listar contas a pagar' });
+  }
+});
+
+// === RECORRÊNCIA — cancelar parcelas futuras (mantém histórico de pagas) ===
+// DEVE vir antes de /:id (ordering Express)
+router.post('/recurrence/:recurrenceId/cancel-future', async (req, res) => {
+  try {
+    const { recurrenceId } = req.params;
+    // Confere que a recorrência pertence ao cliente (via uma payable filha)
+    const sample = await prisma.payable.findFirst({
+      where: { recurrenceId, clientId: req.bpoClient.id },
+    });
+    if (!sample) return res.status(404).json({ error: 'Recorrência não encontrada' });
+
+    // Cancela só payables NÃO pagas e com vencimento >= hoje
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const result = await prisma.payable.updateMany({
+      where: {
+        recurrenceId,
+        clientId: req.bpoClient.id,
+        status: { in: ['pending', 'scheduled'] },
+        dueDate: { gte: today },
+      },
+      data: { status: 'cancelled' },
+    });
+
+    // Marca o endDate da recorrência (não dá pra deletar, FKs)
+    await prisma.recurrence.update({
+      where: { id: recurrenceId },
+      data: { endDate: new Date() },
+    });
+
+    res.json({ canceledCount: result.count });
+  } catch (err) {
+    console.error('[bpo payables cancel-recurrence]', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

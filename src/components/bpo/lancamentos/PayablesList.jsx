@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, useToast, useConfirm } from '../../ui/primitives';
 
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -79,8 +79,17 @@ const PayablesList = () => {
               return (
                 <Tr key={p.id} onClick={() => setEditing(p)}>
                   <Td className={overdue ? 'text-danger font-semibold' : ''}>
-                    {fmtDate(p.dueDate)}
-                    {p.installmentNumber && <span className="text-xs text-text-subtle ml-1">({p.installmentNumber})</span>}
+                    <div className="flex items-center gap-1.5">
+                      <span>{fmtDate(p.dueDate)}</span>
+                      {p.installmentNumber && p.recurrence && (
+                        <span className="text-[10px] text-text-subtle bg-bg-input px-1.5 py-0.5 rounded" title={`Recorrência ${p.recurrence.frequency}`}>
+                          ↻ {p.installmentNumber}/{p.recurrence.occurrencesCount || '∞'}
+                        </span>
+                      )}
+                      {p.installmentNumber && !p.recurrence && (
+                        <span className="text-xs text-text-subtle">({p.installmentNumber})</span>
+                      )}
+                    </div>
                   </Td>
                   <Td className="font-medium">{p.supplier?.name || '—'}</Td>
                   <Td className="text-xs text-text-muted">{p.description || p.invoiceNumber || '—'}</Td>
@@ -200,9 +209,12 @@ const ScheduleModal = ({ item, onClose, onSaved }) => {
 // ============ Modal CRUD ============
 const PayableModal = ({ item, onClose, onSaved }) => {
   const { bpoUrl } = useBpo();
+  const toast = useToast();
+  const confirm = useConfirm();
   const isEdit = !!item;
   const [suppliers, setSuppliers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [fullItem, setFullItem] = useState(item); // recarregado do servidor com recurrence
 
   const [form, setForm] = useState({
     supplierId: item?.supplierId || '',
@@ -218,11 +230,38 @@ const PayableModal = ({ item, onClose, onSaved }) => {
   });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [cancelingRecurrence, setCancelingRecurrence] = useState(false);
 
   useEffect(() => {
     fetch(bpoUrl('/suppliers')).then((r) => r.json()).then((d) => setSuppliers(d.items || []));
     fetch(bpoUrl('/categories?type=despesa')).then((r) => r.json()).then((d) => setCategories(d.items || []));
-  }, [bpoUrl]);
+    // Refetch payable completo (com recurrence) se for edição
+    if (isEdit && item?.id) {
+      fetch(bpoUrl(`/payables/${item.id}`)).then((r) => r.json()).then((d) => setFullItem(d)).catch(() => {});
+    }
+  }, [bpoUrl, isEdit, item?.id]);
+
+  const FREQ_LABEL = { weekly: 'semanal', monthly: 'mensal', quarterly: 'trimestral', semiannual: 'semestral', yearly: 'anual' };
+
+  const handleCancelRecurrence = async () => {
+    if (!fullItem?.recurrenceId) return;
+    const ok = await confirm({
+      title: 'Cancelar parcelas futuras?',
+      message: 'Todas as parcelas pendentes desta recorrência (a partir de hoje) serão canceladas. Parcelas já pagas continuam intactas.',
+      confirmLabel: 'Cancelar parcelas futuras',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setCancelingRecurrence(true);
+    try {
+      const res = await fetch(bpoUrl(`/payables/recurrence/${fullItem.recurrenceId}/cancel-future`), { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao cancelar');
+      toast.success(`${data.canceledCount} parcela(s) futura(s) cancelada(s)`);
+      onSaved();
+    } catch (err) { toast.error(err.message); }
+    finally { setCancelingRecurrence(false); }
+  };
 
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -258,6 +297,24 @@ const PayableModal = ({ item, onClose, onSaved }) => {
       </>}>
       <div className="flex flex-col gap-4">
         {error && <div className="bg-danger-soft border border-danger/30 rounded-md px-3 py-2 text-xs text-danger">{error}</div>}
+
+        {/* Banner de recorrência (só em edição, quando o item faz parte de uma recorrência) */}
+        {isEdit && fullItem?.recurrenceId && fullItem?.recurrence && (
+          <div className="bg-info-soft border border-info/30 rounded-md p-3 flex items-start gap-3">
+            <div className="text-info text-lg leading-none">↻</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-info">
+                Parcela {fullItem.installmentNumber || '?'} de {fullItem.recurrence.occurrencesCount || '∞'} · Recorrência {FREQ_LABEL[fullItem.recurrence.frequency] || fullItem.recurrence.frequency}
+              </div>
+              <p className="text-[11px] text-text-muted mt-0.5">
+                Editar essa parcela afeta só ela. Pra parar todas as próximas (mantendo as já pagas), use "Cancelar parcelas futuras".
+              </p>
+            </div>
+            <Button variant="danger" size="sm" onClick={handleCancelRecurrence} loading={cancelingRecurrence}>
+              Cancelar parcelas futuras
+            </Button>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
