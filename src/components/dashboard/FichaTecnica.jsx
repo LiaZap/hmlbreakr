@@ -1028,8 +1028,9 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const [nome, setNome] = useState(editingFicha ? editingFicha.name : '');
   
   const DEFAULT_FICHA_CATS = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
-  const _rawFichaCats = (dashboardData.operational?.categories?.fichas || []).filter(c => c !== 'Insumo Pronto Preparado');
-  const fichaCategoryOptions = _rawFichaCats.length > 0 ? _rawFichaCats : DEFAULT_FICHA_CATS;
+  const _customFichaCats = (dashboardData.operational?.categories?.fichas || []).filter(c => c !== 'Insumo Pronto Preparado');
+  // Sempre incluir defaults + custom, sem deduplicar entre si
+  const fichaCategoryOptions = Array.from(new Set([...DEFAULT_FICHA_CATS, ..._customFichaCats]));
   const insumoCategoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
   const availableInsumos = dashboardData.operational?.insumos || [];
 
@@ -2527,6 +2528,15 @@ const FichaTecnica = () => {
                   {activeTab === 'insumos' ? (
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                           <button
+                              onClick={() => setEditingInsumo({})}
+                              className="hidden md:flex bg-[#F5A623] hover:bg-[#E5961E] text-black text-[11px] font-semibold px-3 py-1.5 rounded-[8px] items-center gap-1.5 transition-colors"
+                              title="Cadastrar novo insumo"
+                          >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                              Novo Insumo
+                          </button>
+
+                          <button
                             onClick={() => setShowCategoriesModal(true)}
                             className="bg-[#2A2A2C] hover:bg-[#333] text-white text-[11px] font-medium px-3 py-1.5 rounded-[8px] flex items-center gap-1.5 transition-colors"
                           >
@@ -2552,6 +2562,15 @@ const FichaTecnica = () => {
                       </div>
                   ) : (
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                          <button
+                              onClick={() => setModalFicha('new')}
+                              className="hidden md:flex bg-[#F5A623] hover:bg-[#E5961E] text-black text-[11px] font-semibold px-3 py-1.5 rounded-[8px] items-center gap-1.5 transition-colors"
+                              title="Criar nova ficha técnica"
+                          >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                              Nova Ficha
+                          </button>
+
                           <button
                               onClick={() => setShowSimulador(true)}
                               className="bg-[#F5A623]/15 hover:bg-[#F5A623]/25 border border-[#F5A623]/30 text-[#F5A623] text-[11px] font-medium px-3 py-1.5 rounded-[8px] flex items-center gap-1.5 transition-colors"
@@ -2605,11 +2624,12 @@ const FichaTecnica = () => {
                 const items = activeTab === 'insumos' ? insumos : fichas;
                 const defaultInsumoCats = ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
                 const defaultFichaCats = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
+                // Always merge defaults with custom categories so creating a custom one doesn't hide built-ins
+                const customInsumoCats = dashboardData.operational?.categories?.insumos || [];
+                const customFichaCats = dashboardData.operational?.categories?.fichas || [];
                 const allCategories = activeTab === 'insumos'
-                  ? (dashboardData.operational?.categories?.insumos || defaultInsumoCats)
-                  : (dashboardData.operational?.categories?.fichas?.length
-                      ? dashboardData.operational.categories.fichas
-                      : defaultFichaCats);
+                  ? Array.from(new Set([...defaultInsumoCats, ...customInsumoCats]))
+                  : Array.from(new Set([...defaultFichaCats, ...customFichaCats]));
                 // Only show categories that have at least one item.
                 // Fichas use the `type` field; insumos use `category`.
                 const itemCatField = activeTab === 'insumos' ? 'category' : 'type';
@@ -2745,8 +2765,8 @@ const FichaTecnica = () => {
             </div>
           </div>
 
-          {/* FAB Button — sobe no desktop pra nao colar na paginacao */}
-          <div className="fixed bottom-20 md:bottom-24 right-6 md:right-10 z-40">
+          {/* FAB Button — so mobile (no desktop usamos botao na barra de acoes) */}
+          <div className="fixed bottom-20 right-6 z-40 md:hidden">
             <button
               onClick={() => {
                 if (activeTab === 'insumos') {
