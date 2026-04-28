@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
-import { Card, Button, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr } from '../../ui/primitives';
+import { Card, Button, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, useToast } from '../../ui/primitives';
 
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -227,6 +227,7 @@ const UploadStatementModal = ({ onClose, onSaved }) => {
 
 const ReconcileModal = ({ tx, onClose, onSaved }) => {
   const { bpoUrl } = useBpo();
+  const toast = useToast();
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
@@ -246,9 +247,11 @@ const ReconcileModal = ({ tx, onClose, onSaved }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: suggestion.type, id: suggestion.id, createPayment: true }),
       });
-      if (!res.ok) throw new Error('Erro');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
+      toast.success('Transação conciliada');
       onSaved();
-    } catch (err) { alert(err.message); }
+    } catch (err) { toast.error(err.message); }
     finally { setConfirming(false); }
   };
 
@@ -296,12 +299,21 @@ const ReconcileModal = ({ tx, onClose, onSaved }) => {
                         ✨ IA
                       </Badge>
                     )}
+                    {s.installmentNumber && (
+                      <Badge variant="default" size="xs" title="Parcela de recorrência">
+                        ↻ {s.installmentNumber}{s.totalInstallments ? `/${s.totalInstallments}` : ''}
+                      </Badge>
+                    )}
                   </div>
                   <Badge variant={s.confidence > 80 ? 'success' : s.confidence > 60 ? 'warning' : 'default'} size="xs">
                     {s.confidence}% match
                   </Badge>
                 </div>
                 <div className="text-sm font-medium text-text-strong">{s.label}</div>
+                <div className="flex items-center gap-3 mt-1 text-[11px] text-text-muted">
+                  {s.dueDate && <span>Vence: <span className="text-text">{fmtDate(s.dueDate)}</span></span>}
+                  {s.description && <span className="truncate flex-1">{s.description}</span>}
+                </div>
                 {s.aiSuggested && s.aiReason && (
                   <div className="text-[11px] text-text-muted mt-1 italic">
                     {s.aiReason}

@@ -328,6 +328,10 @@ router.get('/suggest/:transactionId', async (req, res) => {
 
     if (tx.type === 'debit') {
       // Pool 1: valor próximo (±50%) na janela de data
+      const includes = {
+        supplier: { select: { name: true } },
+        recurrence: { select: { occurrencesCount: true } },
+      };
       const byValue = await prisma.payable.findMany({
         where: {
           clientId: req.bpoClient.id,
@@ -335,7 +339,7 @@ router.get('/suggest/:transactionId', async (req, res) => {
           dueDate: { gte: fromDate, lte: toDate },
           remainingAmount: { gte: amountNum * 0.5, lte: amountNum * 1.5 },
         },
-        include: { supplier: { select: { name: true } } },
+        include: includes,
         take: 50,
       });
       // Pool 2: fornecedor cujo nome matcha algum token da descrição da transação
@@ -350,7 +354,7 @@ router.get('/suggest/:transactionId', async (req, res) => {
             { description: { contains: txTokens[0], mode: 'insensitive' } },
           ],
         },
-        include: { supplier: { select: { name: true } } },
+        include: includes,
         take: 30,
       }) : [];
 
@@ -359,7 +363,18 @@ router.get('/suggest/:transactionId', async (req, res) => {
         seenIds.add(c.id);
         const confidence = computeScore(c.remainingAmount, c.supplier?.name, c.dueDate, c.description || '');
         if (confidence < 40) return;
-        suggestions.push({ type: 'payable', id: c.id, label: `${c.supplier?.name || 'Sem fornecedor'} — R$ ${c.remainingAmount}`, confidence });
+        suggestions.push({
+          type: 'payable',
+          id: c.id,
+          label: `${c.supplier?.name || 'Sem fornecedor'} — R$ ${c.remainingAmount}`,
+          confidence,
+          // metadados pra UI desambiguar parcelas iguais
+          dueDate: c.dueDate,
+          remainingAmount: c.remainingAmount,
+          description: c.description || null,
+          installmentNumber: c.installmentNumber || null,
+          totalInstallments: c.recurrence?.occurrencesCount || null,
+        });
         aiCandidatePool.push({
           id: c.id, supplierName: c.supplier?.name || null,
           remainingAmount: c.remainingAmount, dueDate: c.dueDate,
@@ -367,6 +382,7 @@ router.get('/suggest/:transactionId', async (req, res) => {
         });
       });
     } else {
+      const includesR = { recurrence: { select: { occurrencesCount: true } } };
       const byValue = await prisma.receivable.findMany({
         where: {
           clientId: req.bpoClient.id,
@@ -374,6 +390,7 @@ router.get('/suggest/:transactionId', async (req, res) => {
           dueDate: { gte: fromDate, lte: toDate },
           remainingAmount: { gte: amountNum * 0.5, lte: amountNum * 1.5 },
         },
+        include: includesR,
         take: 50,
       });
       const byName = txTokens.length > 0 ? await prisma.receivable.findMany({
@@ -386,6 +403,7 @@ router.get('/suggest/:transactionId', async (req, res) => {
             { description: { contains: txTokens[0], mode: 'insensitive' } },
           ],
         },
+        include: includesR,
         take: 30,
       }) : [];
 
@@ -394,7 +412,17 @@ router.get('/suggest/:transactionId', async (req, res) => {
         seenIds.add(c.id);
         const confidence = computeScore(c.remainingAmount, c.payerName, c.dueDate, c.description || '');
         if (confidence < 40) return;
-        suggestions.push({ type: 'receivable', id: c.id, label: `${c.payerName} — R$ ${c.remainingAmount}`, confidence });
+        suggestions.push({
+          type: 'receivable',
+          id: c.id,
+          label: `${c.payerName} — R$ ${c.remainingAmount}`,
+          confidence,
+          dueDate: c.dueDate,
+          remainingAmount: c.remainingAmount,
+          description: c.description || null,
+          installmentNumber: c.installmentNumber || null,
+          totalInstallments: c.recurrence?.occurrencesCount || null,
+        });
         aiCandidatePool.push({
           id: c.id, payerName: c.payerName || null,
           remainingAmount: c.remainingAmount, dueDate: c.dueDate,
