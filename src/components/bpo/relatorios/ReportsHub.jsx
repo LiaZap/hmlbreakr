@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBpo } from '../../../context/BpoContext';
 import { Card, Button, Input, Badge, Table, Th, Td, Tr, EmptyState } from '../../ui/primitives';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -306,35 +307,80 @@ const CashFlowReport = ({ from, to }) => {
 
       <Card>
         <div className="text-[10px] uppercase text-text-subtle font-semibold mb-3">Fluxo por período</div>
-        <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto">
-          {data.series.map((s) => (
-            <div key={s.period} className="flex items-center gap-3">
-              <div className="w-24 text-xs text-text-muted shrink-0">{s.period}</div>
-              <div className="flex-1 flex items-center gap-1 h-6">
-                {/* Inflows */}
-                <div className="flex flex-1 justify-end relative h-full">
-                  <div className="absolute right-0 top-0 h-full bg-success/40" style={{ width: `${(s.realInflow / maxValue) * 100}%` }} />
-                  <div className="absolute right-0 top-0 h-full bg-success/20 border-r border-success" style={{ width: `${((s.realInflow + s.projInflow) / maxValue) * 100}%` }} />
-                </div>
-                <div className="w-px bg-border h-full" />
-                {/* Outflows */}
-                <div className="flex flex-1 relative h-full">
-                  <div className="absolute left-0 top-0 h-full bg-danger/40" style={{ width: `${(s.realOutflow / maxValue) * 100}%` }} />
-                  <div className="absolute left-0 top-0 h-full bg-danger/20 border-l border-danger" style={{ width: `${((s.realOutflow + s.projOutflow) / maxValue) * 100}%` }} />
-                </div>
-              </div>
-              <div className="text-xs tabular-nums text-text-strong w-32 text-right shrink-0">{fmtBRL(s.balance)}</div>
-            </div>
-          ))}
+        <CashflowChart series={data.series} />
+        <div className="mt-3 pt-3 border-t border-border flex gap-4 flex-wrap text-[10px] text-text-muted">
+          <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-success/30 border border-success/50" /> Entrada (real + projetado)</div>
+          <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-danger/30 border border-danger/50" /> Saída (real + projetado)</div>
+          <div className="flex items-center gap-1"><div className="w-4 h-0.5 bg-brand" /> Saldo acumulado</div>
         </div>
-        <div className="mt-3 pt-3 border-t border-border flex gap-4 text-[10px] text-text-muted">
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-success/40" /> Realizado entrada</div>
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-success/20 border border-success" /> Projetado entrada</div>
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-danger/40" /> Realizado saída</div>
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-danger/20 border border-danger" /> Projetado saída</div>
+      </Card>
+
+      <Card>
+        <div className="text-[10px] uppercase text-text-subtle font-semibold mb-3">Detalhamento por período</div>
+        <div className="overflow-x-auto">
+          <Table>
+            <thead><tr>
+              <Th>Período</Th>
+              <Th align="right">Entrada real</Th>
+              <Th align="right">Entrada projetada</Th>
+              <Th align="right">Saída real</Th>
+              <Th align="right">Saída projetada</Th>
+              <Th align="right">Saldo acumulado</Th>
+            </tr></thead>
+            <tbody>
+              {data.series.map((s) => (
+                <Tr key={s.period}>
+                  <Td className="text-xs text-text-muted">{s.period}</Td>
+                  <Td align="right" className="text-success tabular-nums">{s.realInflow > 0 ? fmtBRL(s.realInflow) : '—'}</Td>
+                  <Td align="right" className="text-success/60 tabular-nums">{s.projInflow > 0 ? fmtBRL(s.projInflow) : '—'}</Td>
+                  <Td align="right" className="text-danger tabular-nums">{s.realOutflow > 0 ? fmtBRL(s.realOutflow) : '—'}</Td>
+                  <Td align="right" className="text-danger/60 tabular-nums">{s.projOutflow > 0 ? fmtBRL(s.projOutflow) : '—'}</Td>
+                  <Td align="right" className="font-semibold tabular-nums text-text-strong">{fmtBRL(s.balance)}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
         </div>
       </Card>
     </>
+  );
+};
+
+// Gráfico de fluxo de caixa: ComposedChart (Recharts) — entradas/saídas em barras + saldo em linha
+const CashflowChart = ({ series }) => {
+  const data = series.map((s) => ({
+    period: s.period,
+    entrada: s.realInflow + s.projInflow,
+    saida: -(s.realOutflow + s.projOutflow), // negativo pra ficar abaixo do zero
+    saldo: s.balance,
+  }));
+
+  const tooltipFormatter = (value, name) => {
+    const fmt = Number(Math.abs(value)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return [fmt, name];
+  };
+
+  return (
+    <div style={{ width: '100%', height: 320 }}>
+      <ResponsiveContainer>
+        <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+          <CartesianGrid stroke="#2A2A2C" strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="period" stroke="#868686" fontSize={10} tickLine={false} axisLine={{ stroke: '#2A2A2C' }} />
+          <YAxis yAxisId="left" stroke="#868686" fontSize={10} tickLine={false} axisLine={{ stroke: '#2A2A2C' }}
+            tickFormatter={(v) => v >= 1000 || v <= -1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+          <YAxis yAxisId="right" orientation="right" stroke="#F5A623" fontSize={10} tickLine={false} axisLine={{ stroke: '#2A2A2C' }}
+            tickFormatter={(v) => v >= 1000 || v <= -1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+          <Tooltip
+            contentStyle={{ background: '#1B1B1D', border: '1px solid #2A2A2C', borderRadius: 8, fontSize: 11 }}
+            labelStyle={{ color: '#fff', fontWeight: 600 }}
+            formatter={tooltipFormatter}
+          />
+          <Bar yAxisId="left" dataKey="entrada" fill="#4ADE80" fillOpacity={0.5} stroke="#4ADE80" strokeOpacity={0.8} name="Entrada" radius={[2, 2, 0, 0]} />
+          <Bar yAxisId="left" dataKey="saida" fill="#EF4444" fillOpacity={0.5} stroke="#EF4444" strokeOpacity={0.8} name="Saída" radius={[0, 0, 2, 2]} />
+          <Line yAxisId="right" type="monotone" dataKey="saldo" stroke="#F5A623" strokeWidth={2} dot={{ fill: '#F5A623', r: 3 }} name="Saldo" />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
