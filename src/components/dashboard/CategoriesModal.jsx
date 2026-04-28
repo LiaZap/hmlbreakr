@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useDashboard } from '../../context/DashboardContext';
 
-const CategoriesModal = ({ onClose }) => {
+const CategoriesModal = ({ onClose, defaultTab = 'insumos' }) => {
   const { dashboardData, updateDashboardData } = useDashboard();
-  const [activeTab, setActiveTab] = useState('insumos'); // 'insumos' or 'fichas'
+  const [activeTab, setActiveTab] = useState(defaultTab); // 'insumos' or 'fichas'
   const [newCategory, setNewCategory] = useState('');
 
   const categories = dashboardData.operational?.categories || { insumos: [], fichas: [] };

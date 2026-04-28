@@ -2572,6 +2572,15 @@ const FichaTecnica = () => {
                           </button>
 
                           <button
+                              onClick={() => setShowCategoriesModal(true)}
+                              className="bg-[#252527] hover:bg-[#333] border border-[#2A2A2C] text-white text-[11px] font-medium px-3 py-1.5 rounded-[8px] flex items-center gap-1.5 transition-colors"
+                              title="Criar e gerenciar categorias de pratos"
+                          >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                              Categorias
+                          </button>
+
+                          <button
                               onClick={handleDownloadFichasTemplate}
                               className="text-[11px] font-medium text-[#F5A623] hover:text-[#E5961E] transition-colors flex items-center gap-1.5"
                           >
@@ -2781,7 +2790,7 @@ const FichaTecnica = () => {
 
       {/* Categories Modal */}
       {showCategoriesModal && (
-        <CategoriesModal onClose={() => setShowCategoriesModal(false)} />
+        <CategoriesModal onClose={() => setShowCategoriesModal(false)} defaultTab={activeTab === 'fichas' ? 'fichas' : 'insumos'} />
       )}
 
       {/* Simulador de Precificação (BAH-039) */}
