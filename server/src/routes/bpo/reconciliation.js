@@ -275,66 +275,136 @@ router.get('/suggest/:transactionId', async (req, res) => {
     });
     if (!tx) return res.status(404).json({ error: 'Transação não encontrada' });
 
-    // Janela: ±5 dias da data da transação, valor exato
-    const fromDate = new Date(tx.date.getTime() - 5 * 86400000);
-    const toDate = new Date(tx.date.getTime() + 5 * 86400000);
+    // Janelas LARGAS pra trazer pool grande, score fino classifica:
+    // - Data: ±90 dias antes / ±30 dias depois (pagamento atrasado é comum)
+    // - Valor: ±50% (pra pegar parciais e arredondamentos)
+    const fromDate = new Date(tx.date.getTime() - 90 * 86400000);
+    const toDate = new Date(tx.date.getTime() + 30 * 86400000);
     const amountNum = Number(tx.amount);
 
     const suggestions = [];
-
-    let aiCandidatePool = []; // pool enriquecido pra alimentar IA (ids + metadados)
+    let aiCandidatePool = [];
     const targetType = tx.type === 'debit' ? 'payable' : 'receivable';
+    const txDescLow = tx.description.toLowerCase();
+
+    // Score fino — quanto mais próximo, mais alto. Tudo escalado pra 0-100:
+    // base 30 (estar no pool) + valor (até +40) + nome (até +25) + data (até +15) - fora-de-janela
+    const computeScore = (remaining, supplierOrPayerName, dueDate, descricao) => {
+      let s = 30;
+      const remNum = Number(remaining);
+      // Valor (peso máximo): exato +40, ±2% +35, ±10% +25, ±25% +10
+      if (Math.abs(remNum - amountNum) < 0.01) s += 40;
+      else if (Math.abs(remNum - amountNum) / amountNum < 0.02) s += 35;
+      else if (Math.abs(remNum - amountNum) / amountNum < 0.10) s += 25;
+      else if (Math.abs(remNum - amountNum) / amountNum < 0.25) s += 10;
+      // Nome do fornecedor/pagador na descrição da transação
+      if (supplierOrPayerName) {
+        const name = supplierOrPayerName.toLowerCase();
+        const firstWord = name.split(/\s+/)[0];
+        if (txDescLow.includes(name)) s += 25;
+        else if (firstWord.length >= 3 && txDescLow.includes(firstWord)) s += 20;
+      }
+      // Descrição do payable/receivable também conta
+      if (descricao) {
+        const tokens = descricao.toLowerCase().split(/\s+/).filter((t) => t.length >= 4);
+        const hits = tokens.filter((t) => txDescLow.includes(t)).length;
+        if (hits >= 2) s += 10;
+        else if (hits === 1) s += 5;
+      }
+      // Proximidade de data: ±3 dias +15, ±7 dias +10, ±15 dias +5
+      const daysDiff = Math.abs((new Date(dueDate).getTime() - tx.date.getTime()) / 86400000);
+      if (daysDiff <= 3) s += 15;
+      else if (daysDiff <= 7) s += 10;
+      else if (daysDiff <= 15) s += 5;
+      return Math.min(100, s);
+    };
+
+    // Helper: extrai palavras "úteis" da descrição da transação pra busca textual
+    // (ignora tokens curtos, palavras genéricas como "PIX", "TED", "PAGAMENTO", "RECEBIDO")
+    const STOPWORDS = new Set(['pix', 'ted', 'doc', 'pagamento', 'recebido', 'enviada', 'recebida', 'cliente', 'compra', 'debito', 'credito', 'avulso', 'tarifa', 'manutencao', 'iof', 'sobre', 'operacoes', 'fornecedor', 'desconhecido', 'seed', 'bpo']);
+    const txTokens = txDescLow.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+
+    const seenIds = new Set();
 
     if (tx.type === 'debit') {
-      // Provavelmente uma conta a pagar
-      const candidates = await prisma.payable.findMany({
+      // Pool 1: valor próximo (±50%) na janela de data
+      const byValue = await prisma.payable.findMany({
         where: {
           clientId: req.bpoClient.id,
           status: { in: ['pending', 'scheduled', 'paid_partial'] },
           dueDate: { gte: fromDate, lte: toDate },
-          remainingAmount: { gte: amountNum * 0.95, lte: amountNum * 1.05 },
+          remainingAmount: { gte: amountNum * 0.5, lte: amountNum * 1.5 },
         },
         include: { supplier: { select: { name: true } } },
-        take: 10,
+        take: 50,
       });
-      candidates.forEach((c) => {
-        let confidence = 50;
-        if (Number(c.remainingAmount) === amountNum) confidence += 30;
-        if (c.supplier?.name && tx.description.toLowerCase().includes(c.supplier.name.toLowerCase().split(' ')[0])) confidence += 20;
+      // Pool 2: fornecedor cujo nome matcha algum token da descrição da transação
+      // (sem filtro de valor — score vai punir se valor distante)
+      const byName = txTokens.length > 0 ? await prisma.payable.findMany({
+        where: {
+          clientId: req.bpoClient.id,
+          status: { in: ['pending', 'scheduled', 'paid_partial'] },
+          OR: [
+            { supplier: { name: { contains: txTokens[0], mode: 'insensitive' } } },
+            ...(txTokens[1] ? [{ supplier: { name: { contains: txTokens[1], mode: 'insensitive' } } }] : []),
+            { description: { contains: txTokens[0], mode: 'insensitive' } },
+          ],
+        },
+        include: { supplier: { select: { name: true } } },
+        take: 30,
+      }) : [];
+
+      [...byValue, ...byName].forEach((c) => {
+        if (seenIds.has(c.id)) return;
+        seenIds.add(c.id);
+        const confidence = computeScore(c.remainingAmount, c.supplier?.name, c.dueDate, c.description || '');
+        if (confidence < 40) return;
         suggestions.push({ type: 'payable', id: c.id, label: `${c.supplier?.name || 'Sem fornecedor'} — R$ ${c.remainingAmount}`, confidence });
         aiCandidatePool.push({
-          id: c.id,
-          supplierName: c.supplier?.name || null,
-          remainingAmount: c.remainingAmount,
-          dueDate: c.dueDate,
+          id: c.id, supplierName: c.supplier?.name || null,
+          remainingAmount: c.remainingAmount, dueDate: c.dueDate,
           description: c.description || c.notes || '',
         });
       });
     } else {
-      // Crédito = conta a receber
-      const candidates = await prisma.receivable.findMany({
+      const byValue = await prisma.receivable.findMany({
         where: {
           clientId: req.bpoClient.id,
           status: { in: ['pending', 'received_partial'] },
           dueDate: { gte: fromDate, lte: toDate },
-          remainingAmount: { gte: amountNum * 0.95, lte: amountNum * 1.05 },
+          remainingAmount: { gte: amountNum * 0.5, lte: amountNum * 1.5 },
         },
-        take: 10,
+        take: 50,
       });
-      candidates.forEach((c) => {
-        let confidence = 50;
-        if (Number(c.remainingAmount) === amountNum) confidence += 30;
-        if (c.payerName && tx.description.toLowerCase().includes(c.payerName.toLowerCase().split(' ')[0])) confidence += 20;
+      const byName = txTokens.length > 0 ? await prisma.receivable.findMany({
+        where: {
+          clientId: req.bpoClient.id,
+          status: { in: ['pending', 'received_partial'] },
+          OR: [
+            { payerName: { contains: txTokens[0], mode: 'insensitive' } },
+            ...(txTokens[1] ? [{ payerName: { contains: txTokens[1], mode: 'insensitive' } }] : []),
+            { description: { contains: txTokens[0], mode: 'insensitive' } },
+          ],
+        },
+        take: 30,
+      }) : [];
+
+      [...byValue, ...byName].forEach((c) => {
+        if (seenIds.has(c.id)) return;
+        seenIds.add(c.id);
+        const confidence = computeScore(c.remainingAmount, c.payerName, c.dueDate, c.description || '');
+        if (confidence < 40) return;
         suggestions.push({ type: 'receivable', id: c.id, label: `${c.payerName} — R$ ${c.remainingAmount}`, confidence });
         aiCandidatePool.push({
-          id: c.id,
-          payerName: c.payerName || null,
-          remainingAmount: c.remainingAmount,
-          dueDate: c.dueDate,
+          id: c.id, payerName: c.payerName || null,
+          remainingAmount: c.remainingAmount, dueDate: c.dueDate,
           description: c.description || c.notes || '',
         });
       });
     }
+
+    // Limita resultado pra evitar lista enorme
+    suggestions.splice(10);
 
     // Aplica regras de conciliação (palavra-chave)
     const rules = await prisma.reconciliationRule.findMany({
