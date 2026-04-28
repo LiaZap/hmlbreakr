@@ -2590,7 +2590,7 @@ const FichaTecnica = () => {
             </div>
 
             {/* Cards Grid with grey background — agora flex column com scroll interno e paginação sticky */}
-            <div className="bg-[#1B1B1D] mx-4 mb-4 rounded-[16px] p-4 flex-1 lg:min-h-0 flex flex-col">
+            <div className="bg-[#1B1B1D] mx-4 mb-6 lg:mb-8 rounded-[16px] p-4 flex-1 lg:min-h-0 flex flex-col">
               {/* Search + Category Filter — fixo no topo do cards container */}
               {(() => {
                 const items = activeTab === 'insumos' ? insumos : fichas;
