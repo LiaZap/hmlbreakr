@@ -2745,8 +2745,8 @@ const FichaTecnica = () => {
             </div>
           </div>
 
-          {/* FAB Button — fica no canto inferior direito sem cobrir paginação */}
-          <div className="fixed bottom-20 md:bottom-8 right-6 md:right-8 z-40">
+          {/* FAB Button — sobe no desktop pra nao colar na paginacao */}
+          <div className="fixed bottom-20 md:bottom-24 right-6 md:right-10 z-40">
             <button
               onClick={() => {
                 if (activeTab === 'insumos') {
