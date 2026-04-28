@@ -292,11 +292,42 @@ router.post('/excel/:type', upload.single('file'), async (req, res) => {
 
     const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
+    let rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
 
     if (rows.length === 0) {
       return res.status(400).json({ error: 'Planilha vazia' });
     }
+
+    // Aliases pt-BR <-> EN (resiliente a templates de outros sistemas)
+    const COL_ALIASES = {
+      nome: ['name', 'razao_social', 'razão social'],
+      telefone: ['phone', 'fone', 'tel', 'celular'],
+      pix: ['pixkey', 'pix_key', 'chave_pix', 'chave pix'],
+      banco: ['bankcode', 'bank_code', 'codigo_banco'],
+      agencia: ['agency'],
+      conta: ['account'],
+      observacoes: ['notes', 'obs', 'observações'],
+      valor: ['amount', 'value'],
+      vencimento: ['duedate', 'due_date', 'data_vencimento'],
+      pagador: ['payer', 'cliente'],
+      tipo: ['type'],
+    };
+    // Normaliza colunas: lowercase + aplica alias reverso
+    const normalizeRow = (row) => {
+      const out = {};
+      for (const k of Object.keys(row)) {
+        const low = String(k).toLowerCase().trim();
+        // Procura se essa coluna é um alias de algum canônico
+        let canonical = low;
+        for (const [target, aliases] of Object.entries(COL_ALIASES)) {
+          if (low === target) { canonical = target; break; }
+          if (aliases.includes(low)) { canonical = target; break; }
+        }
+        out[canonical] = row[k];
+      }
+      return out;
+    };
+    rows = rows.map(normalizeRow);
 
     // BUG #4 FIX: valida colunas antes de processar
     const REQUIRED_COLS = {
@@ -313,7 +344,7 @@ router.post('/excel/:type', upload.single('file'), async (req, res) => {
         error: `Colunas obrigatórias faltando: ${missing.join(', ')}`,
         expected: REQUIRED_COLS[type],
         found: cols,
-        hint: 'Use o template (Baixar Modelo) pra ver os nomes corretos.',
+        hint: 'Use o template (Baixar Modelo) pra ver os nomes corretos. Aceita também aliases em inglês (name, phone, pixKey, etc).',
       });
     }
 

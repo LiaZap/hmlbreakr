@@ -34,7 +34,8 @@ function log(...args) {
 function genBulkFornecedoresXlsx() {
   log('Gerando bulk-fornecedores.xlsx...');
 
-  const headers = ['cnpj', 'name', 'email', 'phone', 'pixKey', 'bankCode', 'agency', 'account', 'notes'];
+  // Headers em pt-BR (alinha com REQUIRED_COLS do backend imports.js)
+  const headers = ['cnpj', 'nome', 'email', 'telefone', 'pix', 'banco', 'agencia', 'conta', 'observacoes'];
   const rows = [
     ['11.222.333/0001-81', 'Distribuidora Bebidas SP LTDA', 'contato@distbebidas.com.br', '(11) 98765-4321', '11222333000181', '237', '1234', '56789-0', 'Refrigerantes e cervejas'],
     ['22.333.444/0001-95', 'Hortifruti Cidade Verde', 'compras@hortifruti.com.br', '(11) 98888-1111', '22333444000195', '341', '0001', '12345-6', 'Verduras e legumes'],
