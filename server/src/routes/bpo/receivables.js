@@ -222,6 +222,12 @@ router.post('/:id/receive', async (req, res) => {
     const newRemaining = Number(receivable.remainingAmount) - amountNum;
     const isPartial = newRemaining >= 0.01;  // BUG #2 FIX: threshold consistente
 
+    // Valida que o banco existe e pertence ao cliente
+    const bank = await prisma.bankAccount.findFirst({
+      where: { id: bankAccountId, clientId: req.bpoClient.id },
+    });
+    if (!bank) return res.status(404).json({ error: 'Conta bancária não encontrada' });
+
     const result = await prisma.$transaction(async (tx) => {
       const txn = await tx.paymentTransaction.create({
         data: {
@@ -239,6 +245,11 @@ router.post('/:id/receive', async (req, res) => {
           remainingAmount: newRemaining,
           status: isPartial ? 'received_partial' : 'received',
         },
+      });
+      // BUG FIX: incrementar saldo do banco quando recebe
+      await tx.bankAccount.update({
+        where: { id: bankAccountId },
+        data: { currentBalance: { increment: amountNum } },
       });
       return { transaction: txn, receivable: updated };
     });

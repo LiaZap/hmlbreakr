@@ -86,6 +86,28 @@ router.get('/', async (req, res) => {
   }
 });
 
+// === WORKFLOW DE APROVAÇÃO — DEVE vir antes de /:id (ordering Express) ===
+router.get('/pending-approval', async (req, res) => {
+  try {
+    const items = await prisma.payable.findMany({
+      where: {
+        clientId: req.bpoClient.id,
+        requiresApproval: true,
+        approvedAt: null,
+        rejectedAt: null,
+      },
+      orderBy: { scheduledAt: 'asc' },
+      include: {
+        supplier: { select: { name: true, cnpj: true } },
+        category: { select: { name: true } },
+      },
+    });
+    res.json({ items, total: items.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const item = await prisma.payable.findFirst({
@@ -263,7 +285,13 @@ router.post('/:id/pay', async (req, res) => {
     const newRemaining = Number(payable.remainingAmount) - amountNum;
     const isPartial = newRemaining >= 0.01;  // BUG #2 FIX: threshold consistente (1 centavo)
 
-    // Transação: cria PaymentTransaction + atualiza Payable
+    // Valida que o banco existe e pertence ao cliente
+    const bank = await prisma.bankAccount.findFirst({
+      where: { id: bankAccountId, clientId: req.bpoClient.id },
+    });
+    if (!bank) return res.status(404).json({ error: 'Conta bancária não encontrada' });
+
+    // Transação: cria PaymentTransaction + atualiza Payable + decrementa saldo do banco
     const result = await prisma.$transaction(async (tx) => {
       const txn = await tx.paymentTransaction.create({
         data: {
@@ -281,6 +309,11 @@ router.post('/:id/pay', async (req, res) => {
           remainingAmount: newRemaining,
           status: isPartial ? 'paid_partial' : 'paid',
         },
+      });
+      // BUG FIX: atualizar saldo do banco (estava ficando intacto após pagamento)
+      await tx.bankAccount.update({
+        where: { id: bankAccountId },
+        data: { currentBalance: { decrement: amountNum } },
       });
       return { transaction: txn, payable: updated };
     });
@@ -320,27 +353,6 @@ router.post('/:id/schedule', async (req, res) => {
 });
 
 // === WORKFLOW DE APROVAÇÃO (dono aprova pagamentos agendados pelo BPO operador) ===
-router.get('/pending-approval', async (req, res) => {
-  try {
-    const items = await prisma.payable.findMany({
-      where: {
-        clientId: req.bpoClient.id,
-        requiresApproval: true,
-        approvedAt: null,
-        rejectedAt: null,
-      },
-      orderBy: { scheduledAt: 'asc' },
-      include: {
-        supplier: { select: { name: true, cnpj: true } },
-        category: { select: { name: true } },
-      },
-    });
-    res.json({ items, total: items.length });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 router.post('/:id/approve', async (req, res) => {
   try {
     const { approverEmail } = req.body;
