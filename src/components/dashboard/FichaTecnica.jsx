@@ -1,8 +1,41 @@
 /* eslint-disable react-refresh/only-export-components, no-unused-vars */
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as XLSX from 'xlsx';
 
 // ============ DATA ============
+// Mapeia variações de unidade (Alo Chefia, BR popular, etc) para os codigos
+// canonicos do sistema: gr | kg | ml | lt | un.
+// "dúzia" e "pacote" são tratados como "un" — quantidade encapsula o resto
+// (ex: dúzia => qty=12, pacote => qty=1 com nome explicito).
+export const UNIT_ALIASES = {
+  // unidade
+  'unidade': 'un', 'unidades': 'un', 'un': 'un', 'und': 'un', 'pc': 'un',
+  'pcs': 'un', 'peca': 'un', 'peça': 'un', 'pecas': 'un', 'peças': 'un',
+  'duzia': 'un', 'dúzia': 'un', 'duzias': 'un', 'dúzias': 'un',
+  'pacote': 'un', 'pacotes': 'un', 'pct': 'un', 'pacote(s)': 'un',
+  'caixa': 'un', 'caixas': 'un', 'cx': 'un', 'fardo': 'un',
+  // grama
+  'g': 'gr', 'gr': 'gr', 'grama': 'gr', 'gramas': 'gr',
+  // quilograma
+  'kg': 'kg', 'k': 'kg', 'quilo': 'kg', 'kilo': 'kg', 'quilos': 'kg',
+  'kilos': 'kg', 'quilograma': 'kg', 'quilogramas': 'kg',
+  'kilograma': 'kg', 'kilogramas': 'kg',
+  // litro
+  'l': 'lt', 'lt': 'lt', 'litro': 'lt', 'litros': 'lt',
+  // mililitro
+  'ml': 'ml', 'mililitro': 'ml', 'mililitros': 'ml',
+};
+
+export const normalizeUnit = (raw, fallback = 'gr') => {
+  if (!raw) return fallback;
+  const key = String(raw).toLowerCase().trim().replace(/[\s().]+/g, '');
+  if (UNIT_ALIASES[key]) return UNIT_ALIASES[key];
+  // Match short canonical codes already
+  if (['gr', 'kg', 'ml', 'lt', 'un'].includes(key)) return key;
+  return fallback;
+};
+
 export const parseSafeNumber = (val) => {
     if (typeof val === 'number') return val;
     if (!val && val !== 0) return 0;
@@ -299,10 +332,13 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   // Safe parsing for creation vs edit
   const safeRendimento = insumo.rendimento || '0gr';
   const qty = safeRendimento.replace(/[^0-9.,]/g, '');
-  const unitMatch = safeRendimento.replace(/[0-9.,]/g, '') || 'gr';
+  const rawUnitFromRendimento = safeRendimento.replace(/[0-9.,]/g, '');
+  // Normaliza unit pra cobrir dados antigos importados com "unidade",
+  // "quilograma", "litro" etc do Alo Chefia
+  const unitMatch = normalizeUnit(rawUnitFromRendimento, 'gr');
 
   const [quantidade] = useState(insumo.qty || insumo.defaultQty || qty || '');
-  const [unit, setUnit] = useState(insumo.unit || unitMatch || 'gr');
+  const [unit, setUnit] = useState(normalizeUnit(insumo.unit, unitMatch));
 
   const safeCusto = insumo.custo || '0,00';
   const [custo, setCusto] = useState(safeCusto.replace(/R\$\s?/g, '').trim());
@@ -310,7 +346,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   // Purchase info — quantidade comprada + valor pago total (para calcular preço por unidade base)
   // purchaseQty é a qtd comprada na unidade purchaseUnit; purchaseTotal é o valor pago pela embalagem inteira
   const [purchaseQty, setPurchaseQty] = useState(insumo.purchaseQty || '');
-  const [purchaseUnit, setPurchaseUnit] = useState(insumo.purchaseUnit || insumo.unit || unitMatch || 'gr');
+  const [purchaseUnit, setPurchaseUnit] = useState(normalizeUnit(insumo.purchaseUnit || insumo.unit, unitMatch));
   const [purchaseTotal, setPurchaseTotal] = useState(insumo.purchaseTotal || '');
 
   // Prepared insumo state
@@ -2181,66 +2217,154 @@ const FichaTecnica = () => {
     }
   };
 
+  /**
+   * Mapeia uma linha de planilha pro formato interno de insumo.
+   * Detecta formato via cabeçalho: Breaker (5 cols) ou Alo Chefia (9 cols).
+   * Normaliza unidades ("unidade" -> "un", "quilograma" -> "kg", etc).
+   */
+  const mapRowToInsumo = (row, headerMap, idx) => {
+    const get = (key) => {
+      const col = headerMap[key];
+      return col != null ? String(row[col] ?? '').trim() : '';
+    };
+    const name = get('name');
+    if (!name) return null;
+
+    const rawUnit = get('unit');
+    const unit = normalizeUnit(rawUnit, 'gr');
+    let qty = parseSafeNumber(get('qty')) || 1;
+
+    // "dúzia" -> 12 unidades
+    if (/d[uú]zia/i.test(rawUnit)) qty = qty * 12;
+
+    const price = parseSafeNumber(get('price'));
+    // No formato Alo Chefia, "Último preço" é o preço por unidade base.
+    // Custo total da última compra = preço * qty.
+    const totalCost = price * qty;
+
+    return {
+      id: `imp_${Date.now()}_${idx}`,
+      name,
+      category: get('category') || 'Outros',
+      unit,
+      qty: String(qty),
+      defaultQty: String(qty),
+      rendimento: `${qty}${unit}`,
+      // Compra
+      purchaseUnit: unit,
+      purchaseQty: String(qty),
+      purchaseTotal: totalCost ? String(totalCost.toFixed(2)) : '',
+      // Preço por unidade base
+      price: price ? String(price) : '',
+      custo: `R$ ${(price || 0).toFixed(2).replace('.', ',')}`,
+    };
+  };
+
+  /**
+   * Detecta o formato da planilha e retorna headerMap mapeando
+   * keys internos (name, category, qty, unit, price) -> índice da coluna.
+   */
+  const detectFormat = (headers) => {
+    const lower = headers.map(h => String(h || '').toLowerCase().trim());
+    const has = (...patterns) => lower.findIndex(h => patterns.some(p => h.includes(p)));
+
+    // Alo Chefia: ID,Produto,Quantidade,Unidade,Último preço,Preço médio,Estoque mínimo,Categorias,Ficha técnica?
+    if (has('produto') >= 0 && has('último preço', 'ultimo preco', 'preço médio') >= 0) {
+      return {
+        name: has('produto'),
+        qty: has('quantidade'),
+        unit: has('unidade'),
+        price: has('último preço', 'ultimo preco') >= 0 ? has('último preço', 'ultimo preco') : has('preço médio', 'preco medio'),
+        category: has('categoria'),
+      };
+    }
+
+    // Breaker template: Nome;Categoria;Rendimento;Unidade;Custo
+    if (has('nome') >= 0 && has('rendimento') >= 0) {
+      return {
+        name: has('nome'),
+        category: has('categoria'),
+        qty: has('rendimento'),
+        unit: has('unidade'),
+        price: has('custo', 'preço', 'preco'),
+      };
+    }
+
+    // Fallback (assume ordem Breaker mesmo sem header reconhecível)
+    return { name: 0, category: 1, qty: 2, unit: 3, price: 4 };
+  };
+
   const handleImportInsumos = (event) => {
     const file = event.target.files[0];
     if (!file) return;
+    const isExcel = /\.xlsx?$/i.test(file.name);
+
+    const processRows = (rows) => {
+      if (!rows || rows.length < 2) {
+        alert('Planilha vazia ou só com cabeçalho.');
+        return;
+      }
+      const headerMap = detectFormat(rows[0]);
+      const newItems = [];
+      for (let i = 1; i < rows.length; i++) {
+        const item = mapRowToInsumo(rows[i], headerMap, i);
+        if (item) newItems.push(item);
+      }
+
+      if (newItems.length === 0) {
+        alert('Nenhum item válido encontrado na planilha.');
+        return;
+      }
+
+      const updatedInsumos = [...insumos];
+      newItems.forEach(newItem => {
+        const existingIndex = updatedInsumos.findIndex(
+          i => i.name.toLowerCase().trim() === newItem.name.toLowerCase().trim()
+        );
+        if (existingIndex >= 0) {
+          updatedInsumos[existingIndex] = {
+            ...updatedInsumos[existingIndex],
+            ...newItem,
+            id: updatedInsumos[existingIndex].id, // preserva ID original
+          };
+        } else {
+          updatedInsumos.push(newItem);
+        }
+      });
+
+      updateDashboardData({
+        operational: {
+          ...dashboardData.operational,
+          insumos: updatedInsumos,
+        }
+      });
+      alert(`${newItems.length} itens processados com sucesso!`);
+    };
 
     const reader = new FileReader();
     reader.onload = (e) => {
-        const text = e.target.result;
-        const lines = text.split('\n');
-        // Skip header
-        const newItems = [];
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            // Handle both comma and semicolon separators for flexibility
-            const separator = line.includes(';') ? ';' : ',';
-            const cols = line.split(separator);
-            if (cols.length >= 5) {
-                newItems.push({
-                    id: `imp_${Date.now()}_${i}`,
-                    name: cols[0].trim(),
-                    category: cols[1].trim(),
-                    rendimento: `${cols[2].trim()}${cols[3].trim()}`,
-                    custo: `R$ ${cols[4].trim()}`
-                });
-            }
+      try {
+        if (isExcel) {
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+          processRows(rows);
+        } else {
+          const text = e.target.result;
+          const lines = text.split('\n').filter(l => l.trim());
+          const sep = lines[0]?.includes(';') ? ';' : ',';
+          const rows = lines.map(l => l.split(sep).map(c => c.trim()));
+          processRows(rows);
         }
-        
-        if (newItems.length > 0) {
-            // Smart Merge: Update existing items by name, add new ones
-            const updatedInsumos = [...insumos];
-            
-            newItems.forEach(newItem => {
-                const existingIndex = updatedInsumos.findIndex(
-                    i => i.name.toLowerCase().trim() === newItem.name.toLowerCase().trim()
-                );
-                
-                if (existingIndex >= 0) {
-                    // Update existing item (preserve ID)
-                    updatedInsumos[existingIndex] = {
-                        ...updatedInsumos[existingIndex],
-                        ...newItem,
-                        id: updatedInsumos[existingIndex].id // Keep original ID
-                    };
-                } else {
-                    // Add new item
-                    updatedInsumos.push(newItem);
-                }
-            });
-
-            updateDashboardData({
-                operational: {
-                    ...dashboardData.operational,
-                    insumos: updatedInsumos
-                }
-            });
-            alert(`${newItems.length} itens processados com sucesso!`);
-        }
+      } catch (err) {
+        console.error('Erro ao processar planilha:', err);
+        alert('Erro ao ler a planilha. Verifique o formato (CSV ou XLSX).');
+      }
     };
-    reader.readAsText(file);
-    // Reset input
+
+    if (isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
     event.target.value = '';
   };
 
@@ -2557,7 +2681,7 @@ const FichaTecnica = () => {
                           <label className="bg-[#252527] hover:bg-[#333] border border-[#2A2A2C] text-white text-[11px] font-medium px-3 py-1.5 rounded-[8px] transition-colors cursor-pointer flex items-center gap-1.5">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                               Importar
-                              <input type="file" accept=".csv" onChange={handleImportInsumos} hidden />
+                              <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImportInsumos} hidden />
                           </label>
                       </div>
                   ) : (
