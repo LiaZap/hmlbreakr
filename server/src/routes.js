@@ -260,6 +260,30 @@ router.get('/admin/inspect/:hash/raw', async (req, res) => {
   }
 });
 
+// Diagnóstico do sync onboarding -> BPO
+// Mostra contagens por entidade e quem tá faltando.
+// Útil pra verificar se o sync rodou após deploy ou ediçao do cliente.
+router.get('/admin/sync-status/:hash', async (req, res) => {
+  try {
+    const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    const raw = typeof client.data === 'string' ? client.data : JSON.stringify(client.data || {});
+    let parsed = {};
+    try { parsed = JSON.parse(raw); } catch { /* invalid json */ }
+    const { diffOnboardingVsBpo } = require('./services/onboardingSync');
+    const diff = await diffOnboardingVsBpo(prisma, client.id, parsed.formData || {});
+    res.json({
+      clientId: client.id,
+      clientName: client.name,
+      hash: client.hash,
+      ...diff,
+    });
+  } catch (error) {
+    console.error('sync-status error:', error);
+    res.status(500).json({ error: 'Erro ao calcular sync status' });
+  }
+});
+
 // Restaurar data de um cliente específico a partir de JSON enviado (admin manual)
 // Uso: após extrair JSON do snapshot, enviar aqui para injetar em produção
 router.post('/admin/restore-client-data', async (req, res) => {

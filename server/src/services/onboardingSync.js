@@ -143,14 +143,81 @@ async function syncPaymentMethods(prisma, clientId, formData) {
 async function syncOnboardingToBpo(prisma, clientId, formData) {
   if (!formData || typeof formData !== 'object') return;
 
+  const stats = {
+    partners: Array.isArray(formData.partners) ? formData.partners.filter(p => p?.name).length : 0,
+    employees: Array.isArray(formData.employees) ? formData.employees.filter(e => e?.name).length : 0,
+    marketplaces: Array.isArray(formData.fees_marketplaces) ? formData.fees_marketplaces.length : 0,
+    cards: Array.isArray(formData.fees_cards) ? formData.fees_cards.length : 0,
+  };
+
   try {
     await syncPartners(prisma, clientId, formData.partners);
     await syncEmployees(prisma, clientId, formData.employees);
     await syncPaymentMethods(prisma, clientId, formData);
+    console.log(`[onboardingSync] OK client=${clientId} partners=${stats.partners} employees=${stats.employees} marketplaces=${stats.marketplaces} cards=${stats.cards}`);
   } catch (err) {
     // Sync é best-effort — não quebra o save do cliente se falhar
-    console.error('[onboardingSync] failed:', err);
+    console.error(`[onboardingSync] FAIL client=${clientId}`, err);
   }
 }
 
-module.exports = { syncOnboardingToBpo };
+/**
+ * Diagnóstico: compara o que tá no formData (onboarding) com o que tá nas
+ * tabelas BPO. Útil pra admin verificar se sync rodou.
+ */
+async function diffOnboardingVsBpo(prisma, clientId, formData) {
+  formData = formData || {};
+  const [bpoPartners, bpoEmployees, bpoPaymentMethods] = await Promise.all([
+    prisma.bpoPartner.findMany({ where: { clientId } }),
+    prisma.bpoEmployee.findMany({ where: { clientId } }),
+    prisma.paymentMethod.findMany({ where: { clientId } }),
+  ]);
+
+  const onboarding = {
+    partners: (formData.partners || []).filter(p => p?.name).map(p => p.name),
+    employees: (formData.employees || []).filter(e => e?.name).map(e => e.name),
+    marketplaces: (formData.fees_marketplaces || [])
+      .map(m => m.provider === 'Outro' ? m.custom_provider : m.provider)
+      .filter(Boolean),
+    cards: (formData.fees_cards || [])
+      .map(c => c.provider === 'Outra' ? c.custom_provider : c.provider)
+      .filter(Boolean),
+  };
+
+  const bpo = {
+    partners: bpoPartners.map(p => p.name),
+    employees: bpoEmployees.map(e => e.name),
+    marketplaces: bpoPaymentMethods.filter(m => m.type === 'marketplace').map(m => m.name),
+    cards: bpoPaymentMethods
+      .filter(m => m.type === 'card_credit' || m.type === 'card_debit')
+      .map(m => m.name),
+  };
+
+  const inOnboardingNotBpo = (a, b) => a.filter(x => !b.some(y => y.toLowerCase() === x.toLowerCase()));
+
+  return {
+    counts: {
+      onboarding: {
+        partners: onboarding.partners.length,
+        employees: onboarding.employees.length,
+        marketplaces: onboarding.marketplaces.length,
+        cards: onboarding.cards.length,
+      },
+      bpo: {
+        partners: bpo.partners.length,
+        employees: bpo.employees.length,
+        marketplaces: bpo.marketplaces.length,
+        cards: bpo.cards.length,
+      },
+    },
+    missing: {
+      partners: inOnboardingNotBpo(onboarding.partners, bpo.partners),
+      employees: inOnboardingNotBpo(onboarding.employees, bpo.employees),
+      marketplaces: inOnboardingNotBpo(onboarding.marketplaces, bpo.marketplaces),
+    },
+    bpoLists: bpo,
+    onboardingLists: onboarding,
+  };
+}
+
+module.exports = { syncOnboardingToBpo, diffOnboardingVsBpo };
