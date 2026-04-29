@@ -5,6 +5,7 @@ const router = express.Router();
 const prisma = new PrismaClient();
 const { sendWelcomeEmail, sendCredentialResetEmail, sendPasswordResetEmail } = require('./services/emailService');
 const { calculateClientFinancials } = require('./services/financialCalc');
+const { syncOnboardingToBpo } = require('./services/onboardingSync');
 const crypto = require('crypto');
 
 // ========================
@@ -1034,6 +1035,13 @@ router.post('/client/:hash/sync', async (req, res) => {
         data: JSON.stringify(newData)
       }
     });
+
+    // Espelha sócios/funcionários/payment methods do onboarding pro BPO
+    // (best-effort — não bloqueia o save se falhar)
+    if (newData.formData) {
+      syncOnboardingToBpo(prisma, clientIdToUpdate, newData.formData)
+        .catch(err => console.error('[onboardingSync] hook failed:', err));
+    }
 
     res.json({ success: true });
   } catch (error) {

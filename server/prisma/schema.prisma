@@ -171,7 +171,7 @@ model BpoEmployee {
   clientId       String
   client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name           String
-  cpf            String
+  cpf            String?
   email          String?
   phone          String?
   // Dados bancários
@@ -202,7 +202,7 @@ model BpoPartner {
   clientId              String
   client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name                  String
-  cpf                   String
+  cpf                   String?
   email                 String?
   phone                 String?
   prolaboreAmount       Decimal  @db.Decimal(18, 2)
