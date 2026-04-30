@@ -25,27 +25,49 @@ const fmtBRL = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', curr
 // IDs unicos curtos
 const newId = (prefix) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
 
+// Parse "R$ 4,05" / "4,05" / "4.05" / 4.05 -> 4.05
+const parseCusto = (val) => {
+  if (typeof val === 'number') return val;
+  if (!val) return 0;
+  let str = String(val).replace(/R\$/g, '').trim();
+  if (str.includes(',') && str.includes('.')) str = str.replace(/\./g, '').replace(',', '.');
+  else if (str.includes(',')) str = str.replace(',', '.');
+  return parseFloat(str) || 0;
+};
+
+/**
+ * Custo efetivo de uma opção: se vinculada a uma ficha existente,
+ * lê o custo dela em tempo real (atualiza sozinho se a ficha-mae mudar).
+ * Caso contrario usa o custo digitado manualmente.
+ */
+const getCustoFromOption = (opt, availableFichas) => {
+  if (opt.linkedFichaId) {
+    const ficha = (availableFichas || []).find(f => String(f.id) === String(opt.linkedFichaId));
+    return ficha ? parseCusto(ficha.custoTotal) : 0;
+  }
+  return parseCusto(opt.custo);
+};
+
 // Calcula min/max/default de uma lista de modulos
-const calcCustosFromModules = (modules) => {
+const calcCustosFromModules = (modules, availableFichas) => {
   let custoDefault = 0, custoMin = 0, custoMax = 0;
   modules.forEach(mod => {
     const opts = mod.options || [];
-    const valid = opts.filter(o => parseFloat(o.custo) >= 0);
-    if (valid.length === 0) {
-      // se modulo opcional sem opcoes, ignora
-      return;
-    }
+    // Anota cada opção com seu custo efetivo (vinculada ou manual)
+    const enriched = opts.map(o => ({ ...o, _custo: getCustoFromOption(o, availableFichas) }));
+    // Válidas: vinculadas (linkedFichaId) ou com nome digitado
+    const valid = enriched.filter(o => o.linkedFichaId || (o.name && String(o.name).trim()));
+    if (valid.length === 0) return;
     const def = valid.find(o => o.default) || valid[0];
-    custoDefault += parseFloat(def.custo) || 0;
+    custoDefault += def._custo || 0;
     if (mod.required) {
       // required: tem que pegar pelo menos uma — min e o mais barato
-      const min = Math.min(...valid.map(o => parseFloat(o.custo) || 0));
-      const max = Math.max(...valid.map(o => parseFloat(o.custo) || 0));
-      custoMin += min;
-      custoMax += max;
+      const costs = valid.map(o => o._custo || 0);
+      custoMin += Math.min(...costs);
+      custoMax += Math.max(...costs);
     } else {
       // opcional: min pode ser 0 (nao escolhe), max pega o mais caro
-      const max = Math.max(...valid.map(o => parseFloat(o.custo) || 0), 0);
+      const max = Math.max(...valid.map(o => o._custo || 0), 0);
       custoMax += max;
     }
   });
@@ -57,6 +79,16 @@ const CriarFichaModularModal = ({ onClose, editingFicha = null, onSave, onDelete
   const isEditing = !!editingFicha;
 
   const fichaCategorias = (dashboardData.operational?.categories?.fichas || ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos']).filter(c => c !== 'Insumo Pronto Preparado');
+
+  // Fichas técnicas vinculáveis: não-modulares com custo > 0, excluindo
+  // a propria ficha em edicao (evita auto-referencia).
+  const availableFichas = useMemo(() => {
+    const all = dashboardData.operational?.fichas || [];
+    return all
+      .filter(f => !f.isModular && parseCusto(f.custoTotal) > 0)
+      .filter(f => !editingFicha || String(f.id) !== String(editingFicha.id))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [dashboardData.operational?.fichas, editingFicha]);
 
   const [name, setName] = useState(editingFicha?.name || '');
   const [category, setCategory] = useState(editingFicha?.category || fichaCategorias[0] || 'Prato Principal');
@@ -122,8 +154,36 @@ const CriarFichaModularModal = ({ onClose, editingFicha = null, onSave, onDelete
     }));
   };
 
+  // Vincula uma opcao a uma ficha existente — pre-preenche nome e zera custo manual
+  const linkOptionToFicha = (modId, optId, fichaId) => {
+    const ficha = availableFichas.find(f => String(f.id) === String(fichaId));
+    if (!ficha) return;
+    setModules(prev => prev.map(m => {
+      if (m.id !== modId) return m;
+      return {
+        ...m,
+        options: m.options.map(o => o.id === optId
+          ? { ...o, linkedFichaId: ficha.id, name: ficha.name, custo: '' }
+          : o)
+      };
+    }));
+  };
+
+  // Desvincula — volta pra modo manual, mantem nome atual
+  const unlinkOption = (modId, optId) => {
+    setModules(prev => prev.map(m => {
+      if (m.id !== modId) return m;
+      return {
+        ...m,
+        options: m.options.map(o => o.id === optId
+          ? { ...o, linkedFichaId: null }
+          : o)
+      };
+    }));
+  };
+
   // Calculos derivados
-  const custos = useMemo(() => calcCustosFromModules(modules), [modules]);
+  const custos = useMemo(() => calcCustosFromModules(modules, availableFichas), [modules, availableFichas]);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -280,14 +340,21 @@ const CriarFichaModularModal = ({ onClose, editingFicha = null, onSave, onDelete
 
                   {/* Opcoes */}
                   <div className="flex flex-col gap-1.5">
-                    <div className="grid grid-cols-[20px_1fr_100px_24px] gap-2 text-[9px] text-[#555] uppercase font-semibold tracking-wider px-1">
+                    <div className="grid grid-cols-[20px_1fr_100px_28px_24px] gap-2 text-[9px] text-[#555] uppercase font-semibold tracking-wider px-1">
                       <span>Pad</span>
                       <span>Opção</span>
                       <span className="text-right">Custo (R$)</span>
+                      <span title="Vincular ficha existente"></span>
                       <span></span>
                     </div>
-                    {mod.options.map((opt) => (
-                      <div key={opt.id} className="grid grid-cols-[20px_1fr_100px_24px] gap-2 items-center">
+                    {mod.options.map((opt) => {
+                      const isLinked = !!opt.linkedFichaId;
+                      const linkedFicha = isLinked
+                        ? availableFichas.find(f => String(f.id) === String(opt.linkedFichaId))
+                        : null;
+                      const linkedCusto = linkedFicha ? parseCusto(linkedFicha.custoTotal) : 0;
+                      return (
+                      <div key={opt.id} className="grid grid-cols-[20px_1fr_100px_28px_24px] gap-2 items-center">
                         <input
                           type="radio"
                           checked={!!opt.default}
@@ -295,21 +362,70 @@ const CriarFichaModularModal = ({ onClose, editingFicha = null, onSave, onDelete
                           className="accent-[#F5A623]"
                           title="Marcar como combinação padrão"
                         />
-                        <input
-                          type="text"
-                          value={opt.name}
-                          onChange={(e) => updateOption(mod.id, opt.id, 'name', e.target.value)}
-                          placeholder="Nome da opção"
-                          className="bg-[#0F0F0F] border border-[#2A2A2C] rounded-[6px] px-2 py-1 text-[11px] text-white outline-none focus:border-[#F5A623]"
-                        />
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={opt.custo}
-                          onChange={(e) => updateOption(mod.id, opt.id, 'custo', e.target.value)}
-                          placeholder="0,00"
-                          className="bg-[#0F0F0F] border border-[#2A2A2C] rounded-[6px] px-2 py-1 text-[11px] text-white text-right outline-none focus:border-[#F5A623] tabular-nums"
-                        />
+                        {isLinked ? (
+                          <select
+                            value={opt.linkedFichaId || ''}
+                            onChange={(e) => linkOptionToFicha(mod.id, opt.id, e.target.value)}
+                            className={`bg-[#0F0F0F] border rounded-[6px] px-2 py-1 text-[11px] text-white outline-none focus:border-[#F5A623] truncate ${linkedFicha ? 'border-[#F5A623]/40' : 'border-red-500/50'}`}
+                            title={linkedFicha ? `Vinculado a: ${linkedFicha.name}` : 'Ficha vinculada não encontrada'}
+                          >
+                            {!linkedFicha && <option value={opt.linkedFichaId} className="bg-[#1B1B1D]">⚠ Ficha excluída</option>}
+                            {availableFichas.map(f => (
+                              <option key={f.id} value={f.id} className="bg-[#1B1B1D]">
+                                {f.name} — {fmtBRL(parseCusto(f.custoTotal))}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={opt.name}
+                            onChange={(e) => updateOption(mod.id, opt.id, 'name', e.target.value)}
+                            placeholder="Nome da opção"
+                            className="bg-[#0F0F0F] border border-[#2A2A2C] rounded-[6px] px-2 py-1 text-[11px] text-white outline-none focus:border-[#F5A623]"
+                          />
+                        )}
+                        {isLinked ? (
+                          <div
+                            className="bg-[#0F0F0F] border border-[#2A2A2C] rounded-[6px] px-2 py-1 text-[11px] text-[#F5A623] text-right tabular-nums select-none cursor-not-allowed"
+                            title="Custo lido da ficha vinculada"
+                          >
+                            {linkedCusto.toFixed(2).replace('.', ',')}
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={opt.custo}
+                            onChange={(e) => updateOption(mod.id, opt.id, 'custo', e.target.value)}
+                            placeholder="0,00"
+                            className="bg-[#0F0F0F] border border-[#2A2A2C] rounded-[6px] px-2 py-1 text-[11px] text-white text-right outline-none focus:border-[#F5A623] tabular-nums"
+                          />
+                        )}
+                        {/* Toggle vincular/desvincular ficha */}
+                        {isLinked ? (
+                          <button
+                            onClick={() => unlinkOption(mod.id, opt.id)}
+                            className="w-7 h-6 rounded-[4px] bg-[#F5A623]/15 text-[#F5A623] flex items-center justify-center transition-colors hover:bg-[#F5A623]/25"
+                            title="Desvincular ficha (voltar pra manual)"
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.71" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (availableFichas.length === 0) {
+                                alert('Cadastre fichas técnicas regulares (com custo) antes de vincular aqui.');
+                                return;
+                              }
+                              linkOptionToFicha(mod.id, opt.id, availableFichas[0].id);
+                            }}
+                            className="w-7 h-6 rounded-[4px] bg-[#252527] text-[#868686] hover:bg-[#333] hover:text-[#F5A623] flex items-center justify-center transition-colors"
+                            title="Vincular a uma ficha existente (puxa custo automaticamente)"
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.71" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        )}
                         <button
                           onClick={() => removeOption(mod.id, opt.id)}
                           className="w-6 h-6 rounded-[4px] hover:bg-red-500/20 hover:text-red-400 text-[#555] flex items-center justify-center transition-colors"
@@ -319,7 +435,8 @@ const CriarFichaModularModal = ({ onClose, editingFicha = null, onSave, onDelete
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <button
