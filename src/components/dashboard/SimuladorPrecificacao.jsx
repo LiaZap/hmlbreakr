@@ -34,7 +34,19 @@ const SimuladorPrecificacao = ({ onClose }) => {
   );
 
   const basePct = parseFloat(dashboardData.breakEven?.base?.value || '25') || 25;
-  const marketplacePct = parseFloat(dashboardData.breakEven?.marketplaceFeePct || '0') || 0;
+
+  // Lê marketplaces individuais do onboarding pra calcular preço por canal.
+  // Cada marketplace tem comissão própria — pra precificar nele o preço
+  // tem que cobrir AQUELA comissão, não a média ponderada.
+  const marketplaces = useMemo(() => {
+    const list = dashboardData.formData?.fees_marketplaces || [];
+    return list
+      .map((m) => ({
+        name: (m.provider === 'Outro' ? (m.custom_provider || 'Outro') : m.provider) || 'Marketplace',
+        commission: parseFloat(String(m.commission ?? '0').replace(',', '.').replace('%', '')) || 0,
+      }))
+      .filter((m) => m.commission > 0); // canais sem comissão (ex: App Próprio) viram "Cardápio Próprio"
+  }, [dashboardData.formData]);
 
   const [selectedFichaId, setSelectedFichaId] = useState(fichas[0]?.id || null);
   const [lucroAlvo, setLucroAlvo] = useState(20); // padrão 20%
@@ -56,26 +68,33 @@ const SimuladorPrecificacao = ({ onClose }) => {
     const precoAtual = parseCurrency(selectedFicha.precoVenda);
 
     const precoProprio = custoTotal / cmvAlvoFraction;
-    const precoMarketplace = marketplacePct > 0 && marketplacePct < 100
-      ? precoProprio / (1 - marketplacePct / 100)
-      : precoProprio;
+
+    // Preço por marketplace — cada um aplica SUA comissão sobre o preço próprio
+    const precosMarketplaces = marketplaces.map((m) => {
+      const c = m.commission;
+      const preco = c > 0 && c < 100 ? precoProprio / (1 - c / 100) : precoProprio;
+      return {
+        name: m.name,
+        commission: c,
+        preco,
+        delta: precoAtual > 0 ? preco - precoAtual : 0,
+      };
+    });
 
     const cmvAtualPct = precoAtual > 0 ? (custoTotal / precoAtual) * 100 : 0;
     const lucroAtualPct = precoAtual > 0 ? 100 - basePct - cmvAtualPct : 0;
     const deltaProprio = precoAtual > 0 ? precoProprio - precoAtual : 0;
-    const deltaMarketplace = precoAtual > 0 ? precoMarketplace - precoAtual : 0;
 
     return {
       custoTotal,
       precoAtual,
       precoProprio,
-      precoMarketplace,
+      precosMarketplaces,
       cmvAtualPct,
       lucroAtualPct,
       deltaProprio,
-      deltaMarketplace,
     };
-  }, [selectedFicha, basePct, cmvAlvoFraction, marketplacePct]);
+  }, [selectedFicha, basePct, cmvAlvoFraction, marketplaces]);
 
   // CMV negativo = combinação BASE+Lucro inviável
   const cmvInviavel = cmvAlvo <= 0;
@@ -175,10 +194,10 @@ const SimuladorPrecificacao = ({ onClose }) => {
                 )}
               </div>
 
-              {/* Resultado: 2 cards (próprio e marketplace) */}
+              {/* Resultado: card de Cardápio Próprio + 1 card por marketplace */}
               {selectedFicha && calc && !cmvInviavel && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Cardápio Próprio */}
+                  {/* Cardápio Próprio (sem comissão) */}
                   <div className="bg-[#161616] border border-[#2A2A2C] rounded-[14px] p-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] text-[#868686] uppercase tracking-wider font-semibold">Cardápio próprio</span>
@@ -187,8 +206,9 @@ const SimuladorPrecificacao = ({ onClose }) => {
                       </svg>
                     </div>
                     <div className="text-[26px] font-bold text-white mb-1">{fmtBRL(calc.precoProprio)}</div>
+                    <div className="text-[11px] text-[#7E7E7E]">Sem comissão (App próprio, balcão)</div>
                     {calc.precoAtual > 0 && (
-                      <div className="text-[11px]">
+                      <div className="text-[11px] mt-1">
                         <span className="text-[#868686]">vs atual {fmtBRL(calc.precoAtual)}: </span>
                         <span className={`font-semibold ${calc.deltaProprio >= 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
                           {calc.deltaProprio >= 0 ? '+' : ''}{fmtBRL(calc.deltaProprio)}
@@ -197,29 +217,34 @@ const SimuladorPrecificacao = ({ onClose }) => {
                     )}
                   </div>
 
-                  {/* Marketplace */}
-                  <div className="bg-[#161616] border border-[#2A2A2C] rounded-[14px] p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] text-[#868686] uppercase tracking-wider font-semibold">Marketplace</span>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#F5A623" strokeWidth="1.5"/>
-                      </svg>
+                  {/* Um card por marketplace cadastrado (com comissão > 0) */}
+                  {calc.precosMarketplaces.length === 0 ? (
+                    <div className="bg-[#161616] border border-[#2A2A2C] border-dashed rounded-[14px] p-4 flex flex-col items-center justify-center text-center">
+                      <div className="text-[11px] text-[#868686] uppercase tracking-wider font-semibold mb-1">Marketplaces</div>
+                      <div className="text-[12px] text-[#7E7E7E]">Nenhum marketplace cadastrado no onboarding</div>
                     </div>
-                    <div className="text-[26px] font-bold text-white mb-1">{fmtBRL(calc.precoMarketplace)}</div>
-                    {marketplacePct > 0 ? (
-                      <div className="text-[11px] text-[#868686]">+{marketplacePct.toFixed(1)}% comissão média</div>
-                    ) : (
-                      <div className="text-[11px] text-[#7E7E7E]">Sem comissão cadastrada</div>
-                    )}
-                    {calc.precoAtual > 0 && (
-                      <div className="text-[11px] mt-1">
-                        <span className="text-[#868686]">vs atual: </span>
-                        <span className={`font-semibold ${calc.deltaMarketplace >= 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
-                          {calc.deltaMarketplace >= 0 ? '+' : ''}{fmtBRL(calc.deltaMarketplace)}
-                        </span>
+                  ) : (
+                    calc.precosMarketplaces.map((mp, idx) => (
+                      <div key={`${mp.name}-${idx}`} className="bg-[#161616] border border-[#2A2A2C] rounded-[14px] p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[11px] text-[#868686] uppercase tracking-wider font-semibold truncate" title={mp.name}>{mp.name}</span>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#F5A623" strokeWidth="1.5"/>
+                          </svg>
+                        </div>
+                        <div className="text-[26px] font-bold text-white mb-1">{fmtBRL(mp.preco)}</div>
+                        <div className="text-[11px] text-[#868686]">+{mp.commission.toFixed(1)}% de comissão</div>
+                        {calc.precoAtual > 0 && (
+                          <div className="text-[11px] mt-1">
+                            <span className="text-[#868686]">vs atual: </span>
+                            <span className={`font-semibold ${mp.delta >= 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
+                              {mp.delta >= 0 ? '+' : ''}{fmtBRL(mp.delta)}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    ))
+                  )}
                 </div>
               )}
 
