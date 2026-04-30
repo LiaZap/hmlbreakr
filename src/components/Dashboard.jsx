@@ -58,7 +58,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="relative w-full h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-y-auto md:overflow-hidden">
+    <div className="relative w-full h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-y-auto lg:overflow-hidden">
       {/* Banner de modo admin-viewing */}
       {isAdminViewing && (
         <div className="sticky top-0 z-[60] bg-gradient-to-r from-[#F5A623] to-[#E5961E] text-black shadow-lg">
