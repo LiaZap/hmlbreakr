@@ -100,7 +100,7 @@ const SimuladorPrecificacao = ({ onClose }) => {
   const cmvInviavel = cmvAlvo <= 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm p-0 md:p-4" onClick={onClose}>
       <div
         className="w-full max-w-2xl bg-[#1B1B1D] border border-[#2F2F31] rounded-t-[24px] md:rounded-[24px] flex flex-col max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
