@@ -770,7 +770,11 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
                   </div>
                   <div className="relative w-[120px] bg-[#252527] border border-[#2A2A2C] rounded-[12px] overflow-hidden focus-within:border-[#F5A623] transition-colors">
                     <select value={rendimentoUnit} onChange={(e) => setRendimentoUnit(e.target.value)} className="w-full bg-transparent px-3 py-3.5 text-[14px] text-white outline-none appearance-none cursor-pointer">
-                      <option value="gr">Gramas</option><option value="kg">Kg</option><option value="ml">mL</option><option value="lt">Litros</option><option value="un">Un</option>
+                      <option value="gr" className="bg-[#1B1B1D] text-white">Gramas</option>
+                      <option value="kg" className="bg-[#1B1B1D] text-white">Kg</option>
+                      <option value="ml" className="bg-[#1B1B1D] text-white">mL</option>
+                      <option value="lt" className="bg-[#1B1B1D] text-white">Litros</option>
+                      <option value="un" className="bg-[#1B1B1D] text-white">Un</option>
                     </select>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"><path d="M6 9L12 15L18 9" stroke="#868686" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
@@ -1950,6 +1954,14 @@ const FichaTecnica = () => {
   const [editingInsumo, setEditingInsumo] = useState(null);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
   const [showSimulador, setShowSimulador] = useState(false);
+  // Painel lateral colapsável — preferência persistida pra dar mais espaço
+  // aos cards quando o usuário tá em meia tela (BAH-067)
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() => {
+    try { return localStorage.getItem('breaker.fichaTecnica.leftPanelCollapsed') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('breaker.fichaTecnica.leftPanelCollapsed', leftPanelCollapsed ? '1' : '0'); } catch { /* ignore */ }
+  }, [leftPanelCollapsed]);
   // BAH-037: ficha modular (pizzas, combos)
   const [modalFichaModular, setModalFichaModular] = useState(null); // null | 'new' | ficha object
 
@@ -2499,7 +2511,33 @@ const FichaTecnica = () => {
       <div className="flex flex-col lg:flex-row flex-1 lg:min-h-0">
 
         {/* LEFT PANEL - Summary (hidden on mobile — stats shown in compact form) */}
-        <div className="hidden lg:flex w-full lg:w-[320px] xl:w-[380px] shrink-0 bg-[#101010] p-6 lg:p-8 flex-col gap-5 lg:border-r border-[#1E1E1E]">
+        {/* Colapsável: quando recolhido vira faixa fina com botão pra expandir, dá mais espaço aos cards em meia tela */}
+        {leftPanelCollapsed ? (
+          <div className="hidden lg:flex w-[40px] shrink-0 bg-[#101010] border-r border-[#1E1E1E] items-start justify-center pt-6">
+            <button
+              onClick={() => setLeftPanelCollapsed(false)}
+              className="w-[28px] h-[28px] rounded-[8px] flex items-center justify-center hover:bg-[#1E1E1E] transition-colors"
+              title="Expandir painel de estatísticas"
+              aria-label="Expandir painel"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M9 18L15 12L9 6" stroke="#868686" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        ) : (
+        <div className="hidden lg:flex w-full lg:w-[320px] xl:w-[380px] shrink-0 bg-[#101010] p-6 lg:p-8 flex-col gap-5 lg:border-r border-[#1E1E1E] relative">
+          {/* Botão recolher — canto sup direito do painel */}
+          <button
+            onClick={() => setLeftPanelCollapsed(true)}
+            className="absolute top-4 right-4 w-[28px] h-[28px] rounded-[8px] flex items-center justify-center hover:bg-[#1E1E1E] transition-colors"
+            title="Recolher painel pra dar mais espaço aos cards"
+            aria-label="Recolher painel"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M15 18L9 12L15 6" stroke="#868686" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
           {/* Breadcrumb */}
           <div className="text-[11px] text-[#868686]">
             <span className="text-[#555]">Breakr</span>
@@ -2560,6 +2598,7 @@ const FichaTecnica = () => {
             </div>
           </div>
         </div>
+        )}
 
         {/* MIDDLE PANEL - Submenu (horizontal on mobile, vertical on desktop) */}
         <div className="w-full lg:w-[220px] shrink-0 bg-[#131313] p-3 lg:py-6 lg:px-4 flex flex-row lg:flex-col gap-2 lg:gap-4 lg:border-r border-[#1E1E1E] overflow-x-auto">
