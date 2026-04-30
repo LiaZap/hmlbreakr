@@ -206,13 +206,26 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent, t
         <span className="text-[#868686]">Custo</span>
         <span className="text-white font-medium">{item.custoTotal}</span>
       </div>
-      {pv > 0 && displayRS !== null && (
-        <div className="flex justify-between text-[11px]">
-          <span className="text-[#868686]">MC(%)</span>
-          <span className={`font-medium ${displayRS >= 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
-            {displayPct !== null ? `${displayPct.toFixed(1)}%` : ''} / R$ {displayRS.toFixed(2).replace('.', ',')}
-          </span>
-        </div>
+      {pv > 0 && (
+        <>
+          {/* MC = Margem de Contribuição pura: (PV - CMV) / PV.
+              Mede quanto cada venda contribui pra cobrir custos fixos + lucro. */}
+          <div className="flex justify-between text-[11px]">
+            <span className="text-[#868686]">MC(%)</span>
+            <span className={`font-medium ${(pv - cmv) >= 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
+              {`${(((pv - cmv) / pv) * 100).toFixed(1)}%`} / R$ {(pv - cmv).toFixed(2).replace('.', ',')}
+            </span>
+          </div>
+          {/* Lucro Liquido (com BASE) ou MC com impostos (sem BASE) — info adicional */}
+          {displayPct !== null && displayRS !== null && (
+            <div className="flex justify-between text-[11px]">
+              <span className="text-[#868686]">{hasValidBase ? 'Lucro Líq.(%)' : 'MC c/ Imp.(%)'}</span>
+              <span className={`font-medium ${displayRS >= 0 ? 'text-[#00B37E]' : 'text-[#FF4560]'}`}>
+                {`${displayPct.toFixed(1)}%`} / R$ {displayRS.toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+          )}
+        </>
       )}
     </div>
   </div>
