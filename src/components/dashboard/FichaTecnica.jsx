@@ -2870,7 +2870,7 @@ const FichaTecnica = () => {
                       {filtered.length === 0 ? (
                         <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="insumos" />
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+                        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
                           {pageItems.map((item) => (
                             <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} onDelete={handleDeleteInsumo} />
                           ))}
@@ -2905,7 +2905,7 @@ const FichaTecnica = () => {
                       {filtered.length === 0 ? (
                         <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="fichas" />
                       ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
                           {pageItems.map((item) => (
                             <FichaTecnicaCard key={item.id} item={item} onClick={() => item.isModular ? setModalFichaModular(item) : setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
                           ))}
