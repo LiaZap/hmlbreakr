@@ -3,6 +3,7 @@ import { useDashboard } from '../context/DashboardContext';
 import Sidebar from './dashboard/Sidebar';
 import DashboardHeader from './dashboard/DashboardHeader';
 import FinanceOverview from './dashboard/FinanceOverview';
+import JourneyMap from './dashboard/JourneyMap';
 import MoneyOnTable from './dashboard/MoneyOnTable';
 import TechnicalSheets from './dashboard/TechnicalSheets';
 import CostStructure from './dashboard/CostStructure';
@@ -117,6 +118,9 @@ const Dashboard = () => {
 
         {/* BPO Alerts — só aparece se cliente tem BPO ativado */}
         <BpoClientAlerts bpoInfo={dashboardData._bpo} onNavigateToFinance={() => setActivePage('financeiro')} />
+
+        {/* BAH-023: Mapa do Caminho — sumário visual das etapas de configuração */}
+        <JourneyMap dashboardData={dashboardData} onNavigate={(page) => setActivePage(page)} />
 
         {/* MAIN GRID - 4 columns layout (responsive fluid) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-4 xl:gap-6 mb-0 min-h-0">
