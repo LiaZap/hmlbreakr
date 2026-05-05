@@ -50,6 +50,7 @@ model Client {
   bpoEmployees        BpoEmployee[]
   bpoPartners         BpoPartner[]
   paymentMethods      PaymentMethod[]
+  receivableAdvances  ReceivableAdvance[]
   payables            Payable[]
   receivables         Receivable[]
   reconciliationRules ReconciliationRule[] @relation("ClientReconciliationRules")
@@ -228,8 +229,35 @@ model PaymentMethod {
   settlementDays Int          @default(0)
   active         Boolean      @default(true)
   receivables    Receivable[]
+  advances       ReceivableAdvance[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  @@index([clientId])
+}
+
+// BAH-030 — Antecipação de Recebíveis
+// Cliente cadastra antecipações que faz nas operadoras (cartão/marketplace)
+// pra ver o quanto perde em taxa e ter isso refletido no "Dinheiro na Mesa".
+model ReceivableAdvance {
+  id              String         @id @default(uuid())
+  clientId        String
+  client          Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  paymentMethodId String?
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  // Identificação opcional (ex: "iFood antecipação semanal")
+  description     String
+  // Inputs
+  monthlyRate     Decimal        @db.Decimal(7, 4) // taxa a.m. (% ao mês), ex: 2.99
+  averageValue    Decimal        @db.Decimal(18, 2) // valor médio antecipado por mês (R$)
+  daysAdvanced    Int // dias antecipados (média)
+  // Calculados (denormalizados pra historico)
+  dailyRate       Decimal        @db.Decimal(9, 6) // taxa equivalente diária (decimal)
+  totalDiscount   Decimal        @db.Decimal(18, 2) // valor R$ perdido em taxa
+  finalValue      Decimal        @db.Decimal(18, 2) // valor liquido apos desconto
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([clientId])
 }

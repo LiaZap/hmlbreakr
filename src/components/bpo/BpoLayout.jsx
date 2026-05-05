@@ -18,6 +18,7 @@ const NAV_COMMON = [
     { id: 'employees', label: 'Funcionários' },
     { id: 'partners', label: 'Sócios' },
     { id: 'payment-methods', label: 'Meios Pagamento' },
+    { id: 'advances', label: 'Antecipação Receb.' },
   ]},
   { id: 'lancamentos', label: 'Lançamentos', icon: 'list', children: [
     { id: 'payables', label: 'Contas a Pagar' },

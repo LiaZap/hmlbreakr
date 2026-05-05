@@ -19,6 +19,7 @@ import CategoriesList from './cadastros/CategoriesList';
 import EmployeesList from './cadastros/EmployeesList';
 import PartnersList from './cadastros/PartnersList';
 import PaymentMethodsList from './cadastros/PaymentMethodsList';
+import ReceivableAdvancesList from './cadastros/ReceivableAdvancesList';
 import PayablesList from './lancamentos/PayablesList';
 import ReceivablesList from './lancamentos/ReceivablesList';
 import PendingApprovalsList from './lancamentos/PendingApprovalsList';
@@ -84,6 +85,7 @@ const BpoClientAppInner = () => {
       case 'employees': return <EmployeesList />;
       case 'partners': return <PartnersList />;
       case 'payment-methods': return <PaymentMethodsList />;
+      case 'advances': return <ReceivableAdvancesList />;
       case 'payables': return <PayablesList />;
       case 'receivables': return <ReceivablesList />;
       case 'approvals': return <PendingApprovalsList />;
