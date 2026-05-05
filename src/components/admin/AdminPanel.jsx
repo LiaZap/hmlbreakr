@@ -828,13 +828,58 @@ const AdminPanel = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           {/* BAH-003: Quick Client Switcher — escolha rapida de cliente pra trabalhar */}
           {(() => {
+            // Helper pra extrair logo do client.data (vem JSON-stringified do backend)
+            const getClientLogo = (c) => {
+              try {
+                const d = typeof c.data === 'string' ? JSON.parse(c.data || '{}') : (c.data || {});
+                return d?.restaurant?.logo || null;
+              } catch { return null; }
+            };
+
             const recentClients = recentHashes
               .map(h => clients.find(c => c.hash === h))
               .filter(Boolean)
               .slice(0, 5);
-            const filtered = quickSearch.trim()
-              ? clients.filter(c => (c.name || '').toLowerCase().includes(quickSearch.toLowerCase()) || (c.email || '').toLowerCase().includes(quickSearch.toLowerCase())).slice(0, 8)
-              : [];
+
+            // Busca com scoring: nome com prefixo > nome com palavra > nome contém > email contém
+            const q = quickSearch.trim().toLowerCase();
+            const filtered = !q ? [] : clients
+              .map(c => {
+                const name = (c.name || '').toLowerCase();
+                const email = (c.email || '').toLowerCase();
+                let score = 0;
+                if (name.startsWith(q)) score = 100;
+                else if (name.match(new RegExp(`\\b${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'))) score = 80;
+                else if (name.includes(q)) score = 50;
+                else if (email.startsWith(q)) score = 30;
+                else if (email.includes(q)) score = 10;
+                return score > 0 ? { client: c, score } : null;
+              })
+              .filter(Boolean)
+              .sort((a, b) => b.score - a.score)
+              .map(x => x.client);
+
+            // Avatar component reutilizavel: mostra logo se houver, senao a letra
+            const ClientAvatar = ({ client, size = 32 }) => {
+              const logo = getClientLogo(client);
+              const sizeClass = size === 32 ? 'w-8 h-8' : 'w-6 h-6';
+              if (logo) {
+                return (
+                  <img
+                    src={logo}
+                    alt={client.name}
+                    className={`${sizeClass} rounded-full object-cover shrink-0 bg-white/[0.04]`}
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                  />
+                );
+              }
+              return (
+                <div className={`${sizeClass} rounded-full bg-[#F5A623]/15 text-[#F5A623] flex items-center justify-center text-[11px] font-bold shrink-0`}>
+                  {(client.name || '?').charAt(0).toUpperCase()}
+                </div>
+              );
+            };
+
             return (
               <div className="mb-6 bg-gradient-to-br from-[#1a1410] via-[#141416] to-[#0F0F11] border border-[#F5A623]/20 rounded-[18px] p-5 relative overflow-hidden">
                 <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-[#F5A623]/10 blur-3xl pointer-events-none" />
@@ -864,39 +909,43 @@ const AdminPanel = () => {
                     />
                   </div>
 
-                  {/* Resultados da busca (com botoes de ação) */}
+                  {/* Resultados da busca — scroll quando muitos, contagem total no header */}
                   {filtered.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                      {filtered.map(c => (
-                        <div key={c.id} className="flex items-center justify-between gap-2 bg-[#0F0F11] border border-white/[0.06] rounded-[10px] p-2.5 hover:border-[#F5A623]/40 transition-colors">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-8 h-8 rounded-full bg-[#F5A623]/15 text-[#F5A623] flex items-center justify-center text-[11px] font-bold shrink-0">
-                              {(c.name || '?').charAt(0).toUpperCase()}
+                    <>
+                      <div className="text-[10px] text-[#666] mb-2">
+                        <span className="text-[#F5A623] font-semibold">{filtered.length}</span> resultado{filtered.length !== 1 ? 's' : ''}
+                        {filtered.length > 8 && <span className="text-[#444]"> (rolar pra ver todos)</span>}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 max-h-[320px] overflow-y-auto pr-1 -mr-1">
+                        {filtered.map(c => (
+                          <div key={c.id} className="flex items-center justify-between gap-2 bg-[#0F0F11] border border-white/[0.06] rounded-[10px] p-2.5 hover:border-[#F5A623]/40 transition-colors">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <ClientAvatar client={c} size={32} />
+                              <div className="min-w-0">
+                                <div className="text-[12px] font-semibold text-white truncate">{c.name}</div>
+                                <div className="text-[10px] text-[#666] truncate">{c.email || '—'}</div>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <div className="text-[12px] font-semibold text-white truncate">{c.name}</div>
-                              <div className="text-[10px] text-[#666] truncate">{c.email || '—'}</div>
+                            <div className="flex gap-1 shrink-0">
+                              <button
+                                onClick={() => openClientAsAdmin(c.hash)}
+                                className="text-[10px] px-2 py-1 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-white font-medium transition-colors"
+                                title="Abrir dashboard do cliente"
+                              >
+                                Dashboard
+                              </button>
+                              <button
+                                onClick={() => openClientAsAdmin(c.hash, { section: 'financeiro' })}
+                                className="text-[10px] px-2 py-1 rounded-md bg-[#F5A623] hover:bg-[#E5961E] text-black font-bold transition-colors"
+                                title="Abrir financeiro do cliente"
+                              >
+                                Financeiro →
+                              </button>
                             </div>
                           </div>
-                          <div className="flex gap-1 shrink-0">
-                            <button
-                              onClick={() => openClientAsAdmin(c.hash)}
-                              className="text-[10px] px-2 py-1 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-white font-medium transition-colors"
-                              title="Abrir dashboard do cliente"
-                            >
-                              Dashboard
-                            </button>
-                            <button
-                              onClick={() => openClientAsAdmin(c.hash, { section: 'financeiro' })}
-                              className="text-[10px] px-2 py-1 rounded-md bg-[#F5A623] hover:bg-[#E5961E] text-black font-bold transition-colors"
-                              title="Abrir financeiro do cliente"
-                            >
-                              Financeiro →
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                   {quickSearch.trim() && filtered.length === 0 && (
                     <div className="text-[11px] text-[#666] py-3 text-center mb-3">Nenhum cliente encontrado pra "{quickSearch}".</div>
@@ -912,9 +961,7 @@ const AdminPanel = () => {
                           className="group flex items-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-[#F5A623]/40 rounded-full pl-1.5 pr-3 py-1.5 transition-all"
                           title={`Abrir ${c.name}`}
                         >
-                          <div className="w-6 h-6 rounded-full bg-[#F5A623]/15 text-[#F5A623] flex items-center justify-center text-[10px] font-bold">
-                            {(c.name || '?').charAt(0).toUpperCase()}
-                          </div>
+                          <ClientAvatar client={c} size={24} />
                           <span className="text-[12px] text-white font-medium max-w-[140px] truncate">{c.name}</span>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className="text-[#666] group-hover:text-[#F5A623] transition-colors"><path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </button>
