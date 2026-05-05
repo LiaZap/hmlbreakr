@@ -2890,16 +2890,21 @@ const FichaTecnica = () => {
                         </div>
                       )}
                     </div>
-                    {totalPages > 1 && (
-                      <div className="shrink-0">
+                    {/* Footer: paginação completa quando >1 página, só count quando =1 (BAH-070) */}
+                    <div className="shrink-0">
+                      {totalPages > 1 ? (
                         <NumericPagination
                           page={page}
                           totalPages={totalPages}
                           onChange={setInsumoPage}
                           totalItems={filtered.length}
                         />
-                      </div>
-                    )}
+                      ) : filtered.length > 0 && (
+                        <div className="text-[11px] text-[#555] mt-4 pt-4 border-t border-[#2A2A2C]">
+                          {filtered.length} {filtered.length === 1 ? 'item' : 'itens'}
+                        </div>
+                      )}
+                    </div>
                   </>
                 );
               })() : (() => {
@@ -2925,16 +2930,21 @@ const FichaTecnica = () => {
                         </div>
                       )}
                     </div>
-                    {totalPages > 1 && (
-                      <div className="shrink-0">
+                    {/* Footer: paginação completa quando >1 página, só count quando =1 (BAH-070) */}
+                    <div className="shrink-0">
+                      {totalPages > 1 ? (
                         <NumericPagination
                           page={page}
                           totalPages={totalPages}
                           onChange={setFichasPage}
                           totalItems={filtered.length}
                         />
-                      </div>
-                    )}
+                      ) : filtered.length > 0 && (
+                        <div className="text-[11px] text-[#555] mt-4 pt-4 border-t border-[#2A2A2C]">
+                          {filtered.length} {filtered.length === 1 ? 'item' : 'itens'}
+                        </div>
+                      )}
+                    </div>
                   </>
                 );
               })()}
