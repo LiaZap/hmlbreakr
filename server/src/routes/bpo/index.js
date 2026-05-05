@@ -28,6 +28,7 @@ const employeesRoutes = require('./employees');
 const partnersRoutes = require('./partners');
 const paymentMethodsRoutes = require('./payment-methods');
 const receivableAdvancesRoutes = require('./receivable-advances');
+const loansRoutes = require('./loans');
 const payablesRoutes = require('./payables');
 const receivablesRoutes = require('./receivables');
 const importsRoutes = require('./imports');
@@ -83,6 +84,7 @@ router.use('/:clientHash/employees', employeesRoutes);
 router.use('/:clientHash/partners', partnersRoutes);
 router.use('/:clientHash/payment-methods', paymentMethodsRoutes);
 router.use('/:clientHash/advances', receivableAdvancesRoutes);
+router.use('/:clientHash/loans', loansRoutes);
 
 // Lançamentos
 router.use('/:clientHash/payables', payablesRoutes);

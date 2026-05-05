@@ -51,6 +51,7 @@ model Client {
   bpoPartners         BpoPartner[]
   paymentMethods      PaymentMethod[]
   receivableAdvances  ReceivableAdvance[]
+  loans               Loan[]
   payables            Payable[]
   receivables         Receivable[]
   reconciliationRules ReconciliationRule[] @relation("ClientReconciliationRules")
@@ -234,6 +235,37 @@ model PaymentMethod {
   updatedAt      DateTime     @updatedAt
 
   @@index([clientId])
+}
+
+// BAH-031 — Empréstimos e Financiamentos
+// Cliente registra contratos com bancos pra ter parcela mensal e saldo
+// devedor refletidos na DRE/fluxo de caixa.
+model Loan {
+  id                  String    @id @default(uuid())
+  clientId            String
+  client              Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bankName            String
+  contractNumber      String?
+  description         String? // ex: "Capital de giro - reforma"
+  // Inputs
+  principal           Decimal   @db.Decimal(18, 2) // valor financiado
+  interestRateMonthly Decimal   @db.Decimal(7, 4) // taxa a.m. (% ao mês)
+  totalInstallments   Int // qtd total de parcelas
+  paidInstallments    Int       @default(0) // qtd ja pagas
+  startDate           DateTime
+  // Calculados (denormalizados pra performance)
+  installmentValue    Decimal   @db.Decimal(18, 2) // valor da parcela (Price)
+  totalToPay          Decimal   @db.Decimal(18, 2) // installmentValue * totalInstallments
+  totalInterest       Decimal   @db.Decimal(18, 2) // totalToPay - principal
+  currentBalance      Decimal   @db.Decimal(18, 2) // saldo devedor amortizado
+  status              String    @default("active") // active | paid | cancelled
+  notes               String?
+  active              Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([clientId])
+  @@index([status])
 }
 
 // BAH-030 — Antecipação de Recebíveis
