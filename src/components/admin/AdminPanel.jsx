@@ -80,15 +80,37 @@ const AdminPanel = () => {
 
   // Abre dashboard do cliente em nova aba com contexto admin (sessionStorage é isolado por aba)
   // Passa adminView=1 + role + name via URL — App.jsx detecta e seta sessionStorage na aba nova
-  const openClientAsAdmin = (hash) => {
+  // Tambem registra como "cliente recente" no localStorage pra alimentar o ClientQuickSwitcher (BAH-003)
+  const openClientAsAdmin = (hash, opts = {}) => {
     const params = new URLSearchParams({
       hash,
       adminView: '1',
       adminRole,
       adminName,
+      ...(opts.section ? { section: opts.section } : {}),
     });
+    // Registra como recente
+    try {
+      const recents = JSON.parse(localStorage.getItem('breakr-admin-recents') || '[]');
+      const next = [hash, ...recents.filter(h => h !== hash)].slice(0, 8);
+      localStorage.setItem('breakr-admin-recents', JSON.stringify(next));
+    } catch { /* ignore */ }
     window.open(`${window.location.origin}/?${params.toString()}`, '_blank', 'noopener,noreferrer');
   };
+
+  // BAH-003: estado do ClientQuickSwitcher (busca rapida + recentes na home)
+  const [quickSearch, setQuickSearch] = useState('');
+  const [recentHashes, setRecentHashes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('breakr-admin-recents') || '[]'); } catch { return []; }
+  });
+  // Sincroniza recents quando abrir cliente (re-le do localStorage)
+  useEffect(() => {
+    const onStorage = () => {
+      try { setRecentHashes(JSON.parse(localStorage.getItem('breakr-admin-recents') || '[]')); } catch { /* */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useEffect(() => {
     fetch('/api/admin/clients')
@@ -804,6 +826,109 @@ const AdminPanel = () => {
         {/* ===== DASHBOARD TAB ===== */}
         {activeTab === 'dashboard' ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+          {/* BAH-003: Quick Client Switcher — escolha rapida de cliente pra trabalhar */}
+          {(() => {
+            const recentClients = recentHashes
+              .map(h => clients.find(c => c.hash === h))
+              .filter(Boolean)
+              .slice(0, 5);
+            const filtered = quickSearch.trim()
+              ? clients.filter(c => (c.name || '').toLowerCase().includes(quickSearch.toLowerCase()) || (c.email || '').toLowerCase().includes(quickSearch.toLowerCase())).slice(0, 8)
+              : [];
+            return (
+              <div className="mb-6 bg-gradient-to-br from-[#1a1410] via-[#141416] to-[#0F0F11] border border-[#F5A623]/20 rounded-[18px] p-5 relative overflow-hidden">
+                <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-[#F5A623]/10 blur-3xl pointer-events-none" />
+                <div className="relative">
+                  <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        <h3 className="text-[15px] font-bold text-white">Em qual cliente vai trabalhar?</h3>
+                      </div>
+                      <p className="text-[11px] text-[#868686]">Busque pelo nome ou email pra abrir o financeiro/dashboard direto.</p>
+                    </div>
+                    {recentClients.length > 0 && (
+                      <span className="text-[10px] text-[#666] uppercase tracking-wider font-semibold">{recentClients.length} recentes</span>
+                    )}
+                  </div>
+
+                  {/* Search input */}
+                  <div className="relative mb-3">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#868686]"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                    <input
+                      type="text"
+                      value={quickSearch}
+                      onChange={(e) => setQuickSearch(e.target.value)}
+                      placeholder="Buscar cliente por nome ou email..."
+                      className="w-full bg-[#0F0F11] border border-white/[0.06] rounded-[12px] pl-10 pr-3 py-2.5 text-[13px] text-white placeholder:text-[#555] outline-none focus:border-[#F5A623]/50 transition-colors"
+                    />
+                  </div>
+
+                  {/* Resultados da busca (com botoes de ação) */}
+                  {filtered.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                      {filtered.map(c => (
+                        <div key={c.id} className="flex items-center justify-between gap-2 bg-[#0F0F11] border border-white/[0.06] rounded-[10px] p-2.5 hover:border-[#F5A623]/40 transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-[#F5A623]/15 text-[#F5A623] flex items-center justify-center text-[11px] font-bold shrink-0">
+                              {(c.name || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-[12px] font-semibold text-white truncate">{c.name}</div>
+                              <div className="text-[10px] text-[#666] truncate">{c.email || '—'}</div>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => openClientAsAdmin(c.hash)}
+                              className="text-[10px] px-2 py-1 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-white font-medium transition-colors"
+                              title="Abrir dashboard do cliente"
+                            >
+                              Dashboard
+                            </button>
+                            <button
+                              onClick={() => openClientAsAdmin(c.hash, { section: 'financeiro' })}
+                              className="text-[10px] px-2 py-1 rounded-md bg-[#F5A623] hover:bg-[#E5961E] text-black font-bold transition-colors"
+                              title="Abrir financeiro do cliente"
+                            >
+                              Financeiro →
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {quickSearch.trim() && filtered.length === 0 && (
+                    <div className="text-[11px] text-[#666] py-3 text-center mb-3">Nenhum cliente encontrado pra "{quickSearch}".</div>
+                  )}
+
+                  {/* Atalhos: clientes recentes (chips) — só quando não ta buscando */}
+                  {!quickSearch.trim() && recentClients.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {recentClients.map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => openClientAsAdmin(c.hash)}
+                          className="group flex items-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-[#F5A623]/40 rounded-full pl-1.5 pr-3 py-1.5 transition-all"
+                          title={`Abrir ${c.name}`}
+                        >
+                          <div className="w-6 h-6 rounded-full bg-[#F5A623]/15 text-[#F5A623] flex items-center justify-center text-[10px] font-bold">
+                            {(c.name || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <span className="text-[12px] text-white font-medium max-w-[140px] truncate">{c.name}</span>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className="text-[#666] group-hover:text-[#F5A623] transition-colors"><path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!quickSearch.trim() && recentClients.length === 0 && (
+                    <div className="text-[11px] text-[#666] italic">Nenhum cliente acessado ainda. Use a busca acima ou vá pra aba <button onClick={() => setActiveTab('clients')} className="text-[#F5A623] font-semibold hover:underline">Clientes</button>.</div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Hero greeting */}
           <div className="mb-6 flex items-end justify-between flex-wrap gap-4">
             <div>

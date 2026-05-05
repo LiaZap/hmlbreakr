@@ -32,7 +32,14 @@ import BroadcastPopup from './dashboard/BroadcastPopup';
 const Dashboard = () => {
   /* MOVED TO CONTEXT */
   const { dashboardData, updateDashboardData, setSelectedMonthIndex } = useDashboard();
-  const [activePage, setActivePage] = useState('home');
+  const [activePage, setActivePage] = useState(() => {
+    // BAH-003: respeita ?section=financeiro vindo do AdminPanel ClientQuickSwitcher
+    try {
+      const sec = new URLSearchParams(window.location.search).get('section');
+      const valid = ['home', 'fichaTecnica', 'matrizPreco', 'engenhariaMenu', 'equipe', 'financeiro'];
+      return sec && valid.includes(sec) ? sec : 'home';
+    } catch { return 'home'; }
+  });
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showDailyRevenue, setShowDailyRevenue] = useState(false);
   // BAH-036: BaseModal removido. Indicadores agora ficam inline no CostStructure / SimuladorPrecificacao

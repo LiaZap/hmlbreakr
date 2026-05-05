@@ -22,16 +22,87 @@ const TABS = [
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateMinusDays = (days) => new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
+const STATUS_OPTIONS_PAYABLE = [
+  { value: '', label: 'Todos' },
+  { value: 'pending', label: 'Pendente' },
+  { value: 'partial', label: 'Parcial' },
+  { value: 'paid', label: 'Pago' },
+];
+const STATUS_OPTIONS_RECEIVABLE = [
+  { value: '', label: 'Todos' },
+  { value: 'pending', label: 'Pendente' },
+  { value: 'received', label: 'Recebido' },
+];
+
 const ReportsHub = () => {
+  const { bpoUrl } = useBpo();
   const [activeTab, setActiveTab] = useState('payables');
   const [from, setFrom] = useState(dateMinusDays(30));
   const [to, setTo] = useState(todayISO());
 
+  // BAH-016: filtros dinâmicos
+  const [categoryId, setCategoryId] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [paymentMethodId, setPaymentMethodId] = useState('');
+  const [status, setStatus] = useState('');
+
+  // Listas pra alimentar dropdowns
+  const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+
+  useEffect(() => {
+    const loadDropdownData = async () => {
+      try {
+        const [catRes, supRes, pmRes] = await Promise.all([
+          fetch(bpoUrl('/categories')).then(r => r.ok ? r.json() : { items: [] }),
+          fetch(bpoUrl('/suppliers')).then(r => r.ok ? r.json() : { items: [] }),
+          fetch(bpoUrl('/payment-methods')).then(r => r.ok ? r.json() : { items: [] }),
+        ]);
+        setCategories(catRes.items || []);
+        setSuppliers(supRes.items || []);
+        setPaymentMethods(pmRes.items || []);
+      } catch { /* ignora erros de loading dos dropdowns */ }
+    };
+    loadDropdownData();
+  }, [bpoUrl]);
+
+  // Reseta filtros específicos ao trocar tab pra evitar enviar param incompatível
+  useEffect(() => {
+    setStatus('');
+    setSupplierId('');
+    setPaymentMethodId('');
+  }, [activeTab]);
+
+  const statusOptions = activeTab === 'payables' ? STATUS_OPTIONS_PAYABLE : STATUS_OPTIONS_RECEIVABLE;
+
+  // Constroi querystring com todos filtros aplicáveis ao tab
+  const buildQs = () => {
+    const qs = new URLSearchParams({ from, to });
+    if (categoryId) qs.set('categoryId', categoryId);
+    if (status && (activeTab === 'payables' || activeTab === 'receivables')) qs.set('status', status);
+    if (supplierId && activeTab === 'payables') qs.set('supplierId', supplierId);
+    if (paymentMethodId && activeTab === 'receivables') qs.set('paymentMethodId', paymentMethodId);
+    return qs.toString();
+  };
+
+  const filtersActive = !!(categoryId || status || supplierId || paymentMethodId);
+  const clearFilters = () => {
+    setCategoryId(''); setStatus(''); setSupplierId(''); setPaymentMethodId('');
+  };
+
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold text-text-strong">Relatórios</h1>
-        <p className="text-xs text-text-muted mt-0.5">Filtros por período. Exporte qualquer relatório em Excel.</p>
+      <div className="flex items-end justify-between flex-wrap gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-text-strong">Relatórios</h1>
+          <p className="text-xs text-text-muted mt-0.5">Filtros dinâmicos por período, categoria, fornecedor e status. Exporte em Excel.</p>
+        </div>
+        {filtersActive && (
+          <button onClick={clearFilters} className="text-xs text-text-muted hover:text-brand underline">
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -46,52 +117,119 @@ const ReportsHub = () => {
         ))}
       </Card>
 
-      {/* Date range */}
-      <Card padded={false} className="p-3 flex items-center gap-3 flex-wrap">
-        <div className="text-xs text-text-muted">Período:</div>
-        <Input type="date" value={from} onChange={setFrom} className="w-auto" />
-        <span className="text-text-muted text-xs">até</span>
-        <Input type="date" value={to} onChange={setTo} className="w-auto" />
-        <div className="flex gap-1 ml-2">
-          {[
-            { label: '7d', days: 7 },
-            { label: '30d', days: 30 },
-            { label: '90d', days: 90 },
-            { label: '1a', days: 365 },
-          ].map((p) => (
-            <button key={p.days} onClick={() => { setFrom(dateMinusDays(p.days)); setTo(todayISO()); }}
-              className="text-xs px-2.5 py-1.5 rounded-md bg-bg-input text-text-muted hover:text-text-strong">
-              {p.label}
-            </button>
-          ))}
+      {/* Filtros — Período + Categoria + Status + (Fornecedor|Meio Pagto conforme tab) */}
+      <Card padded={false} className="p-3 flex flex-col gap-3">
+        {/* Linha 1: Período */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-xs text-text-muted shrink-0">Período:</div>
+          <Input type="date" value={from} onChange={setFrom} className="w-auto" />
+          <span className="text-text-muted text-xs">até</span>
+          <Input type="date" value={to} onChange={setTo} className="w-auto" />
+          <div className="flex gap-1 ml-1">
+            {[
+              { label: '7d', days: 7 },
+              { label: '30d', days: 30 },
+              { label: '90d', days: 90 },
+              { label: '1a', days: 365 },
+            ].map((p) => (
+              <button key={p.days} onClick={() => { setFrom(dateMinusDays(p.days)); setTo(todayISO()); }}
+                className="text-xs px-2.5 py-1.5 rounded-md bg-bg-input text-text-muted hover:text-text-strong">
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Linha 2: Filtros dinâmicos (BAH-016) */}
+        <div className="flex items-center gap-3 flex-wrap pt-3 border-t border-border">
+          <div className="text-xs text-text-muted shrink-0">Filtrar:</div>
+
+          {/* Categoria — disponível em todos os tabs */}
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className="bg-bg-input border border-border rounded-md px-2.5 py-1.5 text-xs text-text-strong outline-none focus:border-brand min-w-[140px]"
+          >
+            <option value="">Todas categorias</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+
+          {/* Status — só pra Pagar/Receber */}
+          {(activeTab === 'payables' || activeTab === 'receivables') && (
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="bg-bg-input border border-border rounded-md px-2.5 py-1.5 text-xs text-text-strong outline-none focus:border-brand min-w-[120px]"
+            >
+              {statusOptions.map(s => (
+                <option key={s.value} value={s.value}>Status: {s.label}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Fornecedor — só pra Pagar */}
+          {activeTab === 'payables' && (
+            <select
+              value={supplierId}
+              onChange={(e) => setSupplierId(e.target.value)}
+              className="bg-bg-input border border-border rounded-md px-2.5 py-1.5 text-xs text-text-strong outline-none focus:border-brand min-w-[160px]"
+            >
+              <option value="">Todos fornecedores</option>
+              {suppliers.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Meio de Pagamento — só pra Receber */}
+          {activeTab === 'receivables' && (
+            <select
+              value={paymentMethodId}
+              onChange={(e) => setPaymentMethodId(e.target.value)}
+              className="bg-bg-input border border-border rounded-md px-2.5 py-1.5 text-xs text-text-strong outline-none focus:border-brand min-w-[160px]"
+            >
+              <option value="">Todos meios pagto</option>
+              {paymentMethods.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
+
+          {filtersActive && (
+            <span className="text-[10px] text-brand bg-brand/10 px-2 py-1 rounded-full font-semibold">
+              {[categoryId && 'categoria', status && 'status', supplierId && 'fornecedor', paymentMethodId && 'meio pagto'].filter(Boolean).length} filtro(s) ativo(s)
+            </span>
+          )}
         </div>
       </Card>
 
       {/* Content */}
-      {activeTab === 'payables' && <PayablesReport from={from} to={to} />}
-      {activeTab === 'receivables' && <ReceivablesReport from={from} to={to} />}
-      {activeTab === 'transactions' && <TransactionsReport from={from} to={to} />}
-      {activeTab === 'dre' && <DREReport from={from} to={to} />}
-      {activeTab === 'cashflow' && <CashFlowReport from={from} to={to} />}
+      {activeTab === 'payables' && <PayablesReport qs={buildQs()} />}
+      {activeTab === 'receivables' && <ReceivablesReport qs={buildQs()} />}
+      {activeTab === 'transactions' && <TransactionsReport qs={buildQs()} />}
+      {activeTab === 'dre' && <DREReport qs={buildQs()} />}
+      {activeTab === 'cashflow' && <CashFlowReport qs={buildQs()} />}
     </div>
   );
 };
 
 // ============ Sub-reports ============
 
-const PayablesReport = ({ from, to }) => {
+const PayablesReport = ({ qs }) => {
   const { bpoUrl } = useBpo();
   const [data, setData] = useState(null);
 
   const fetch_ = useCallback(async () => {
-    const res = await fetch(bpoUrl(`/reports/payables?from=${from}&to=${to}`));
+    const res = await fetch(bpoUrl(`/reports/payables?${qs}`));
     setData(await res.json());
-  }, [bpoUrl, from, to]);
+  }, [bpoUrl, qs]);
 
   useEffect(() => { fetch_(); }, [fetch_]);
 
   if (!data) return <Card><div className="text-center py-8 text-xs text-text-muted">Carregando...</div></Card>;
-  if (data.count === 0) return <Card><EmptyState title="Sem contas no período" description="Tente ampliar o filtro de datas." /></Card>;
+  if (data.count === 0) return <Card><EmptyState title="Sem contas no período" description="Tente ampliar o filtro de datas ou limpar filtros." /></Card>;
 
   return (
     <>
@@ -99,7 +237,7 @@ const PayablesReport = ({ from, to }) => {
         { label: 'Total no período', value: fmtBRL(data.summary.total), color: 'text-text-strong' },
         { label: 'Pago', value: fmtBRL(data.summary.paid), color: 'text-success' },
         { label: 'Pendente', value: fmtBRL(data.summary.remaining), color: 'text-danger' },
-      ]} exportUrl={bpoUrl(`/reports/payables/export?from=${from}&to=${to}`)} />
+      ]} exportUrl={bpoUrl(`/reports/payables/export?${qs}`)} />
 
       <Table>
         <thead><tr>
@@ -124,19 +262,19 @@ const PayablesReport = ({ from, to }) => {
   );
 };
 
-const ReceivablesReport = ({ from, to }) => {
+const ReceivablesReport = ({ qs }) => {
   const { bpoUrl } = useBpo();
   const [data, setData] = useState(null);
 
   const fetch_ = useCallback(async () => {
-    const res = await fetch(bpoUrl(`/reports/receivables?from=${from}&to=${to}`));
+    const res = await fetch(bpoUrl(`/reports/receivables?${qs}`));
     setData(await res.json());
-  }, [bpoUrl, from, to]);
+  }, [bpoUrl, qs]);
 
   useEffect(() => { fetch_(); }, [fetch_]);
 
   if (!data) return <Card><div className="text-center py-8 text-xs text-text-muted">Carregando...</div></Card>;
-  if (data.count === 0) return <Card><EmptyState title="Sem contas no período" /></Card>;
+  if (data.count === 0) return <Card><EmptyState title="Sem contas no período" description="Tente ampliar o filtro ou limpar filtros." /></Card>;
 
   return (
     <>
@@ -144,7 +282,7 @@ const ReceivablesReport = ({ from, to }) => {
         { label: 'Total no período', value: fmtBRL(data.summary.total), color: 'text-text-strong' },
         { label: 'Recebido', value: fmtBRL(data.summary.received), color: 'text-success' },
         { label: 'A receber', value: fmtBRL(data.summary.remaining), color: 'text-warning' },
-      ]} exportUrl={bpoUrl(`/reports/receivables/export?from=${from}&to=${to}`)} />
+      ]} exportUrl={bpoUrl(`/reports/receivables/export?${qs}`)} />
 
       <Table>
         <thead><tr>
@@ -169,19 +307,19 @@ const ReceivablesReport = ({ from, to }) => {
   );
 };
 
-const TransactionsReport = ({ from, to }) => {
+const TransactionsReport = ({ qs }) => {
   const { bpoUrl } = useBpo();
   const [data, setData] = useState(null);
 
   const fetch_ = useCallback(async () => {
-    const res = await fetch(bpoUrl(`/reports/transactions?from=${from}&to=${to}`));
+    const res = await fetch(bpoUrl(`/reports/transactions?${qs}`));
     setData(await res.json());
-  }, [bpoUrl, from, to]);
+  }, [bpoUrl, qs]);
 
   useEffect(() => { fetch_(); }, [fetch_]);
 
   if (!data) return <Card><div className="text-center py-8 text-xs text-text-muted">Carregando...</div></Card>;
-  if (data.count === 0) return <Card><EmptyState title="Sem movimentações no período" /></Card>;
+  if (data.count === 0) return <Card><EmptyState title="Sem movimentações no período" description="Tente ampliar o filtro ou limpar filtros." /></Card>;
 
   return (
     <>
@@ -189,7 +327,7 @@ const TransactionsReport = ({ from, to }) => {
         { label: 'Entradas', value: fmtBRL(data.summary.inflow), color: 'text-success' },
         { label: 'Saídas', value: fmtBRL(data.summary.outflow), color: 'text-danger' },
         { label: 'Saldo', value: fmtBRL(data.summary.net), color: data.summary.net >= 0 ? 'text-success' : 'text-danger' },
-      ]} exportUrl={bpoUrl(`/reports/transactions/export?from=${from}&to=${to}`)} />
+      ]} exportUrl={bpoUrl(`/reports/transactions/export?${qs}`)} />
 
       <Table>
         <thead><tr>
@@ -214,14 +352,14 @@ const TransactionsReport = ({ from, to }) => {
   );
 };
 
-const DREReport = ({ from, to }) => {
+const DREReport = ({ qs }) => {
   const { bpoUrl } = useBpo();
   const [data, setData] = useState(null);
 
   const fetch_ = useCallback(async () => {
-    const res = await fetch(bpoUrl(`/reports/dre?from=${from}&to=${to}`));
+    const res = await fetch(bpoUrl(`/reports/dre?${qs}`));
     setData(await res.json());
-  }, [bpoUrl, from, to]);
+  }, [bpoUrl, qs]);
 
   useEffect(() => { fetch_(); }, [fetch_]);
 
@@ -231,7 +369,7 @@ const DREReport = ({ from, to }) => {
     <Card>
       <div className="flex items-center justify-between mb-3">
         <div className="text-[10px] uppercase text-text-subtle font-semibold">DRE — {fmtDate(data.from)} a {fmtDate(data.to)}</div>
-        <a href={bpoUrl(`/reports/dre/export?from=${from}&to=${to}`)} download
+        <a href={bpoUrl(`/reports/dre/export?${qs}`)} download
           className="inline-flex items-center gap-1.5 text-xs text-brand hover:text-brand-hover font-medium">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14m0 0l-5-5m5 5l5-5M5 19h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
           Exportar Excel
@@ -269,15 +407,16 @@ const DREReport = ({ from, to }) => {
   );
 };
 
-const CashFlowReport = ({ from, to }) => {
+const CashFlowReport = ({ qs }) => {
   const { bpoUrl } = useBpo();
   const [data, setData] = useState(null);
   const [groupBy, setGroupBy] = useState('day');
+  const fullQs = `${qs}&groupBy=${groupBy}`;
 
   const fetch_ = useCallback(async () => {
-    const res = await fetch(bpoUrl(`/reports/cashflow?from=${from}&to=${to}&groupBy=${groupBy}`));
+    const res = await fetch(bpoUrl(`/reports/cashflow?${fullQs}`));
     setData(await res.json());
-  }, [bpoUrl, from, to, groupBy]);
+  }, [bpoUrl, fullQs]);
 
   useEffect(() => { fetch_(); }, [fetch_]);
 
@@ -292,7 +431,7 @@ const CashFlowReport = ({ from, to }) => {
         { label: 'Entradas (real + projetado)', value: fmtBRL(data.summary.totalInflow), color: 'text-success' },
         { label: 'Saídas (real + projetado)', value: fmtBRL(data.summary.totalOutflow), color: 'text-danger' },
         { label: 'Saldo final projetado', value: fmtBRL(data.summary.finalBalance), color: data.summary.finalBalance >= 0 ? 'text-success' : 'text-danger' },
-      ]} exportUrl={bpoUrl(`/reports/cashflow/export?from=${from}&to=${to}&groupBy=${groupBy}`)} />
+      ]} exportUrl={bpoUrl(`/reports/cashflow/export?${fullQs}`)} />
 
       <Card padded={false} className="p-3 flex justify-end">
         <div className="flex gap-1">
