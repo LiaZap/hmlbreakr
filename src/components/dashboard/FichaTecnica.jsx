@@ -1933,7 +1933,11 @@ const EmptyState = ({ searchTerm, filterCategory, type }) => {
 };
 
 // ============ MAIN COMPONENT ============
-const ITEMS_PER_PAGE = 12;
+// Insumos têm cards mais compactos → cabem mais por página antes de precisar paginar.
+// Fichas têm cards maiores (com MC%, Lucro Líq., etc) → menos por página.
+const ITEMS_PER_PAGE_INSUMOS = 24;
+const ITEMS_PER_PAGE_FICHAS = 12;
+const ITEMS_PER_PAGE = ITEMS_PER_PAGE_FICHAS; // backward compat (usado em ambos os tabs antes do split)
 
 const FichaTecnica = () => {
   const { dashboardData, updateDashboardData } = useDashboard();
@@ -2794,7 +2798,7 @@ const FichaTecnica = () => {
             </div>
 
             {/* Cards Grid with grey background — agora flex column com scroll interno e paginação sticky */}
-            <div className="bg-[#1B1B1D] mx-4 mb-6 lg:mb-8 rounded-[16px] p-4 flex flex-col">
+            <div className="bg-[#1B1B1D] mx-4 mb-6 lg:mb-8 rounded-[16px] p-4 flex-1 lg:min-h-0 flex flex-col">
               {/* Search + Category Filter — fixo no topo do cards container */}
               {(() => {
                 const items = activeTab === 'insumos' ? insumos : fichas;
@@ -2874,16 +2878,16 @@ const FichaTecnica = () => {
                   const matchesCategory = filterCategory === 'all' || (it.category || '').toLowerCase() === filterCategory.toLowerCase();
                   return matchesSearch && matchesCategory;
                 });
-                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE_INSUMOS);
                 const page = Math.min(insumoPage, Math.max(0, totalPages - 1));
-                const pageItems = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+                const pageItems = filtered.slice(page * ITEMS_PER_PAGE_INSUMOS, (page + 1) * ITEMS_PER_PAGE_INSUMOS);
                 return (
                   <>
-                    <div className="lg:overflow-y-auto pr-1 -mr-1 lg:max-h-[calc(100vh-280px)]">
+                    <div className="flex-1 lg:min-h-0 lg:overflow-y-auto pr-1 -mr-1">
                       {filtered.length === 0 ? (
                         <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="insumos" />
                       ) : (
-                        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+                        <div className="grid gap-4 content-start" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gridAutoRows: 'min-content' }}>
                           {pageItems.map((item) => (
                             <InsumoCard key={item.id} item={item} onClick={() => setEditingInsumo(item)} onDuplicate={handleDuplicateInsumo} onDelete={handleDeleteInsumo} />
                           ))}
@@ -2919,11 +2923,11 @@ const FichaTecnica = () => {
                 const pageItems = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
                 return (
                   <>
-                    <div className="lg:overflow-y-auto pr-1 -mr-1 lg:max-h-[calc(100vh-280px)]">
+                    <div className="flex-1 lg:min-h-0 lg:overflow-y-auto pr-1 -mr-1">
                       {filtered.length === 0 ? (
                         <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="fichas" />
                       ) : (
-                        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+                        <div className="grid gap-4 content-start" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gridAutoRows: 'min-content' }}>
                           {pageItems.map((item) => (
                             <FichaTecnicaCard key={item.id} item={item} onClick={() => item.isModular ? setModalFichaModular(item) : setModalFicha(item)} onDuplicate={handleDuplicateFicha} onDelete={handleDeleteFicha} basePercent={dashboardData.breakEven?.base?.value || '0'} taxPercent={dashboardData.breakEven?.taxPercent || '0'} />
                           ))}
