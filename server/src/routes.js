@@ -983,10 +983,33 @@ router.get('/client/:hash', async (req, res) => {
     dashboardData._profile = dashboardData.profile || {};
 
     // Financeiro V2.0 — feature padrão do produto pra todo cliente
+    // Inclui agregados de antecipações + empréstimos pra refletir no Dinheiro na Mesa (BAH-030/BAH-031)
+    let bpoAdvancesTotal = 0;
+    let bpoLoansMonthly = 0;
+    let bpoLoansOutstanding = 0;
+    try {
+      const advances = await prisma.receivableAdvance.findMany({
+        where: { clientId: client.id, active: true },
+        select: { totalDiscount: true },
+      });
+      bpoAdvancesTotal = advances.reduce((acc, a) => acc + parseFloat(a.totalDiscount), 0);
+    } catch (e) { /* tabela pode nao existir antes da migration */ }
+    try {
+      const loans = await prisma.loan.findMany({
+        where: { clientId: client.id, active: true, status: 'active' },
+        select: { installmentValue: true, currentBalance: true },
+      });
+      bpoLoansMonthly = loans.reduce((acc, l) => acc + parseFloat(l.installmentValue), 0);
+      bpoLoansOutstanding = loans.reduce((acc, l) => acc + parseFloat(l.currentBalance), 0);
+    } catch (e) { /* */ }
+
     dashboardData._bpo = {
       enabled: true,
       clientId: client.id,
       hash: client.hash,
+      advancesTotal: +bpoAdvancesTotal.toFixed(2),
+      loansMonthly: +bpoLoansMonthly.toFixed(2),
+      loansOutstanding: +bpoLoansOutstanding.toFixed(2),
     };
 
     // SEGURANÇA: se request vem de admin visualizando (header x-admin-viewing),

@@ -685,6 +685,41 @@ export const DashboardProvider = ({ children }) => {
             recovered: calcRecovered('marketplace', mpCommissionTotal)
         });
     }
+
+    // BAH-030: Antecipações de recebíveis — total perdido vai como item no MoneyOnTable
+    // Dado vem do servidor em _bpo.advancesTotal (agregado de ReceivableAdvance ativos)
+    const bpoAdvancesTotal = parseFloat(dashboardData?._bpo?.advancesTotal) || 0;
+    if (bpoAdvancesTotal > 0) {
+        moneyOnTableTotal += bpoAdvancesTotal;
+        const advancesPctOfRevenue = currentRevenue > 0 ? (bpoAdvancesTotal / currentRevenue) * 100 : 0;
+        moneyOnTableItems.push({
+            key: 'advances',
+            label: 'Antecipação Recebíveis',
+            value: formatMoney(bpoAdvancesTotal),
+            rawValue: bpoAdvancesTotal,
+            pct: `${advancesPctOfRevenue.toFixed(1)}% receita`,
+            color: '#FF8A9C',
+            pctOfRevenue: advancesPctOfRevenue,
+            recovered: calcRecovered('advances', bpoAdvancesTotal)
+        });
+    }
+
+    // BAH-031: Parcelas de empréstimos ativos — comprometimento mensal de caixa
+    const bpoLoansMonthly = parseFloat(dashboardData?._bpo?.loansMonthly) || 0;
+    if (bpoLoansMonthly > 0) {
+        moneyOnTableTotal += bpoLoansMonthly;
+        const loansPctOfRevenue = currentRevenue > 0 ? (bpoLoansMonthly / currentRevenue) * 100 : 0;
+        moneyOnTableItems.push({
+            key: 'loans',
+            label: 'Parcelas Financiamento',
+            value: formatMoney(bpoLoansMonthly),
+            rawValue: bpoLoansMonthly,
+            pct: `${loansPctOfRevenue.toFixed(1)}% receita`,
+            color: '#A78BFA',
+            pctOfRevenue: loansPctOfRevenue,
+            recovered: calcRecovered('loans', bpoLoansMonthly)
+        });
+    }
     if (fixedCostPercentage > 33 && currentRevenue > 0) {
         const excess = ((fixedCostPercentage - 33) / 100) * currentRevenue;
         moneyOnTableTotal += excess;
