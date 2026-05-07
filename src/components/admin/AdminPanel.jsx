@@ -16,6 +16,7 @@ import DailyBriefing from './DailyBriefing';
 import OpportunityDetector from './OpportunityDetector';
 import MarginHunter from './MarginHunter';
 import CommandPalette from './CommandPalette';
+import DashboardTabs from './DashboardTabs';
 import { computeClientHealth } from '../../utils/clientHealth';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
 // import BpoApp from '../bpo/BpoApp';
@@ -1006,64 +1007,93 @@ const AdminPanel = () => {
             </div>
           </div>
 
-          {/* Fase 4.1: Daily Briefing IA — primeira coisa que admin vê ao abrir */}
+          {/* Briefing fixo no topo — sempre visível, prioridade do dia */}
           <DailyBriefing clients={clients} adminName={adminName} />
 
-          {/* Fase 1.1: Painel de Alertas Operacionais — clientes precisando atenção HOJE */}
-          <OperationalAlerts clients={clients} onOpenClient={(hash, page) => openClientAsAdmin(hash, page ? { section: page } : {})} />
+          {/* Sub-tabs reduzem o scroll: separa "agir agora" (overview) de
+              "explorar" (analytics) e "histórico" (activity) */}
+          <DashboardTabs>
+            {(activeSubTab) => (
+              <div className="flex flex-col gap-4">
+                {activeSubTab === 'overview' && (
+                  <>
+                    {/* Alertas operacionais — quem precisa de atenção HOJE */}
+                    <OperationalAlerts
+                      clients={clients}
+                      onOpenClient={(hash, page) => openClientAsAdmin(hash, page ? { section: page } : {})}
+                    />
+                    {/* KPIs agregados do portfolio */}
+                    <PortfolioKPIs clients={clients} />
+                    {/* Funil de maturidade pra ver gargalos */}
+                    <MaturityFunnel
+                      clients={clients}
+                      onStageClick={(stageId, stuckClients) => {
+                        console.log('Stage clicked:', stageId, stuckClients.length, 'stuck clients');
+                      }}
+                    />
+                  </>
+                )}
 
-          {/* Fase 1.2: KPIs do Portfólio (CMV, BASE, Lucro Líq, Receita agregada) */}
-          <PortfolioKPIs clients={clients} />
+                {activeSubTab === 'analytics' && (
+                  <>
+                    {/* Oportunidades acionáveis primeiro (upsell/case/churn/consultoria) */}
+                    <OpportunityDetector
+                      clients={clients}
+                      onClientClick={(client) => openClientAsAdmin(client.hash)}
+                    />
+                    {/* Caçador de margem perdida */}
+                    <MarginHunter
+                      clients={clients}
+                      onClientClick={(client) => openClientAsAdmin(client.hash, { section: 'fichaTecnica' })}
+                    />
+                    {/* Insights cross-cliente */}
+                    <AggregatedMenuInsights clients={clients} />
+                    {/* Benchmarks por tipo de cozinha */}
+                    <CuisineBenchmarks
+                      clients={clients}
+                      onCuisineClick={(cuisineType, restaurants) => {
+                        console.log('Cuisine clicked:', cuisineType, restaurants.length, 'restaurants');
+                      }}
+                    />
+                    {/* Comparador 2x2 */}
+                    <RestaurantComparator clients={clients} />
+                  </>
+                )}
 
-          {/* Fase 3.1: Funil de Maturidade Operacional — onde cada cliente está */}
-          <MaturityFunnel
-            clients={clients}
-            onStageClick={(stageId, stuckClients) => {
-              console.log('Stage clicked:', stageId, stuckClients.length, 'stuck clients');
-            }}
-          />
+                {activeSubTab === 'activity' && (
+                  <>
+                    {/* Timeline de eventos */}
+                    <ActivityFeed
+                      clients={clients}
+                      maxItems={50}
+                      onClientClick={(hash) => openClientAsAdmin(hash)}
+                    />
+                    {/* Mapa do Brasil — distribuição geográfica */}
+                    <BrazilMap
+                      clients={clients}
+                      onClientClick={(clientList) => {
+                        if (clientList && clientList[0]?.hash) openClientAsAdmin(clientList[0].hash);
+                      }}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+          </DashboardTabs>
 
-          {/* Fase 2.3: Benchmarks por Tipo de Cozinha */}
-          <CuisineBenchmarks
-            clients={clients}
-            onCuisineClick={(cuisineType, restaurants) => {
-              console.log('Cuisine clicked:', cuisineType, restaurants.length, 'restaurants');
-            }}
-          />
-
-          {/* Fase 1.3: Activity Feed — eventos operacionais recentes */}
-          <ActivityFeed
-            clients={clients}
-            maxItems={30}
-            onClientClick={(hash) => openClientAsAdmin(hash)}
-          />
-
-          {/* Fase 3.2: Mapa do Brasil — distribuição geográfica do portfolio */}
-          <BrazilMap
-            clients={clients}
-            onClientClick={(clientList /* , uf */) => {
-              if (clientList && clientList[0]?.hash) openClientAsAdmin(clientList[0].hash);
-            }}
-          />
-
-          {/* Fase 3.3: Engenharia de Menu Agregada — insights cross-cliente */}
-          <AggregatedMenuInsights clients={clients} />
-
-          {/* Fase 2.2: Detector de Oportunidades — upsells, cases, riscos, consultoria */}
-          <OpportunityDetector
-            clients={clients}
-            onClientClick={(client) => openClientAsAdmin(client.hash)}
-          />
-
-          {/* Fase 4.3: Caçador de Margem Perdida — fichas críticas + insumos com discrepância */}
-          <MarginHunter
-            clients={clients}
-            onClientClick={(client) => openClientAsAdmin(client.hash, { section: 'fichaTecnica' })}
-          />
-
-          {/* Fase 4.2: Comparador de Restaurantes — selecione 2 lado a lado */}
-          <RestaurantComparator clients={clients} />
-
+          {/* Métricas clássicas — colapsáveis pra reduzir scroll. Conteúdo
+              já está coberto pelo Portfolio KPIs / Operational Alerts acima */}
+          <details className="group rounded-[14px] bg-white/[0.02] border border-white/[0.04] open:bg-white/[0.03]">
+            <summary className="cursor-pointer flex items-center justify-between gap-2 px-4 py-3 text-[12px] font-semibold text-[#868686] hover:text-white transition-colors list-none">
+              <span className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="transition-transform group-open:rotate-90">
+                  <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Visão clássica (cards + status + atividade)
+              </span>
+              <span className="text-[10px] text-[#555]">opcional</span>
+            </summary>
+            <div className="p-4 pt-0">
           {/* Metric Cards — premium with sparklines */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {[
@@ -1190,6 +1220,8 @@ const AdminPanel = () => {
               )}
             </motion.div>
           </div>
+            </div>
+          </details>
 
           {/* CTA Card at bottom */}
           {metrics.total === 0 && (
