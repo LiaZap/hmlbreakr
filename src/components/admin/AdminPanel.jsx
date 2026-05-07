@@ -16,7 +16,7 @@ import DailyBriefing from './DailyBriefing';
 import OpportunityDetector from './OpportunityDetector';
 import MarginHunter from './MarginHunter';
 import CommandPalette from './CommandPalette';
-import DashboardTabs from './DashboardTabs';
+import EmployeesAdmin from './EmployeesAdmin';
 import { computeClientHealth } from '../../utils/clientHealth';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
 // import BpoApp from '../bpo/BpoApp';
@@ -614,12 +614,18 @@ const AdminPanel = () => {
     return { total, completed: completedArr.length, inProgress: inProgressArr.length, pending: pendingArr.length, withRevenue: withRevenue.length, cfHigh: cfHighArr.length, totalRevenue, totalFichas };
   })();
 
-  // Sidebar nav items
+  // Sidebar nav items — divididos em grupos pra reduzir scroll
   const sidebarItems = [
-    { id: 'dashboard', label: 'Dashboard Inicial', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 22V12h6v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-    { id: 'clients', label: 'Gestão de Clientes', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-    { id: 'commercial', label: 'Comercial', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M20 8v6M23 11h-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-    ...(canManage ? [{ id: 'broadcasts', label: 'Comunicados', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, badge: broadcasts.filter(b => b.active).length }] : []),
+    // Grupo Dashboard — sub-páginas separadas (antes empilhadas com scroll)
+    { id: 'dashboard', label: 'Visão Geral', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 22V12h6v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, group: 'dashboard' },
+    { id: 'analytics', label: 'Análises', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 3v18h18M7 12l4-4 4 4 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, group: 'dashboard' },
+    { id: 'activity', label: 'Atividade', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 2M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, group: 'dashboard' },
+    // Grupo Gestão
+    { id: 'clients', label: 'Gestão de Clientes', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>, group: 'mgmt' },
+    { id: 'commercial', label: 'Comercial', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M20 8v6M23 11h-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>, group: 'mgmt' },
+    ...(canManage ? [{ id: 'broadcasts', label: 'Comunicados', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, badge: broadcasts.filter(b => b.active).length, group: 'mgmt' }] : []),
+    // Grupo Sistema (super_admin only)
+    ...(isSuperAdmin ? [{ id: 'employees', label: 'Funcionários Breakr', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><circle cx="17" cy="11" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M22 21v-1a3 3 0 00-2.5-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>, group: 'system' }] : []),
   ];
 
   return (
@@ -755,7 +761,15 @@ const AdminPanel = () => {
             <div className="hidden lg:flex items-center gap-2 text-[12px]">
               <span className="text-[#555]">Admin</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-[#333]"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              <span className="text-white font-medium capitalize">{activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'clients' ? 'Clientes' : activeTab === 'commercial' ? 'Comercial' : 'Comunicados'}</span>
+              <span className="text-white font-medium capitalize">{
+                activeTab === 'dashboard' ? 'Visão Geral'
+                : activeTab === 'analytics' ? 'Análises'
+                : activeTab === 'activity' ? 'Atividade'
+                : activeTab === 'employees' ? 'Funcionários Breakr'
+                : activeTab === 'clients' ? 'Clientes'
+                : activeTab === 'commercial' ? 'Comercial'
+                : 'Comunicados'
+              }</span>
             </div>
 
             {/* Search with Cmd+K hint */}
@@ -1010,76 +1024,18 @@ const AdminPanel = () => {
           {/* Briefing fixo no topo — sempre visível, prioridade do dia */}
           <DailyBriefing clients={clients} adminName={adminName} />
 
-          {/* Sub-tabs reduzem o scroll: separa "agir agora" (overview) de
-              "explorar" (analytics) e "histórico" (activity) */}
-          <DashboardTabs>
-            {(activeSubTab) => (
-              <div className="flex flex-col gap-4">
-                {activeSubTab === 'overview' && (
-                  <>
-                    {/* Alertas operacionais — quem precisa de atenção HOJE */}
-                    <OperationalAlerts
-                      clients={clients}
-                      onOpenClient={(hash, page) => openClientAsAdmin(hash, page ? { section: page } : {})}
-                    />
-                    {/* KPIs agregados do portfolio */}
-                    <PortfolioKPIs clients={clients} />
-                    {/* Funil de maturidade pra ver gargalos */}
-                    <MaturityFunnel
-                      clients={clients}
-                      onStageClick={(stageId, stuckClients) => {
-                        console.log('Stage clicked:', stageId, stuckClients.length, 'stuck clients');
-                      }}
-                    />
-                  </>
-                )}
-
-                {activeSubTab === 'analytics' && (
-                  <>
-                    {/* Oportunidades acionáveis primeiro (upsell/case/churn/consultoria) */}
-                    <OpportunityDetector
-                      clients={clients}
-                      onClientClick={(client) => openClientAsAdmin(client.hash)}
-                    />
-                    {/* Caçador de margem perdida */}
-                    <MarginHunter
-                      clients={clients}
-                      onClientClick={(client) => openClientAsAdmin(client.hash, { section: 'fichaTecnica' })}
-                    />
-                    {/* Insights cross-cliente */}
-                    <AggregatedMenuInsights clients={clients} />
-                    {/* Benchmarks por tipo de cozinha */}
-                    <CuisineBenchmarks
-                      clients={clients}
-                      onCuisineClick={(cuisineType, restaurants) => {
-                        console.log('Cuisine clicked:', cuisineType, restaurants.length, 'restaurants');
-                      }}
-                    />
-                    {/* Comparador 2x2 */}
-                    <RestaurantComparator clients={clients} />
-                  </>
-                )}
-
-                {activeSubTab === 'activity' && (
-                  <>
-                    {/* Timeline de eventos */}
-                    <ActivityFeed
-                      clients={clients}
-                      maxItems={50}
-                      onClientClick={(hash) => openClientAsAdmin(hash)}
-                    />
-                    {/* Mapa do Brasil — distribuição geográfica */}
-                    <BrazilMap
-                      clients={clients}
-                      onClientClick={(clientList) => {
-                        if (clientList && clientList[0]?.hash) openClientAsAdmin(clientList[0].hash);
-                      }}
-                    />
-                  </>
-                )}
-              </div>
-            )}
-          </DashboardTabs>
+          {/* Visão Geral — agir AGORA (alertas + KPIs + funil) */}
+          <OperationalAlerts
+            clients={clients}
+            onOpenClient={(hash, page) => openClientAsAdmin(hash, page ? { section: page } : {})}
+          />
+          <PortfolioKPIs clients={clients} />
+          <MaturityFunnel
+            clients={clients}
+            onStageClick={(stageId, stuckClients) => {
+              console.log('Stage clicked:', stageId, stuckClients.length, 'stuck clients');
+            }}
+          />
 
           {/* Métricas clássicas — colapsáveis pra reduzir scroll. Conteúdo
               já está coberto pelo Portfolio KPIs / Operational Alerts acima */}
@@ -1244,6 +1200,61 @@ const AdminPanel = () => {
               </div>
             </motion.div>
           )}
+        </motion.div>
+
+        ) : activeTab === 'analytics' ? (
+        /* ===== ANALYTICS TAB ===== */
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+          <div className="mb-6">
+            <h2 className="text-[22px] font-bold text-white tracking-tight">Análises</h2>
+            <p className="text-[12px] text-[#868686] mt-1">Insights detalhados e oportunidades de upsell, consultoria e revisão de margem.</p>
+          </div>
+          <div className="space-y-4">
+            <OpportunityDetector
+              clients={clients}
+              onClientClick={(client) => openClientAsAdmin(client.hash)}
+            />
+            <MarginHunter
+              clients={clients}
+              onClientClick={(client) => openClientAsAdmin(client.hash, { section: 'fichaTecnica' })}
+            />
+            <AggregatedMenuInsights clients={clients} />
+            <CuisineBenchmarks
+              clients={clients}
+              onCuisineClick={(cuisineType, restaurants) => {
+                console.log('Cuisine clicked:', cuisineType, restaurants.length, 'restaurants');
+              }}
+            />
+            <RestaurantComparator clients={clients} />
+          </div>
+        </motion.div>
+
+        ) : activeTab === 'activity' ? (
+        /* ===== ACTIVITY TAB ===== */
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+          <div className="mb-6">
+            <h2 className="text-[22px] font-bold text-white tracking-tight">Atividade</h2>
+            <p className="text-[12px] text-[#868686] mt-1">Timeline de eventos do portfolio + distribuição geográfica.</p>
+          </div>
+          <div className="space-y-4">
+            <ActivityFeed
+              clients={clients}
+              maxItems={50}
+              onClientClick={(hash) => openClientAsAdmin(hash)}
+            />
+            <BrazilMap
+              clients={clients}
+              onClientClick={(clientList) => {
+                if (clientList && clientList[0]?.hash) openClientAsAdmin(clientList[0].hash);
+              }}
+            />
+          </div>
+        </motion.div>
+
+        ) : activeTab === 'employees' ? (
+        /* ===== FUNCIONÁRIOS BREAKR TAB (super_admin only) ===== */
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+          <EmployeesAdmin canManage={isSuperAdmin} />
         </motion.div>
 
         ) : activeTab === 'clients' ? (

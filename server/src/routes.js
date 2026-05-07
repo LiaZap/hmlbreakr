@@ -10,6 +10,7 @@ const crypto = require('crypto');
 
 // Sub-routers admin (item 4.1)
 const dailyInsightsRoutes = require('./routes/admin/daily-insights');
+const adminUsersRoutes = require('./routes/admin/users');
 
 // ========================
 // ADMIN ROUTES
@@ -43,9 +44,37 @@ const ADMIN_ACCOUNTS = [
   }
 ];
 
-// Admin Login
-router.post('/admin/login', (req, res) => {
+// Admin Login — checa AdminUser do banco PRIMEIRO, fallback pra ADMIN_ACCOUNTS legado
+router.post('/admin/login', async (req, res) => {
   const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'email e password obrigatórios' });
+
+  // 1. AdminUser do banco (gerenciado via UI)
+  try {
+    const user = await prisma.adminUser.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (user && user.active && user.password) {
+      const ok = await bcrypt.compare(password, user.password);
+      if (ok) {
+        // Atualiza lastLoginAt (best-effort)
+        prisma.adminUser.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+        }).catch(e => console.error('lastLoginAt update', e));
+        return res.json({
+          success: true,
+          token: 'mock-admin-token',
+          name: user.name,
+          role: user.role,
+          adminUserId: user.id,
+        });
+      }
+    }
+  } catch (e) {
+    console.error('[admin login db lookup]', e);
+    // Não falha — cai pro legado
+  }
+
+  // 2. Legado: ADMIN_ACCOUNTS hardcoded (compat enquanto migra)
   const admin = ADMIN_ACCOUNTS.find(a => a.email === email && a.password === password);
   if (admin) {
     return res.json({ success: true, token: 'mock-admin-token', name: admin.name, role: admin.role });
@@ -1821,6 +1850,7 @@ router.delete('/admin/broadcasts/:id', async (req, res) => {
 
 // Mount admin sub-routers (after definitions acima)
 router.use('/admin', dailyInsightsRoutes);
+router.use('/admin/users', adminUsersRoutes);
 
 module.exports = router;
 

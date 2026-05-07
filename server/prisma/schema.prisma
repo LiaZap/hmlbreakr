@@ -64,6 +64,29 @@ model Client {
   updatedAt DateTime @updatedAt
 }
 
+// Funcionários Breakr — admins/operadores que acessam o painel administrativo.
+// Antes ADMIN_ACCOUNTS era hardcoded em routes.js, agora pode ser gerenciado
+// via UI por super_admin. Login via email+senha (bcrypt) ou Clerk SSO.
+model AdminUser {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  password     String? // bcrypt hash, opcional se usa Clerk
+  clerkUserId  String?   @unique
+  role         String // super_admin | admin | commercial | financial
+  photo        String?   @db.Text
+  active       Boolean   @default(true)
+  invitedBy    String? // id do super_admin que convidou
+  invitedAt    DateTime?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([email])
+  @@index([role])
+  @@index([active])
+}
+
 model TeamMember {
   id          String   @id @default(uuid())
   name        String
