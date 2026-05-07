@@ -15,11 +15,10 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { VALID_ROLES, sanitizePermissions, ROLE_TEMPLATES } = require('../../utils/permissions');
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
-const VALID_ROLES = ['super_admin', 'admin', 'commercial', 'financial'];
 
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e || '');
 
@@ -49,7 +48,7 @@ router.get('/', async (req, res) => {
 // CREATE — convida novo funcionário Breakr
 router.post('/', async (req, res) => {
   try {
-    const { name, email, role, password, sendInvite, invitedBy } = req.body;
+    const { name, email, role, password, sendInvite, invitedBy, permissions } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'name obrigatório' });
     if (!isValidEmail(email)) return res.status(400).json({ error: 'email inválido' });
     if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: `role inválido — use ${VALID_ROLES.join(' | ')}` });
@@ -69,12 +68,21 @@ router.post('/', async (req, res) => {
       hashedPassword = await bcrypt.hash(tempPassword, 10);
     }
 
+    // Permissões: se cliente passou array, valida contra catálogo. Senão usa template do role.
+    let finalPermissions;
+    if (Array.isArray(permissions)) {
+      finalPermissions = sanitizePermissions(permissions);
+    } else {
+      finalPermissions = [...(ROLE_TEMPLATES[role] || [])];
+    }
+
     const item = await prisma.adminUser.create({
       data: {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         password: hashedPassword,
         role,
+        permissions: finalPermissions,
         invitedBy: invitedBy || null,
         invitedAt: new Date(),
       },
@@ -90,10 +98,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-// UPDATE — edita name/role/active/photo (não muda email/senha aqui)
+// UPDATE — edita name/role/active/photo/permissions (não muda email/senha aqui)
 router.put('/:id', async (req, res) => {
   try {
-    const { name, role, active, photo } = req.body;
+    const { name, role, active, photo, permissions } = req.body;
     const existing = await prisma.adminUser.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
     if (role && !VALID_ROLES.includes(role)) {
@@ -106,6 +114,7 @@ router.put('/:id', async (req, res) => {
         ...(role ? { role } : {}),
         ...(active != null ? { active: !!active } : {}),
         ...(photo !== undefined ? { photo: photo || null } : {}),
+        ...(Array.isArray(permissions) ? { permissions: sanitizePermissions(permissions) } : {}),
       },
     });
     res.json(safeAdmin(item));

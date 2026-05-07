@@ -5,26 +5,29 @@
  * criar (com senha temp + invite), editar role/active, resetar senha,
  * desativar.
  *
+ * Permissões granulares (estilo Stripe):
+ * - Cada user tem uma lista de permissions individuais
+ * - Roles definem templates iniciais, mas user pode customizar via checkboxes
+ * - super_admin sempre passa hasPermission (bypassa lista)
+ *
  * Backend: /api/admin/users (CRUD) + /admin/users/:id/reset-password.
  *
  * TODO Clerk: integrar SSO via OAuth pra admin opcionalmente entrar com
  * Google/etc — bastará linkar clerkUserId no AdminUser via callback.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  PERMISSIONS,
+  ROLE_TEMPLATES,
+  ROLE_LABELS,
+  ROLE_COLORS,
+  getEffectivePermissions,
+  getPermissionsByCategory,
+} from '../../utils/permissions';
+import { adminFetch } from '../../utils/adminAuth';
 
-const ROLE_LABELS = {
-  super_admin: 'Super Admin',
-  admin: 'Admin',
-  commercial: 'Comercial',
-  financial: 'Financeiro',
-};
-const ROLE_COLORS = {
-  super_admin: '#F5A623',
-  admin: '#5B8DEF',
-  commercial: '#A78BFA',
-  financial: '#00B37E',
-};
+const ROLE_ORDER = ['super_admin', 'admin', 'gestor', 'commercial', 'financial', 'custom'];
 
 const EmployeesAdmin = ({ canManage }) => {
   const [items, setItems] = useState([]);
@@ -38,7 +41,7 @@ const EmployeesAdmin = ({ canManage }) => {
   const fetchItems = useCallback(async () => {
     setError(null);
     try {
-      const res = await fetch(`/api/admin/users?showInactive=${showInactive ? '1' : '0'}`);
+      const res = await adminFetch(`/api/admin/users?showInactive=${showInactive ? '1' : '0'}`);
       if (!res.ok) throw new Error((await res.json()).error || `Erro ${res.status}`);
       const data = await res.json();
       setItems(data.items || []);
@@ -54,7 +57,7 @@ const EmployeesAdmin = ({ canManage }) => {
   const handleDelete = async (user) => {
     if (!window.confirm(`Desativar "${user.name}"? Ele não conseguirá mais logar.`)) return;
     try {
-      const res = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+      const res = await adminFetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error || 'Falha');
       fetchItems();
     } catch (err) {
@@ -65,9 +68,8 @@ const EmployeesAdmin = ({ canManage }) => {
   const handleResetPassword = async (user) => {
     if (!window.confirm(`Gerar nova senha temporária pra "${user.name}"?`)) return;
     try {
-      const res = await fetch(`/api/admin/users/${user.id}/reset-password`, {
+      const res = await adminFetch(`/api/admin/users/${user.id}/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Falha');
@@ -153,7 +155,7 @@ const EmployeesAdmin = ({ canManage }) => {
       ) : (
         // Lista agrupada por role
         <div className="space-y-5">
-          {['super_admin', 'admin', 'commercial', 'financial'].map(role => {
+          {ROLE_ORDER.map(role => {
             const usersInRole = grouped[role] || [];
             if (usersInRole.length === 0) return null;
             return (
@@ -207,6 +209,12 @@ const EmployeesAdmin = ({ canManage }) => {
 
 const UserCard = ({ user, canManage, onEdit, onResetPassword, onDelete }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const totalPerms = Object.keys(PERMISSIONS).length;
+  const effectivePerms = useMemo(() => getEffectivePermissions(user), [user]);
+  const permsCount = effectivePerms.length;
+  const top5 = effectivePerms.slice(0, 5);
+
   return (
     <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[14px] p-4 relative">
       <div className="flex items-start gap-3">
@@ -220,11 +228,35 @@ const UserCard = ({ user, canManage, onEdit, onResetPassword, onDelete }) => {
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-bold text-white truncate">{user.name}</div>
           <div className="text-[11px] text-[#868686] truncate">{user.email}</div>
-          {!user.active && (
-            <span className="inline-block mt-1 px-1.5 py-0.5 bg-red-500/15 text-red-400 text-[9px] font-bold rounded uppercase tracking-wider">
-              Inativo
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+            {!user.active && (
+              <span className="px-1.5 py-0.5 bg-red-500/15 text-red-400 text-[9px] font-bold rounded uppercase tracking-wider">
+                Inativo
+              </span>
+            )}
+            <span
+              className="relative px-1.5 py-0.5 bg-white/[0.05] text-[#A0A0A0] text-[9px] font-bold rounded uppercase tracking-wider cursor-help"
+              onMouseEnter={() => setTooltipOpen(true)}
+              onMouseLeave={() => setTooltipOpen(false)}
+            >
+              {user.role === 'super_admin' ? `${totalPerms} permissões` : `${permsCount} de ${totalPerms} permissões`}
+              {tooltipOpen && top5.length > 0 && (
+                <div className="absolute left-0 top-full mt-1 z-50 bg-[#0F0F11] border border-white/[0.1] rounded-[8px] p-2 min-w-[200px] shadow-2xl normal-case tracking-normal">
+                  <div className="text-[10px] text-[#666] mb-1">Permissões ativas:</div>
+                  <ul className="space-y-0.5">
+                    {top5.map((p) => (
+                      <li key={p} className="text-[10px] text-white">
+                        - {PERMISSIONS[p]?.label || p}
+                      </li>
+                    ))}
+                    {permsCount > 5 && (
+                      <li className="text-[10px] text-[#666]">+ {permsCount - 5} mais...</li>
+                    )}
+                  </ul>
+                </div>
+              )}
             </span>
-          )}
+          </div>
           {user.lastLoginAt && (
             <div className="text-[10px] text-[#555] mt-1">
               Último login: {new Date(user.lastLoginAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
@@ -263,10 +295,148 @@ const UserCard = ({ user, canManage, onEdit, onResetPassword, onDelete }) => {
   );
 };
 
+/**
+ * Bloco reutilizável de edição de permissões granulares.
+ * Lista checkboxes agrupados por categoria. Quando role muda, sugere aplicar template.
+ */
+const PermissionsEditor = ({ permissions, onChange, role }) => {
+  const [open, setOpen] = useState(false);
+  const grouped = useMemo(() => getPermissionsByCategory(), []);
+  const totalPerms = Object.keys(PERMISSIONS).length;
+  const activeCount = permissions.length;
+
+  const togglePerm = (key) => {
+    if (permissions.includes(key)) {
+      onChange(permissions.filter((p) => p !== key));
+    } else {
+      onChange([...permissions, key]);
+    }
+  };
+
+  const applyTemplate = () => {
+    const tpl = ROLE_TEMPLATES[role] || [];
+    onChange([...tpl]);
+  };
+
+  const toggleAllInCategory = (catKey, allOn) => {
+    const keysInCat = grouped[catKey].map((p) => p.key);
+    if (allOn) {
+      onChange(permissions.filter((p) => !keysInCat.includes(p)));
+    } else {
+      const merged = new Set([...permissions, ...keysInCat]);
+      onChange([...merged]);
+    }
+  };
+
+  return (
+    <div className="border border-white/[0.06] rounded-[10px] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2.5 bg-[#0F0F11] hover:bg-[#15151A] text-left"
+      >
+        <div className="flex items-center gap-2">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="transition-transform"
+            style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}
+          >
+            <path d="M9 6l6 6-6 6" stroke="#868686" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <span className="text-[12px] font-bold text-white">Permissões avançadas</span>
+          <span className="text-[10px] text-[#868686]">
+            {activeCount} de {totalPerms} ativas
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); applyTemplate(); }}
+          className="text-[10px] text-[#F5A623] hover:underline"
+        >
+          Aplicar template do cargo
+        </button>
+      </button>
+      {open && (
+        <div className="bg-[#0A0A0C] border-t border-white/[0.06] p-3 space-y-3 max-h-[320px] overflow-y-auto">
+          {Object.entries(grouped).map(([catKey, perms]) => {
+            if (!perms.length) return null;
+            const activeInCat = perms.filter((p) => permissions.includes(p.key)).length;
+            const allOn = activeInCat === perms.length;
+            return (
+              <div key={catKey} className="bg-[#0F0F11] rounded-[8px] p-2.5 border border-white/[0.04]">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="text-[11px] font-bold text-[#F5A623] uppercase tracking-wider">
+                    {catKey} <span className="text-[#666] font-normal normal-case">({activeInCat}/{perms.length})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleAllInCategory(catKey, allOn)}
+                    className="text-[10px] text-[#868686] hover:text-white"
+                  >
+                    {allOn ? 'Desmarcar todos' : 'Marcar todos'}
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {perms.map((p) => {
+                    const checked = permissions.includes(p.key);
+                    return (
+                      <label
+                        key={p.key}
+                        className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition-colors ${checked ? 'bg-[#00B37E]/[0.07]' : 'hover:bg-white/[0.03]'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => togglePerm(p.key)}
+                          className="accent-[#00B37E]"
+                        />
+                        {checked ? (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                            <path d="M5 12l5 5 9-9" stroke="#00B37E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        ) : (
+                          <span className="w-3 h-3 shrink-0" />
+                        )}
+                        <span className={`text-[11px] ${checked ? 'text-white' : 'text-[#868686]'}`}>
+                          {p.label}
+                        </span>
+                        <code className="ml-auto text-[9px] text-[#444]">{p.key}</code>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CreateUserModal = ({ onClose, onCreated }) => {
-  const [form, setForm] = useState({ name: '', email: '', role: 'admin', password: '', sendInvite: true });
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    role: 'admin',
+    password: '',
+    sendInvite: true,
+    permissions: ROLE_TEMPLATES.admin || [],
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  // Quando role muda, aplica template automaticamente
+  const handleRoleChange = (newRole) => {
+    setForm((prev) => ({
+      ...prev,
+      role: newRole,
+      permissions: [...(ROLE_TEMPLATES[newRole] || [])],
+    }));
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -278,15 +448,15 @@ const CreateUserModal = ({ onClose, onCreated }) => {
     }
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await adminFetch('/api/admin/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name.trim(),
           email: form.email.trim(),
           role: form.role,
           password: form.sendInvite ? null : form.password,
           sendInvite: form.sendInvite,
+          permissions: form.permissions,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Falha ao criar');
@@ -301,7 +471,7 @@ const CreateUserModal = ({ onClose, onCreated }) => {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-[#1B1B1D] border border-white/[0.08] rounded-[18px] p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[#1B1B1D] border border-white/[0.08] rounded-[18px] p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-[16px] font-bold text-white mb-1">Convidar funcionário</h3>
         <p className="text-[11px] text-[#868686] mb-4">Adicione um membro da equipe Breakr ao painel administrativo.</p>
 
@@ -327,15 +497,24 @@ const CreateUserModal = ({ onClose, onCreated }) => {
           <div>
             <label className="text-[11px] text-[#868686] block mb-1">Cargo</label>
             <select
-              value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
+              value={form.role} onChange={(e) => handleRoleChange(e.target.value)}
               className="w-full bg-[#0F0F11] border border-white/[0.06] rounded-[8px] px-3 py-2 text-[13px] text-white outline-none focus:border-[#F5A623]/50"
             >
               <option value="super_admin">Super Admin (acesso total)</option>
-              <option value="admin">Admin (gerencia clientes)</option>
+              <option value="admin">Admin (tudo, exceto criar/excluir clientes)</option>
+              <option value="gestor">Gestor (dashboard, fichas, engenharia)</option>
               <option value="commercial">Comercial (vendas + leads)</option>
               <option value="financial">Financeiro (DRE + BPO)</option>
+              <option value="custom">Customizado (definir permissões)</option>
             </select>
           </div>
+
+          <PermissionsEditor
+            permissions={form.permissions}
+            onChange={(perms) => setForm({ ...form, permissions: perms })}
+            role={form.role}
+          />
+
           <label className="flex items-center gap-2 text-[12px] text-white cursor-pointer pt-2">
             <input type="checkbox" checked={form.sendInvite} onChange={(e) => setForm({ ...form, sendInvite: e.target.checked })} />
             Gerar senha temporária (recomendado)
@@ -368,17 +547,33 @@ const CreateUserModal = ({ onClose, onCreated }) => {
 };
 
 const EditUserModal = ({ user, onClose, onSaved }) => {
-  const [form, setForm] = useState({ name: user.name, role: user.role, active: user.active });
+  const initialPerms = (Array.isArray(user.permissions) && user.permissions.length > 0)
+    ? user.permissions
+    : (ROLE_TEMPLATES[user.role] || []);
+  const [form, setForm] = useState({
+    name: user.name,
+    role: user.role,
+    active: user.active,
+    permissions: [...initialPerms],
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  const handleRoleChange = (newRole) => {
+    setForm((prev) => ({
+      ...prev,
+      role: newRole,
+      // Sugere o template do novo role, mas user pode customizar depois
+      permissions: [...(ROLE_TEMPLATES[newRole] || [])],
+    }));
+  };
 
   const handleSubmit = async () => {
     setError(null);
     setSaving(true);
     try {
-      const res = await fetch(`/api/admin/users/${user.id}`, {
+      const res = await adminFetch(`/api/admin/users/${user.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Falha');
@@ -392,7 +587,7 @@ const EditUserModal = ({ user, onClose, onSaved }) => {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-[#1B1B1D] border border-white/[0.08] rounded-[18px] p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[#1B1B1D] border border-white/[0.08] rounded-[18px] p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-[16px] font-bold text-white mb-4">Editar {user.name}</h3>
 
         {error && <div className="bg-red-500/10 border border-red-500/40 rounded-md p-2 text-[11px] text-red-400 mb-3">{error}</div>}
@@ -408,15 +603,24 @@ const EditUserModal = ({ user, onClose, onSaved }) => {
           <div>
             <label className="text-[11px] text-[#868686] block mb-1">Cargo</label>
             <select
-              value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
+              value={form.role} onChange={(e) => handleRoleChange(e.target.value)}
               className="w-full bg-[#0F0F11] border border-white/[0.06] rounded-[8px] px-3 py-2 text-[13px] text-white outline-none focus:border-[#F5A623]/50"
             >
               <option value="super_admin">Super Admin</option>
               <option value="admin">Admin</option>
+              <option value="gestor">Gestor</option>
               <option value="commercial">Comercial</option>
               <option value="financial">Financeiro</option>
+              <option value="custom">Customizado</option>
             </select>
           </div>
+
+          <PermissionsEditor
+            permissions={form.permissions}
+            onChange={(perms) => setForm({ ...form, permissions: perms })}
+            role={form.role}
+          />
+
           <label className="flex items-center gap-2 text-[12px] text-white cursor-pointer pt-2">
             <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
             Ativo (pode logar)

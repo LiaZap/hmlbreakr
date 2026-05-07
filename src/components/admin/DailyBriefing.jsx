@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { computeClientHealth, generateClientAlerts, SEVERITY_ORDER } from '../../utils/clientHealth';
+import { adminFetch } from '../../utils/adminAuth';
 
 // ─────────────── localStorage helpers (try/catch silencioso) ───────────────
 const lsGet = (key) => {
@@ -203,7 +204,7 @@ const DailyBriefing = ({ clients = [], adminName = 'Admin', insightText }) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/daily-insights');
+      const res = await adminFetch('/api/admin/daily-insights');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setRemote(json);

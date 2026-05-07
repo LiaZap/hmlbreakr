@@ -11,6 +11,10 @@ const crypto = require('crypto');
 // Sub-routers admin (item 4.1)
 const dailyInsightsRoutes = require('./routes/admin/daily-insights');
 const adminUsersRoutes = require('./routes/admin/users');
+const adminReportsRoutes = require('./routes/admin/reports');
+
+// Middleware admin (header-based v1, JWT v2)
+const { requireAdmin, requireSuperAdmin } = require('./middleware/adminAuth');
 
 // ========================
 // ADMIN ROUTES
@@ -843,10 +847,40 @@ router.post('/client/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
-    // Check if it's an admin
+    // Check if it's an AdminUser do banco (gerenciado via UI)
+    try {
+      const dbAdmin = await prisma.adminUser.findUnique({ where: { email: email.toLowerCase().trim() } });
+      if (dbAdmin && dbAdmin.active && dbAdmin.password) {
+        const ok = await bcrypt.compare(password, dbAdmin.password);
+        if (ok) {
+          prisma.adminUser.update({
+            where: { id: dbAdmin.id },
+            data: { lastLoginAt: new Date() },
+          }).catch(e => console.error('lastLoginAt update', e));
+          return res.json({
+            success: true,
+            role: 'admin',
+            name: dbAdmin.name,
+            adminRole: dbAdmin.role,
+            token: 'mock-admin-token',
+            adminUserId: dbAdmin.id,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('[client login admin db lookup]', e);
+    }
+
+    // Legado: ADMIN_ACCOUNTS hardcoded
     const admin = ADMIN_ACCOUNTS.find(a => a.email === email && a.password === password);
     if (admin) {
-      return res.json({ success: true, role: 'admin', name: admin.name, adminRole: admin.role });
+      return res.json({
+        success: true,
+        role: 'admin',
+        name: admin.name,
+        adminRole: admin.role,
+        token: 'mock-admin-token',
+      });
     }
 
     // Checking if the user is a Client (Owner)
@@ -1849,8 +1883,12 @@ router.delete('/admin/broadcasts/:id', async (req, res) => {
 });
 
 // Mount admin sub-routers (after definitions acima)
-router.use('/admin', dailyInsightsRoutes);
-router.use('/admin/users', adminUsersRoutes);
+// — /admin/users exige super_admin (gestão de funcionários da Breakr)
+// — /admin/reports exige admin (envio de relatórios e exploração interna)
+// — /admin/daily-insights exige admin (briefing diário)
+router.use('/admin', requireAdmin, dailyInsightsRoutes);
+router.use('/admin/users', requireSuperAdmin, adminUsersRoutes);
+router.use('/admin/reports', requireAdmin, adminReportsRoutes);
 
 module.exports = router;
 

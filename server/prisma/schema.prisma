@@ -73,7 +73,8 @@ model AdminUser {
   email        String    @unique
   password     String? // bcrypt hash, opcional se usa Clerk
   clerkUserId  String?   @unique
-  role         String // super_admin | admin | commercial | financial
+  role         String // super_admin | admin | gestor | commercial | financial | custom
+  permissions  String[]  @default([]) // granular — ex: ['dashboard.view','clients.edit']. Vazio = usa template do role.
   photo        String?   @db.Text
   active       Boolean   @default(true)
   invitedBy    String? // id do super_admin que convidou

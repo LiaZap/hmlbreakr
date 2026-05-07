@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import boltIcon from '../../assets/bolt.svg';
+import { setAdminSession } from '../../utils/adminAuth';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -30,7 +31,14 @@ const AdminLogin = ({ onLogin }) => {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        onLogin();
+        // Guarda token + adminUserId pra adminFetch usar nos próximos requests
+        setAdminSession({
+          token: data.token,
+          adminUserId: data.adminUserId,
+          role: data.role,
+          name: data.name,
+        });
+        onLogin(data.role, data.name);
       } else {
         setError(data.error || 'Credenciais incorretas.');
         setLoading(false);

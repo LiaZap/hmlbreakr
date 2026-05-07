@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SignIn, SignUp } from '@clerk/clerk-react';
 import boltIcon from '../assets/bolt.svg';
+import { setAdminSession } from '../utils/adminAuth';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -102,7 +103,13 @@ const AdminLoginTab = ({ onLogin, onAdminLogin }) => {
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Credenciais incorretas'); return; }
       if (data.role === 'admin' && onAdminLogin) {
-        if (data.name) sessionStorage.setItem('breaker-admin-name', data.name);
+        // Persiste auth context: token, adminUserId, role, name
+        setAdminSession({
+          token: data.token,
+          adminUserId: data.adminUserId,
+          role: data.adminRole || 'admin',
+          name: data.name,
+        });
         onAdminLogin(data.adminRole || 'admin');
       } else {
         onLogin(data.hash);
