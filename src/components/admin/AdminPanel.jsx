@@ -7,6 +7,8 @@ import OperationalAlerts from './OperationalAlerts';
 import PortfolioKPIs from './PortfolioKPIs';
 import MaturityFunnel from './MaturityFunnel';
 import { HealthScoreBadge } from './HealthScoreBadge';
+import ActivityFeed from './ActivityFeed';
+import CuisineBenchmarks from './CuisineBenchmarks';
 import { computeClientHealth } from '../../utils/clientHealth';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
 // import BpoApp from '../bpo/BpoApp';
@@ -1009,6 +1011,21 @@ const AdminPanel = () => {
             onStageClick={(stageId, stuckClients) => {
               console.log('Stage clicked:', stageId, stuckClients.length, 'stuck clients');
             }}
+          />
+
+          {/* Fase 2.3: Benchmarks por Tipo de Cozinha */}
+          <CuisineBenchmarks
+            clients={clients}
+            onCuisineClick={(cuisineType, restaurants) => {
+              console.log('Cuisine clicked:', cuisineType, restaurants.length, 'restaurants');
+            }}
+          />
+
+          {/* Fase 1.3: Activity Feed — eventos operacionais recentes */}
+          <ActivityFeed
+            clients={clients}
+            maxItems={30}
+            onClientClick={(hash) => openClientAsAdmin(hash)}
           />
 
           {/* Metric Cards — premium with sparklines */}

@@ -69,10 +69,13 @@ const evaluateStages = (data, health) => {
   return {
     cadastrado: true,
     onboarding: !!fd.onboarding_completed,
-    insumos: insumos.length >= 20,
+    // Threshold reduzido pra 10 (lanchonetes pequenas comecam com poucos insumos)
+    insumos: insumos.length >= 10,
     fichas: cardapioMaturidadePct >= 80,
-    engenharia: menuEng.length > 0 || (cardapioMaturidadePct >= 80 && fichasComPreco > 0),
+    // Engenharia: requer matriz importada OU fichas com preço >= 5 (criterio mais rigoroso)
+    engenharia: menuEng.length >= 5 || fichasComPreco >= 5,
     bpo: !!(data?._bpo && data._bpo.enabled),
+    // Equipe vem antes da maioria das outras (geralmente cadastra logo no onboarding)
     equipe: (partners.length + employees.length) > 0,
     receita: validRevenueCount >= 3,
   };

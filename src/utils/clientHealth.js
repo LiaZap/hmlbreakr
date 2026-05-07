@@ -176,7 +176,7 @@ export function computeClientHealth(data) {
  */
 function classifyHealth({ cmvPct, basePct, lucroLiqPct, revenueChange, hasFinancialData }) {
   // Sem dados suficientes pra avaliar saúde financeira
-  if (!hasFinancialData) {
+  if (!hasFinancialData || lucroLiqPct == null) {
     // Se BASE >65 sem fichas, ainda é crítico (custos fixos altos sem receita compensando)
     if (basePct > 65) return 'risk';
     return 'unknown';
@@ -373,12 +373,17 @@ export function aggregatePortfolio(healthList) {
     };
   }
   const sum = (arr, fn) => arr.reduce((a, b) => a + fn(b), 0);
-  const avg = (arr, fn) => sum(arr, fn) / arr.length;
+  const avg = (arr, fn) => arr.length > 0 ? sum(arr, fn) / arr.length : 0;
+  // Fix: profit só média entre quem TEM dados financeiros (lucroLiqPct nao-null)
+  const withProfit = valid.filter(h => h.lucroLiqPct !== null && isFinite(h.lucroLiqPct));
+  const withCmv = valid.filter(h => h.cmvPct > 0); // CMV 0 = sem dados
   return {
     total: valid.length,
-    cmvAvg: +avg(valid, h => h.cmvPct).toFixed(1),
+    cmvAvg: withCmv.length > 0 ? +avg(withCmv, h => h.cmvPct).toFixed(1) : 0,
     baseAvg: +avg(valid, h => h.basePct).toFixed(1),
-    profitAvg: +avg(valid, h => h.lucroLiqPct).toFixed(1),
+    profitAvg: withProfit.length > 0 ? +avg(withProfit, h => h.lucroLiqPct).toFixed(1) : null,
+    profitClientCount: withProfit.length,
+    cmvClientCount: withCmv.length,
     revenueTotal: sum(valid, h => h.currentRevenue),
     revenueChangeAvg: +avg(valid, h => h.revenueChange).toFixed(1),
     healthy: valid.filter(h => h.health === 'healthy').length,

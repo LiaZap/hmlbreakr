@@ -291,4 +291,5 @@ const BreakdownRow = ({ label, got, max }) => {
   );
 };
 
+export { HealthScoreBadge };
 export default HealthScoreBadge;

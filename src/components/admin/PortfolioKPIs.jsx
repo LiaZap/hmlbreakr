@@ -107,7 +107,10 @@ const PortfolioKPIs = ({ clients }) => {
 
   const cmvStatus = portfolio.cmvAvg <= 32 ? 'good' : portfolio.cmvAvg <= 35 ? 'warning' : 'critical';
   const baseStatus = portfolio.baseAvg <= 55 ? 'good' : portfolio.baseAvg <= 65 ? 'warning' : 'critical';
-  const profitStatus = portfolio.profitAvg >= 8 ? 'good' : portfolio.profitAvg >= 3 ? 'warning' : 'critical';
+  // Fix: profitAvg pode ser null quando ninguém tem dados financeiros
+  const profitStatus = portfolio.profitAvg == null
+    ? 'good'
+    : portfolio.profitAvg >= 8 ? 'good' : portfolio.profitAvg >= 3 ? 'warning' : 'critical';
 
   // Distribuição de saúde
   const totalScored = portfolio.healthy + portfolio.tight + portfolio.risk + portfolio.critical;
@@ -132,8 +135,8 @@ const PortfolioKPIs = ({ clients }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <KPICard
           label="CMV Médio"
-          value={`${portfolio.cmvAvg}%`}
-          subtitle="Saudável: 28-32%"
+          value={portfolio.cmvAvg === 0 ? '—' : `${portfolio.cmvAvg}%`}
+          subtitle={portfolio.cmvAvg === 0 ? 'Sem dados de fichas+vendas' : `Saudável: 28-32% (${portfolio.cmvClientCount || 0} clientes)`}
           status={cmvStatus}
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 7l9 4 9-4M3 7v10l9 4 9-4V7M3 7l9-4 9 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cmvStatus === 'good' ? 'text-[#00B37E]' : cmvStatus === 'warning' ? 'text-[#F5A623]' : 'text-[#FF4560]'}/></svg>}
         />
@@ -146,8 +149,8 @@ const PortfolioKPIs = ({ clients }) => {
         />
         <KPICard
           label="Lucro Líquido"
-          value={`${portfolio.profitAvg}%`}
-          subtitle="Saudável: >8%"
+          value={portfolio.profitAvg == null ? '—' : `${portfolio.profitAvg}%`}
+          subtitle={portfolio.profitAvg == null ? 'Sem dados de fichas+vendas' : `Saudável: >8% (${portfolio.profitClientCount || 0} clientes)`}
           status={profitStatus}
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className={profitStatus === 'good' ? 'text-[#00B37E]' : profitStatus === 'warning' ? 'text-[#F5A623]' : 'text-[#FF4560]'}/></svg>}
         />
