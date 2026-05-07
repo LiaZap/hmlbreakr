@@ -201,15 +201,15 @@ const ReceivableAdvanceModal = ({ item, paymentMethods, onClose, onSaved }) => {
   };
 
   return (
-    <Modal onClose={onClose} title={isEdit ? 'Editar antecipação' : 'Nova antecipação'}>
-      <div className="flex flex-col gap-3 p-4">
+    <Modal open onClose={onClose} title={isEdit ? 'Editar antecipação' : 'Nova antecipação'} size="lg">
+      <div className="flex flex-col gap-3">
         <ErrorBanner message={error} />
 
         <div>
           <label className="text-xs text-text-muted block mb-1">Descrição</label>
           <Input
             value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            onChange={(v) => setForm({ ...form, description: v })}
             placeholder="Ex: iFood antecipação semanal"
           />
         </div>
@@ -238,7 +238,7 @@ const ReceivableAdvanceModal = ({ item, paymentMethods, onClose, onSaved }) => {
               type="text"
               inputMode="decimal"
               value={form.monthlyRate}
-              onChange={(e) => setForm({ ...form, monthlyRate: e.target.value.replace(',', '.') })}
+              onChange={(v) => setForm({ ...form, monthlyRate: String(v).replace(',', '.') })}
               placeholder="2.99"
             />
           </div>
@@ -248,7 +248,7 @@ const ReceivableAdvanceModal = ({ item, paymentMethods, onClose, onSaved }) => {
               type="text"
               inputMode="decimal"
               value={form.averageValue}
-              onChange={(e) => setForm({ ...form, averageValue: e.target.value.replace(',', '.') })}
+              onChange={(v) => setForm({ ...form, averageValue: String(v).replace(',', '.') })}
               placeholder="50000"
             />
           </div>
@@ -257,7 +257,7 @@ const ReceivableAdvanceModal = ({ item, paymentMethods, onClose, onSaved }) => {
             <Input
               type="number"
               value={form.daysAdvanced}
-              onChange={(e) => setForm({ ...form, daysAdvanced: e.target.value })}
+              onChange={(v) => setForm({ ...form, daysAdvanced: v })}
               placeholder="15"
             />
           </div>

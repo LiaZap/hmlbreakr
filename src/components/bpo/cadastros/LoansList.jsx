@@ -266,59 +266,59 @@ const LoanModal = ({ item, onClose, onSaved }) => {
   };
 
   return (
-    <Modal onClose={onClose} title={isEdit ? 'Editar contrato' : 'Novo contrato de financiamento'}>
-      <div className="flex flex-col gap-3 p-4">
+    <Modal open onClose={onClose} title={isEdit ? 'Editar contrato' : 'Novo contrato de financiamento'} size="xl">
+      <div className="flex flex-col gap-3">
         <ErrorBanner message={error} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-text-muted block mb-1">Banco</label>
-            <Input value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.target.value })} placeholder="Ex: Banco do Brasil" />
+            <Input value={form.bankName} onChange={(v) => setForm({ ...form, bankName: v })} placeholder="Ex: Banco do Brasil" />
           </div>
           <div>
             <label className="text-xs text-text-muted block mb-1">Nº Contrato (opcional)</label>
-            <Input value={form.contractNumber} onChange={(e) => setForm({ ...form, contractNumber: e.target.value })} placeholder="Ex: 0123456789" />
+            <Input value={form.contractNumber} onChange={(v) => setForm({ ...form, contractNumber: v })} placeholder="Ex: 0123456789" />
           </div>
         </div>
 
         <div>
           <label className="text-xs text-text-muted block mb-1">Descrição (opcional)</label>
-          <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Ex: Capital de giro - reforma cozinha" />
+          <Input value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Ex: Capital de giro - reforma cozinha" />
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <div>
             <label className="text-xs text-text-muted block mb-1">Principal (R$)</label>
             <Input type="text" inputMode="decimal" value={form.principal}
-              onChange={(e) => setForm({ ...form, principal: e.target.value.replace(',', '.') })} placeholder="50000" />
+              onChange={(v) => setForm({ ...form, principal: String(v).replace(',', '.') })} placeholder="50000" />
           </div>
           <div>
             <label className="text-xs text-text-muted block mb-1">Taxa a.m. (%)</label>
             <Input type="text" inputMode="decimal" value={form.interestRateMonthly}
-              onChange={(e) => setForm({ ...form, interestRateMonthly: e.target.value.replace(',', '.') })} placeholder="1.99" />
+              onChange={(v) => setForm({ ...form, interestRateMonthly: String(v).replace(',', '.') })} placeholder="1.99" />
           </div>
           <div>
             <label className="text-xs text-text-muted block mb-1">Total parcelas</label>
             <Input type="number" value={form.totalInstallments}
-              onChange={(e) => setForm({ ...form, totalInstallments: e.target.value })} placeholder="24" />
+              onChange={(v) => setForm({ ...form, totalInstallments: v })} placeholder="24" />
           </div>
           <div>
             <label className="text-xs text-text-muted block mb-1">Já pagas</label>
             <Input type="number" value={form.paidInstallments}
-              onChange={(e) => setForm({ ...form, paidInstallments: e.target.value })} placeholder="0" />
+              onChange={(v) => setForm({ ...form, paidInstallments: v })} placeholder="0" />
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-text-muted block mb-1">Data início</label>
-            <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+            <Input type="date" value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} />
           </div>
         </div>
 
         <div>
           <label className="text-xs text-text-muted block mb-1">Notas (opcional)</label>
-          <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Garantia, observações..." />
+          <Input value={form.notes} onChange={(v) => setForm({ ...form, notes: v })} placeholder="Garantia, observações..." />
         </div>
 
         {/* Preview Tabela Price */}
