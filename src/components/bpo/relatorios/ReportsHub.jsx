@@ -52,12 +52,18 @@ const ReportsHub = () => {
   const [paymentMethods, setPaymentMethods] = useState([]);
 
   useEffect(() => {
+    // Sem cliente selecionado, bpoUrl retorna null — abortar fetch
+    const catUrl = bpoUrl('/categories');
+    const supUrl = bpoUrl('/suppliers');
+    const pmUrl = bpoUrl('/payment-methods');
+    if (!catUrl || !supUrl || !pmUrl) return;
+
     const loadDropdownData = async () => {
       try {
         const [catRes, supRes, pmRes] = await Promise.all([
-          fetch(bpoUrl('/categories')).then(r => r.ok ? r.json() : { items: [] }),
-          fetch(bpoUrl('/suppliers')).then(r => r.ok ? r.json() : { items: [] }),
-          fetch(bpoUrl('/payment-methods')).then(r => r.ok ? r.json() : { items: [] }),
+          fetch(catUrl).then(r => r.ok ? r.json() : { items: [] }),
+          fetch(supUrl).then(r => r.ok ? r.json() : { items: [] }),
+          fetch(pmUrl).then(r => r.ok ? r.json() : { items: [] }),
         ]);
         setCategories(catRes.items || []);
         setSuppliers(supRes.items || []);

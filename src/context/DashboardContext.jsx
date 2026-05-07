@@ -737,7 +737,7 @@ export const DashboardProvider = ({ children }) => {
     }
 
     // Items that were previously above threshold but are now resolved (threshold crossed in right direction)
-    const resolvedKeys = ['marketplace', 'fixedCosts', 'cmv', 'cardFee'];
+    const resolvedKeys = ['marketplace', 'fixedCosts', 'cmv', 'cardFee', 'advances', 'loans'];
     const activeKeys = new Set(moneyOnTableItems.map(i => i.key));
     let resolvedRecoveredTotal = 0;
     resolvedKeys.forEach(key => {
