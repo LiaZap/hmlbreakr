@@ -107,7 +107,7 @@ const buildUrgentActions = (clients) => {
     const icon =
       alert.severity === 'critical' ? '🔴' : alert.severity === 'high' ? '🟠' : '🟡';
     return {
-      id: `alert_${alert.client.id || idx}_${alert.type}`,
+      id: `alert_${alert.client.id || 'unknown'}_${alert.type}_${idx}`,
       icon,
       title: `${alert.client.name}: ${alert.title}`,
       detail: alert.action,
@@ -115,8 +115,24 @@ const buildUrgentActions = (clients) => {
   });
 };
 
+// Helper: retorna a data atual no timezone Brasil (BRT/BRST = UTC-3)
+// pra evitar bugs em servidores rodando UTC ou navegadores em outra TZ.
+const nowInBrazil = () => {
+  // Pega componentes via toLocaleString no fuso correto + reconstrói Date local
+  const parts = new Date().toLocaleString('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).match(/(\d+)\/(\d+)\/(\d+),?\s+(\d+):(\d+):(\d+)/);
+  if (!parts) return new Date();
+  // parts: [_, MM, DD, YYYY, HH, mm, ss]
+  return new Date(+parts[3], +parts[1] - 1, +parts[2], +parts[4], +parts[5], +parts[6]);
+};
+
 const computeYesterdaySummary = (clients) => {
-  const now = new Date();
+  // Fix: usa "ontem" em horário Brasil (não server local TZ que pode ser UTC)
+  const now = nowInBrazil();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 

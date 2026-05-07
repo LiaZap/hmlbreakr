@@ -13,6 +13,9 @@ import RestaurantComparator from './RestaurantComparator';
 import BrazilMap from './BrazilMap';
 import AggregatedMenuInsights from './AggregatedMenuInsights';
 import DailyBriefing from './DailyBriefing';
+import OpportunityDetector from './OpportunityDetector';
+import MarginHunter from './MarginHunter';
+import CommandPalette from './CommandPalette';
 import { computeClientHealth } from '../../utils/clientHealth';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
 // import BpoApp from '../bpo/BpoApp';
@@ -1045,6 +1048,18 @@ const AdminPanel = () => {
 
           {/* Fase 3.3: Engenharia de Menu Agregada — insights cross-cliente */}
           <AggregatedMenuInsights clients={clients} />
+
+          {/* Fase 2.2: Detector de Oportunidades — upsells, cases, riscos, consultoria */}
+          <OpportunityDetector
+            clients={clients}
+            onClientClick={(client) => openClientAsAdmin(client.hash)}
+          />
+
+          {/* Fase 4.3: Caçador de Margem Perdida — fichas críticas + insumos com discrepância */}
+          <MarginHunter
+            clients={clients}
+            onClientClick={(client) => openClientAsAdmin(client.hash, { section: 'fichaTecnica' })}
+          />
 
           {/* Fase 4.2: Comparador de Restaurantes — selecione 2 lado a lado */}
           <RestaurantComparator clients={clients} />
@@ -2282,6 +2297,25 @@ const AdminPanel = () => {
           onClose={() => setDreModal(null)}
         />
       )}
+
+      {/* Fase 5.1: Cmd+K Global Search — atalho global em qualquer aba */}
+      <CommandPalette
+        clients={clients}
+        adminRole={adminRole}
+        onAction={(action, payload) => {
+          if (action === 'open_client' && payload?.hash) {
+            openClientAsAdmin(payload.hash, payload.section ? { section: payload.section } : {});
+          } else if (action === 'navigate' && payload?.tab) {
+            setActiveTab(payload.tab);
+          } else if (action === 'open_modal') {
+            if (payload?.modal === 'broadcast') setBroadcastModal('new');
+            else if (payload?.modal === 'new_client') setShowModal(true);
+          } else if (action === 'apply_filter' && payload?.filter) {
+            setActiveTab('clients');
+            setFinancialFilter(payload.filter);
+          }
+        }}
+      />
     </div>
   );
 };

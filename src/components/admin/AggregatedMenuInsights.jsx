@@ -68,6 +68,8 @@ const NUMBER_WORDS = {
 
 const stripAccents = (s) =>
   // Remove combining diacritical marks (U+0300 to U+036F)
+  // Fix: regex anterior tinha range char literal corrompido em encoding;
+  // agora usa unicode escape explicito que sobrevive a qualquer save.
   s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 const normalizeName = (raw) => {

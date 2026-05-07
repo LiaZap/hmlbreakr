@@ -131,8 +131,21 @@ const buildMockActions = (clients) => {
   ];
 };
 
+// Fix: server pode rodar em UTC. "Ontem" precisa ser ontem em horário Brasil
+// pra alinhar com a percepção do admin/cliente (que estão em -03:00).
+const nowInBrazil = () => {
+  const parts = new Date().toLocaleString('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).match(/(\d+)\/(\d+)\/(\d+),?\s+(\d+):(\d+):(\d+)/);
+  if (!parts) return new Date();
+  return new Date(+parts[3], +parts[1] - 1, +parts[2], +parts[4], +parts[5], +parts[6]);
+};
+
 const computeYesterday = (clients) => {
-  const now = new Date();
+  const now = nowInBrazil();
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
   const yesterdayStart = yesterday.getTime();
   const yesterdayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -177,8 +190,12 @@ const computeYesterday = (clients) => {
 
 router.get('/daily-insights', async (req, res) => {
   try {
-    const today = new Date();
-    const isoDate = today.toISOString().slice(0, 10);
+    // Fix: data em horário Brasil (não UTC) pra alinhar com percepção do admin
+    const today = nowInBrazil();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const isoDate = `${yyyy}-${mm}-${dd}`;
 
     // Carrega clientes pra computar resumo de ontem (best-effort)
     let clients = [];
