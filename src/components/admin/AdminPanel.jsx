@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import boltIcon from '../../assets/bolt.svg';
 import AdminDREModal from './AdminDREModal';
+import OperationalAlerts from './OperationalAlerts';
+import PortfolioKPIs from './PortfolioKPIs';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
 // import BpoApp from '../bpo/BpoApp';
 
@@ -991,6 +993,12 @@ const AdminPanel = () => {
               <p className="text-[13px] text-[#868686] mt-1">Aqui está o resumo do seu negócio hoje.</p>
             </div>
           </div>
+
+          {/* Fase 1.1: Painel de Alertas Operacionais — clientes precisando atenção HOJE */}
+          <OperationalAlerts clients={clients} onOpenClient={(hash, page) => openClientAsAdmin(hash, page ? { section: page } : {})} />
+
+          {/* Fase 1.2: KPIs do Portfólio (CMV, BASE, Lucro Líq, Receita agregada) */}
+          <PortfolioKPIs clients={clients} />
 
           {/* Metric Cards — premium with sparklines */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
