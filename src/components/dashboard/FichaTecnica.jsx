@@ -2794,7 +2794,7 @@ const FichaTecnica = () => {
             </div>
 
             {/* Cards Grid with grey background — agora flex column com scroll interno e paginação sticky */}
-            <div className="bg-[#1B1B1D] mx-4 mb-6 lg:mb-8 rounded-[16px] p-4 flex-1 lg:min-h-0 flex flex-col">
+            <div className="bg-[#1B1B1D] mx-4 mb-6 lg:mb-8 rounded-[16px] p-4 flex flex-col">
               {/* Search + Category Filter — fixo no topo do cards container */}
               {(() => {
                 const items = activeTab === 'insumos' ? insumos : fichas;
@@ -2879,7 +2879,7 @@ const FichaTecnica = () => {
                 const pageItems = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
                 return (
                   <>
-                    <div className="flex-1 lg:min-h-0 lg:overflow-y-auto pr-1 -mr-1">
+                    <div className="lg:overflow-y-auto pr-1 -mr-1 lg:max-h-[calc(100vh-280px)]">
                       {filtered.length === 0 ? (
                         <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="insumos" />
                       ) : (
@@ -2919,7 +2919,7 @@ const FichaTecnica = () => {
                 const pageItems = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
                 return (
                   <>
-                    <div className="flex-1 lg:min-h-0 lg:overflow-y-auto pr-1 -mr-1">
+                    <div className="lg:overflow-y-auto pr-1 -mr-1 lg:max-h-[calc(100vh-280px)]">
                       {filtered.length === 0 ? (
                         <EmptyState searchTerm={searchTerm} filterCategory={filterCategory} type="fichas" />
                       ) : (
