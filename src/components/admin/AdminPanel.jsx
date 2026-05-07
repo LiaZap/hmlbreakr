@@ -5,6 +5,9 @@ import boltIcon from '../../assets/bolt.svg';
 import AdminDREModal from './AdminDREModal';
 import OperationalAlerts from './OperationalAlerts';
 import PortfolioKPIs from './PortfolioKPIs';
+import MaturityFunnel from './MaturityFunnel';
+import { HealthScoreBadge } from './HealthScoreBadge';
+import { computeClientHealth } from '../../utils/clientHealth';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
 // import BpoApp from '../bpo/BpoApp';
 
@@ -1000,6 +1003,14 @@ const AdminPanel = () => {
           {/* Fase 1.2: KPIs do Portfólio (CMV, BASE, Lucro Líq, Receita agregada) */}
           <PortfolioKPIs clients={clients} />
 
+          {/* Fase 3.1: Funil de Maturidade Operacional — onde cada cliente está */}
+          <MaturityFunnel
+            clients={clients}
+            onStageClick={(stageId, stuckClients) => {
+              console.log('Stage clicked:', stageId, stuckClients.length, 'stuck clients');
+            }}
+          />
+
           {/* Metric Cards — premium with sparklines */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {[
@@ -1284,8 +1295,16 @@ const AdminPanel = () => {
                     {/* Date */}
                     <div className="text-[12px] text-[#999]">{new Date(client.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
 
-                    {/* Financial */}
-                    <div className="flex items-center gap-1 flex-wrap">
+                    {/* Financial + Health Score (Fase 2.1) */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(() => {
+                        // Computa health do cliente uma vez e mostra badge
+                        try {
+                          const clientData = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
+                          const health = computeClientHealth(clientData);
+                          return health ? <HealthScoreBadge health={health} size="sm" /> : null;
+                        } catch { return null; }
+                      })()}
                       {fin && fin.revenue > 0 ? (
                         <>
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${fin.cfPct > 33 ? 'bg-red-500/15 text-red-400' : 'bg-[#00B37E]/15 text-[#00B37E]'}`}>CF {fin.cfPct.toFixed(0)}%</span>

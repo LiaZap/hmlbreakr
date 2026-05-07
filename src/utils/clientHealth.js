@@ -66,7 +66,9 @@ export function computeClientHealth(data) {
     : 0;
 
   // BASE (custos fixos + impostos + cartão) — vem pré-calculado
-  const basePct = parsePct(breakEven?.base?.value || 0);
+  // Fix: tolera dados legados onde breakEven.base é número/string direto sem .value
+  const baseRaw = breakEven?.base?.value ?? breakEven?.base ?? 0;
+  const basePct = parsePct(baseRaw);
   const taxPct = parsePct(breakEven?.taxPercent || 0);
   const marketplaceFeePct = parsePct(breakEven?.marketplaceFeePct || 0);
 
@@ -93,13 +95,19 @@ export function computeClientHealth(data) {
   }
 
   // Lucro líquido = 100 - BASE - CMV (com impostos já em BASE)
-  const lucroLiqPct = 100 - basePct - cmvPct;
+  // Fix: se nao temos dados de CMV (cliente sem fichas com custo+preço+vendas),
+  // lucroLiqPct fica indefinido — não dá pra avaliar saúde financeira ainda.
+  // hasFinancialData controla se usamos lucro nas decisões.
+  const hasFinancialData = fichasComCustoEPreco.length > 0;
+  const lucroLiqPct = hasFinancialData ? (100 - basePct - cmvPct) : null;
 
   // Marketplace share (% das vendas vindo de marketplace)
+  // Fix: clampa a 100% pra evitar valores absurdos quando user erra na soma
   const marketplaces = Array.isArray(fd.fees_marketplaces) ? fd.fees_marketplaces : [];
-  const marketplaceSalesPct = marketplaces.reduce((acc, m) => {
+  const marketplaceSalesPctRaw = marketplaces.reduce((acc, m) => {
     return acc + parsePct(m.sales_percentage);
   }, 0);
+  const marketplaceSalesPct = Math.min(100, marketplaceSalesPctRaw);
 
   // Maturidade do cardápio
   const fichasTotal = fichas.length;
@@ -127,9 +135,10 @@ export function computeClientHealth(data) {
     cuisineType,
 
     // Métricas operacionais
+    hasFinancialData,
     cmvPct: +cmvPct.toFixed(1),
     basePct: +basePct.toFixed(1),
-    lucroLiqPct: +lucroLiqPct.toFixed(1),
+    lucroLiqPct: lucroLiqPct !== null ? +lucroLiqPct.toFixed(1) : null,
     taxPct: +taxPct.toFixed(1),
     marketplaceFeePct: +marketplaceFeePct.toFixed(1),
     marketplaceSalesPct: +marketplaceSalesPct.toFixed(1),
@@ -155,14 +164,23 @@ export function computeClientHealth(data) {
     onboardingCompleted: !!fd.onboarding_completed,
 
     // Status agregado
-    health: classifyHealth({ cmvPct, basePct, lucroLiqPct, revenueChange }),
+    health: classifyHealth({ cmvPct, basePct, lucroLiqPct, revenueChange, hasFinancialData }),
   };
 }
 
 /**
- * Classifica saúde geral em healthy / tight / risk / critical
+ * Classifica saúde geral em healthy / tight / risk / critical / unknown
+ * Fix: 'unknown' pra clientes sem dados financeiros suficientes
+ * (sem fichas com custo+preço). Não classifica como saudável quem nem tem
+ * dados pra avaliar.
  */
-function classifyHealth({ cmvPct, basePct, lucroLiqPct, revenueChange }) {
+function classifyHealth({ cmvPct, basePct, lucroLiqPct, revenueChange, hasFinancialData }) {
+  // Sem dados suficientes pra avaliar saúde financeira
+  if (!hasFinancialData) {
+    // Se BASE >65 sem fichas, ainda é crítico (custos fixos altos sem receita compensando)
+    if (basePct > 65) return 'risk';
+    return 'unknown';
+  }
   // Critical: prejuízo OU CMV crítico OU queda forte de receita
   if (lucroLiqPct < 0 || cmvPct > 40 || revenueChange < -25) return 'critical';
   // Risk: lucro <3% OU CMV >35% OU BASE >65% OU queda 15-25%
@@ -175,30 +193,24 @@ function classifyHealth({ cmvPct, basePct, lucroLiqPct, revenueChange }) {
 
 /**
  * Computa última atividade do cliente (heurística pelos dados)
+ * Fix: filtra timestamps futuros (cliente cadastrando "11/2026" enquanto
+ * estamos em maio de 2026 não conta como "atividade hoje").
  */
 function computeLastActivity(data) {
+  const now = Date.now();
   const ts = [];
-  // lastUpdated em fichas
+  // lastUpdated em fichas — só timestamps PASSADOS (anti-futuro)
   (data.operational?.fichas || []).forEach(f => {
-    if (f.lastUpdated) ts.push(f.lastUpdated);
+    if (f.lastUpdated && f.lastUpdated <= now) ts.push(f.lastUpdated);
   });
-  // last revenue entry date
-  const revenueHistory = data.formData?.revenue_history || [];
-  if (revenueHistory.length > 0) {
-    // assume cadastro mais recente = atividade
-    const lastRev = revenueHistory[revenueHistory.length - 1];
-    if (lastRev?.month) {
-      const [m, y] = lastRev.month.split('/').map(Number);
-      if (m && y) ts.push(new Date(y, m - 1, 28).getTime());
-    }
-  }
-  // daily revenue entries
+  // daily revenue entries — datas reais de lançamento
   const daily = data.formData?.daily_revenue || {};
-  const dailyDates = Object.keys(daily).sort().reverse();
-  if (dailyDates[0]) {
-    const d = new Date(dailyDates[0]);
-    if (!isNaN(d.getTime())) ts.push(d.getTime());
-  }
+  Object.keys(daily).forEach(dateStr => {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime()) && d.getTime() <= now) ts.push(d.getTime());
+  });
+  // Não usamos revenue_history.month pra atividade — pode ter mês futuro/passado
+  // arbitrário (cliente cadastra "Janeiro 2026" hoje). Esse não é sinal de atividade.
   return ts.length > 0 ? Math.max(...ts) : null;
 }
 
@@ -231,25 +243,27 @@ export function generateClientAlerts(health) {
     });
   }
 
-  // Lucro líquido negativo (prejuízo)
-  if (health.lucroLiqPct < 0) {
-    alerts.push({
-      severity: 'critical',
-      type: 'profit_negative',
-      title: `Operando em prejuízo (${health.lucroLiqPct}%)`,
-      description: 'Custos totais superam o faturamento. Ação imediata necessária.',
-      action: 'Análise completa: cortar despesas + revisar mix de cardápio',
-      page: 'home',
-    });
-  } else if (health.lucroLiqPct < 3) {
-    alerts.push({
-      severity: 'high',
-      type: 'profit_thin',
-      title: `Lucro líquido ${health.lucroLiqPct}% (saudável >8%)`,
-      description: 'Margem muito apertada. Qualquer choque vira prejuízo.',
-      action: 'Revisar BASE e/ou CMV com cliente',
-      page: 'home',
-    });
+  // Lucro líquido negativo (prejuízo) — só avalia se temos dados financeiros
+  if (health.hasFinancialData && health.lucroLiqPct !== null) {
+    if (health.lucroLiqPct < 0) {
+      alerts.push({
+        severity: 'critical',
+        type: 'profit_negative',
+        title: `Operando em prejuízo (${health.lucroLiqPct}%)`,
+        description: 'Custos totais superam o faturamento. Ação imediata necessária.',
+        action: 'Análise completa: cortar despesas + revisar mix de cardápio',
+        page: 'home',
+      });
+    } else if (health.lucroLiqPct < 3) {
+      alerts.push({
+        severity: 'high',
+        type: 'profit_thin',
+        title: `Lucro líquido ${health.lucroLiqPct}% (saudável >8%)`,
+        description: 'Margem muito apertada. Qualquer choque vira prejuízo.',
+        action: 'Revisar BASE e/ou CMV com cliente',
+        page: 'home',
+      });
+    }
   }
 
   // BASE alto (custos fixos consumindo lucro)
@@ -323,11 +337,14 @@ export function generateClientAlerts(health) {
 
   // Onboarding parado
   if (!health.onboardingCompleted && health.fichasTotal === 0 && health.daysSinceActivity > 7) {
+    const daysText = isFinite(health.daysSinceActivity)
+      ? `nos últimos ${health.daysSinceActivity} dias`
+      : 'desde o cadastro';
     alerts.push({
       severity: 'medium',
       type: 'onboarding_stuck',
       title: 'Onboarding parado',
-      description: `Cadastrou-se mas não preencheu nada nos últimos ${health.daysSinceActivity} dias.`,
+      description: `Cadastrou-se mas não preencheu nada ${daysText}.`,
       action: 'Email/WhatsApp guiado pelo próximo passo',
       page: null,
     });

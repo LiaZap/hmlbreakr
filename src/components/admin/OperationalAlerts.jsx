@@ -42,6 +42,7 @@ const OperationalAlerts = ({ clients, onOpenClient }) => {
   const [expanded, setExpanded] = useState(true);
 
   // Computa todos os alertas de todos os clientes
+  // Fix: parsing UMA VEZ por cliente, extraindo logo aqui pra não re-parsear no AlertCard
   const allAlerts = useMemo(() => {
     const items = [];
     (clients || []).forEach(client => {
@@ -49,11 +50,13 @@ const OperationalAlerts = ({ clients, onOpenClient }) => {
         const data = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
         const health = computeClientHealth(data);
         if (!health) return;
+        const clientLogo = data?.restaurant?.logo || null;
         const alerts = generateClientAlerts(health);
         alerts.forEach(alert => {
           items.push({
             ...alert,
             client,
+            clientLogo,
             health,
           });
         });
@@ -61,8 +64,12 @@ const OperationalAlerts = ({ clients, onOpenClient }) => {
         console.warn('Erro ao processar cliente:', client.name, e);
       }
     });
-    // Ordena por severity
-    items.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+    // Ordena por severity, depois por nome do cliente (estável entre re-renders)
+    items.sort((a, b) => {
+      const sevDiff = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+      if (sevDiff !== 0) return sevDiff;
+      return (a.client.name || '').localeCompare(b.client.name || '');
+    });
     return items;
   }, [clients]);
 
@@ -103,6 +110,8 @@ const OperationalAlerts = ({ clients, onOpenClient }) => {
       {/* Header */}
       <button
         onClick={() => setExpanded(v => !v)}
+        aria-label={expanded ? 'Recolher lista de alertas' : 'Expandir lista de alertas'}
+        aria-expanded={expanded}
         className="w-full flex items-center justify-between p-5 pb-3 hover:bg-white/[0.02] transition-colors"
       >
         <div className="flex items-center gap-3">
@@ -209,34 +218,31 @@ const OperationalAlerts = ({ clients, onOpenClient }) => {
 
 const AlertCard = ({ alert, onOpen }) => {
   const style = SEVERITY_STYLES[alert.severity] || SEVERITY_STYLES.medium;
-
-  // Pega logo do cliente se houver
-  let clientLogo = null;
-  try {
-    const data = typeof alert.client.data === 'string'
-      ? JSON.parse(alert.client.data || '{}')
-      : (alert.client.data || {});
-    clientLogo = data?.restaurant?.logo || null;
-  } catch { /* ignore */ }
+  // Fix: clientLogo agora vem pré-extraído do alert (sem re-parsear cliente.data)
+  const { clientLogo } = alert;
+  const [imgFailed, setImgFailed] = useState(false);
 
   return (
-    <motion.div
+    <motion.button
+      type="button"
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
-      className={`group flex items-start gap-3 p-3 rounded-[12px] border ${style.border} ${style.bg} hover:bg-white/[0.04] transition-colors cursor-pointer`}
+      className={`group flex items-start gap-3 p-3 rounded-[12px] border ${style.border} ${style.bg} hover:bg-white/[0.04] transition-colors cursor-pointer text-left w-full`}
       onClick={onOpen}
+      aria-label={`Abrir cliente ${alert.client.name}: ${alert.title}`}
     >
-      {/* Avatar do cliente */}
+      {/* Avatar do cliente — fix: usa state pra fallback ao invés de DOM manipulation */}
       <div className="shrink-0">
-        {clientLogo ? (
+        {clientLogo && !imgFailed ? (
           <img src={clientLogo} alt={alert.client.name}
             className="w-9 h-9 rounded-full object-cover bg-white/[0.04]"
-            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+            onError={() => setImgFailed(true)}
           />
-        ) : null}
-        <div className={`w-9 h-9 rounded-full ${style.bg} ${style.text} ${clientLogo ? 'hidden' : 'flex'} items-center justify-center text-[12px] font-bold`}>
-          {(alert.client.name || '?').charAt(0).toUpperCase()}
-        </div>
+        ) : (
+          <div className={`w-9 h-9 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-[12px] font-bold`}>
+            {(alert.client.name || '?').charAt(0).toUpperCase()}
+          </div>
+        )}
       </div>
 
       {/* Conteúdo do alerta */}
@@ -267,7 +273,7 @@ const AlertCard = ({ alert, onOpen }) => {
           Abrir →
         </div>
       </div>
-    </motion.div>
+    </motion.button>
   );
 };
 
