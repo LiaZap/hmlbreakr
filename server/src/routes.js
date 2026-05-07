@@ -8,6 +8,9 @@ const { calculateClientFinancials } = require('./services/financialCalc');
 const { syncOnboardingToBpo } = require('./services/onboardingSync');
 const crypto = require('crypto');
 
+// Sub-routers admin (item 4.1)
+const dailyInsightsRoutes = require('./routes/admin/daily-insights');
+
 // ========================
 // ADMIN ROUTES
 // ========================
@@ -1815,6 +1818,9 @@ router.delete('/admin/broadcasts/:id', async (req, res) => {
     res.status(500).json({ error: 'Erro ao deletar comunicado' });
   }
 });
+
+// Mount admin sub-routers (after definitions acima)
+router.use('/admin', dailyInsightsRoutes);
 
 module.exports = router;
 

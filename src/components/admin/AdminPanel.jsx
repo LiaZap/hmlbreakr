@@ -9,6 +9,10 @@ import MaturityFunnel from './MaturityFunnel';
 import { HealthScoreBadge } from './HealthScoreBadge';
 import ActivityFeed from './ActivityFeed';
 import CuisineBenchmarks from './CuisineBenchmarks';
+import RestaurantComparator from './RestaurantComparator';
+import BrazilMap from './BrazilMap';
+import AggregatedMenuInsights from './AggregatedMenuInsights';
+import DailyBriefing from './DailyBriefing';
 import { computeClientHealth } from '../../utils/clientHealth';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
 // import BpoApp from '../bpo/BpoApp';
@@ -999,6 +1003,9 @@ const AdminPanel = () => {
             </div>
           </div>
 
+          {/* Fase 4.1: Daily Briefing IA — primeira coisa que admin vê ao abrir */}
+          <DailyBriefing clients={clients} adminName={adminName} />
+
           {/* Fase 1.1: Painel de Alertas Operacionais — clientes precisando atenção HOJE */}
           <OperationalAlerts clients={clients} onOpenClient={(hash, page) => openClientAsAdmin(hash, page ? { section: page } : {})} />
 
@@ -1027,6 +1034,20 @@ const AdminPanel = () => {
             maxItems={30}
             onClientClick={(hash) => openClientAsAdmin(hash)}
           />
+
+          {/* Fase 3.2: Mapa do Brasil — distribuição geográfica do portfolio */}
+          <BrazilMap
+            clients={clients}
+            onClientClick={(clientList /* , uf */) => {
+              if (clientList && clientList[0]?.hash) openClientAsAdmin(clientList[0].hash);
+            }}
+          />
+
+          {/* Fase 3.3: Engenharia de Menu Agregada — insights cross-cliente */}
+          <AggregatedMenuInsights clients={clients} />
+
+          {/* Fase 4.2: Comparador de Restaurantes — selecione 2 lado a lado */}
+          <RestaurantComparator clients={clients} />
 
           {/* Metric Cards — premium with sparklines */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

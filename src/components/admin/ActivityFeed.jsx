@@ -104,7 +104,12 @@ const deriveClientEvents = (client) => {
   const op = data?.operational || {};
   const fichas = Array.isArray(op.fichas) ? op.fichas : [];
   const insumos = Array.isArray(op.insumos) ? op.insumos : [];
-  const clientLogo = data?.restaurant?.logo || null;
+  // Fix: tenta múltiplos campos de logo pra cobrir todas situações
+  const clientLogo = data?.restaurant?.logo
+    || data?.user?.photo
+    || data?.profile?.photo
+    || data?.formData?.identity?.business_logo
+    || null;
   const clientName = client.name || data?.restaurant?.name || 'Restaurante';
   const now = Date.now();
   const cutoff = now - SEVEN_DAYS_MS;

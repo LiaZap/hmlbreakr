@@ -239,11 +239,11 @@ export function applyView(view, allClients = []) {
       if (monthsInUse(client) < def.minMonthsInUse) return false;
     }
 
-    // Cuisine
+    // Cuisine — default consistente com clientHealth.getClientCuisine
     if (Array.isArray(def.cuisineTypes) && def.cuisineTypes.length > 0) {
       const cuisine = data?.formData?.identity?.cuisine_type
         || data?.formData?.cuisine_type
-        || 'Outros';
+        || 'Não informado';
       if (!def.cuisineTypes.includes(cuisine)) return false;
     }
 

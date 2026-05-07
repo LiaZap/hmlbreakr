@@ -20,6 +20,35 @@
  *  - Engagement: atualização nos últimos 14 dias
  */
 
+/**
+ * Helper compartilhado pra extrair logo do cliente, tentando vários campos
+ * possíveis em ordem de preferência. Padroniza o lookup pra todos componentes.
+ */
+export function getClientLogo(client) {
+  if (!client) return null;
+  try {
+    const data = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
+    return data?.restaurant?.logo
+      || data?.user?.photo
+      || data?.profile?.photo
+      || data?.formData?.identity?.business_logo
+      || null;
+  } catch { return null; }
+}
+
+/**
+ * Helper compartilhado pra extrair tipo de cozinha do cliente. Default consistente.
+ */
+export function getClientCuisine(client) {
+  if (!client) return 'Não informado';
+  try {
+    const data = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
+    return data?.formData?.identity?.cuisine_type
+      || data?.formData?.cuisine_type
+      || 'Não informado';
+  } catch { return 'Não informado'; }
+}
+
 const parseValue = (val) => {
   if (val == null) return 0;
   if (typeof val === 'number') return val;
@@ -127,8 +156,8 @@ export function computeClientHealth(data) {
   // BPO ativa
   const bpoActive = !!(data._bpo && data._bpo.enabled);
 
-  // Cuisine type (pra benchmarks)
-  const cuisineType = fd.identity?.cuisine_type || fd.cuisine_type || 'Outros';
+  // Cuisine type (pra benchmarks) — default consistente com getClientCuisine helper
+  const cuisineType = fd.identity?.cuisine_type || fd.cuisine_type || 'Não informado';
 
   return {
     // Identificação

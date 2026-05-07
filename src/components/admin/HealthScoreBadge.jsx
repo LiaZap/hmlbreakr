@@ -117,10 +117,12 @@ export function computeHealthScore(health) {
   else if (cmvPct > 32) allFactors.push({ label: `CMV em ${cmvPct}% (atenção)`, impact: -1, type: 'negative' });
   else if (cmvPct > 0) allFactors.push({ label: `CMV em ${cmvPct}% (saudável)`, impact: 3, type: 'positive' });
 
-  // Lucro líquido
-  if (lucroLiqPct < 0) allFactors.push({ label: `Operando em prejuízo (${lucroLiqPct}%)`, impact: -3, type: 'negative' });
-  else if (lucroLiqPct < 3) allFactors.push({ label: `Lucro líquido apertado (${lucroLiqPct}%)`, impact: -2, type: 'negative' });
-  else if (lucroLiqPct > 8) allFactors.push({ label: `Lucro líquido saudável (${lucroLiqPct}%)`, impact: 3, type: 'positive' });
+  // Lucro líquido — só avalia quando temos dados financeiros válidos
+  if (lucroLiqPct != null && isFinite(lucroLiqPct)) {
+    if (lucroLiqPct < 0) allFactors.push({ label: `Operando em prejuízo (${lucroLiqPct}%)`, impact: -3, type: 'negative' });
+    else if (lucroLiqPct < 3) allFactors.push({ label: `Lucro líquido apertado (${lucroLiqPct}%)`, impact: -2, type: 'negative' });
+    else if (lucroLiqPct > 8) allFactors.push({ label: `Lucro líquido saudável (${lucroLiqPct}%)`, impact: 3, type: 'positive' });
+  }
 
   // BASE
   if (basePct > 65) allFactors.push({ label: `BASE em ${basePct}% (custos fixos altos)`, impact: -2, type: 'negative' });
