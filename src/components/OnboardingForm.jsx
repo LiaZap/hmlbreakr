@@ -1,9 +1,240 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { onboardingQuestions } from '../data/onboardingQuestions';
 import { useDashboard } from '../context/DashboardContext';
+
+// ─────────────────────────────────────────────────────────────
+// FUNÇÕES PURAS — fora do componente pra não recriar a cada render
+// ─────────────────────────────────────────────────────────────
+
+const fmtBRL = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const calculateProLabore = (value) => {
+  if (!value) return 0;
+  const num = parseFloat(value.toString().replace(/\D/g, '')) / 100;
+  // Rule: Cost = ProLabore + (ProLabore * 0.11)
+  return num + (num * 0.11);
+};
+
+const calculateCLT = (baseSalary) => {
+  if (!baseSalary) return { total: 0, totalEfetivo: 0, totalProvisionamento: 0, breakdown: [] };
+  const salary = parseFloat(baseSalary.toString().replace(/\D/g, '')) / 100;
+  const fgts = salary * 0.08;
+  const totalEfetivo = salary + fgts;
+  const prov13 = salary / 12;
+  const provFerias = (salary * 1.3333) / 12;
+  const fgtsProv = (prov13 + provFerias) * 0.08;
+  const multa = (fgts + fgtsProv) * 0.50;
+  const aviso = salary / 12;
+  const totalProvisionamento = prov13 + provFerias + fgtsProv + multa + aviso;
+  const total = totalEfetivo + totalProvisionamento;
+  return {
+    total, totalEfetivo, totalProvisionamento,
+    breakdown: [
+      { item: '01', comp: 'Salário Base', formula: 'Valor Nominal', val: salary, desc: 'Valor bruto em contrato.', type: 'efetivo' },
+      { item: '02', comp: 'FGTS Mensal', formula: 'Salário * 0.08', val: fgts, desc: 'Depósito mensal obrigatório.', type: 'efetivo' },
+      { item: '03', comp: 'Provisão 13º', formula: 'Salário / 12', val: prov13, desc: 'Reserva para 13º salário.', type: 'provisao' },
+      { item: '04', comp: 'Provisão Férias', formula: '(Salário * 1.3333)/12', val: provFerias, desc: 'Férias + 1/3 constitucional.', type: 'provisao' },
+      { item: '05', comp: 'FGTS s/ Prov.', formula: '(13º + Férias) * 0.08', val: fgtsProv, desc: 'FGTS sobre provisões.', type: 'provisao' },
+      { item: '06', comp: 'Reserva Multa', formula: '(FGTS Total) * 0.50', val: multa, desc: 'Multa rescisória (40% + 10%).', type: 'provisao' },
+      { item: '07', comp: 'Aviso Prévio', formula: 'Salário / 12', val: aviso, desc: 'Provisão para indenização.', type: 'provisao' },
+    ]
+  };
+};
+
+const calculateDepreciation = (value, lifespan) => {
+  if (!value || !lifespan) return 0;
+  const val = parseFloat(value.toString().replace(/\D/g, '')) / 100;
+  const years = parseFloat(lifespan);
+  if (years <= 0) return 0;
+  return val / (years * 12);
+};
+
+const formatCurrencyDigits = (value) => {
+  let digits = (value || '').toString().replace(/\D/g, '');
+  if (!digits) return '';
+  const num = parseFloat(digits) / 100;
+  return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+// ─────────────────────────────────────────────────────────────
+// DynamicItemCard — memoizado: re-renderiza SÓ se item/idx mudou.
+// Antes: digitar no Sócio 1 re-renderizava TODOS os sócios + recalcula
+// CLT/proLabore/depreciação de todos. Causava travamento perceptível.
+// ─────────────────────────────────────────────────────────────
+const DynamicItemCard = React.memo(function DynamicItemCard({
+  question, item, idx, itemsCount, monthLabel,
+  onFieldChange, onRemove, onShowCLTHelp,
+}) {
+  // Cálculo só roda quando ESSE item muda
+  const calc = useMemo(() => {
+    let costDisplay = null;
+    let cltData = null;
+    let employeeBreakdown = null;
+    let riskWarning = null;
+
+    if (question.calcType === 'pro_labore') {
+      const cost = calculateProLabore(item.pro_labore);
+      if (cost > 0) costDisplay = `Custo Real: ${fmtBRL(cost)}`;
+    } else if (question.calcType === 'clt_cost') {
+      const premio = parseFloat((item.premio || '0').toString().replace(/\D/g, '')) / 100 || 0;
+      const baseSal = parseFloat((item.base_salary || '0').toString().replace(/\D/g, '')) / 100 || 0;
+      if (item.regime === 'CLT' && baseSal > 0) {
+        cltData = calculateCLT(item.base_salary);
+        const efetivoMensal = cltData.totalEfetivo + premio;
+        const totalCompleto = cltData.total + premio;
+        costDisplay = `Custo Total: ${fmtBRL(totalCompleto)}${premio > 0 ? ` (inclui prêmio ${fmtBRL(premio)})` : ''}`;
+        employeeBreakdown = {
+          regime: 'CLT', efetivoMensal,
+          totalProvisionamento: cltData.totalProvisionamento, totalCompleto,
+          percentProv: efetivoMensal > 0 ? (cltData.totalProvisionamento / efetivoMensal) * 100 : 0,
+        };
+      } else if (item.regime === 'PJ' && baseSal > 0) {
+        const total = baseSal + premio;
+        costDisplay = `Custo PJ: ${fmtBRL(total)}`;
+        employeeBreakdown = { regime: 'PJ', efetivoMensal: total, totalProvisionamento: 0, totalCompleto: total, percentProv: 0 };
+        riskWarning = '⚠️ Atenção: exclusividade + subordinação + habitualidade pode gerar passivo trabalhista por vínculo disfarçado.';
+      } else if (item.regime && item.regime !== 'CLT' && item.regime !== 'PJ' && baseSal > 0) {
+        const total = baseSal + premio;
+        costDisplay = `Custo ${item.regime}: ${fmtBRL(total)}`;
+        employeeBreakdown = { regime: item.regime, efetivoMensal: total, totalProvisionamento: 0, totalCompleto: total, percentProv: 0 };
+        riskWarning = '⚠️ Risco trabalhista: relação contínua com freelancer pode ser caracterizada como vínculo CLT pela Justiça do Trabalho.';
+      }
+    } else if (question.calcType === 'depreciation') {
+      const dep = calculateDepreciation(item.value, item.lifespan);
+      if (dep > 0) costDisplay = `Depreciação Mensal: ${fmtBRL(dep)}`;
+    }
+    return { costDisplay, cltData, employeeBreakdown, riskWarning };
+  }, [item, question.calcType]);
+
+  const { costDisplay, cltData, employeeBreakdown, riskWarning } = calc;
+
+  return (
+    <div className="p-4 bg-[#2A2A2A] rounded-lg border border-[#333] relative">
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-xs text-[#FFC100] font-bold uppercase">{monthLabel}</div>
+        {itemsCount > (question.minItems || 1) && (
+          <button onClick={() => onRemove(question.id, idx)} className="text-red-500 text-xs hover:underline">Remover</button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {question.fields.map(field => {
+          if (field.type === 'separator') {
+            return (
+              <div key={field.id} className="col-span-2 flex items-center gap-3 mt-2 mb-1">
+                <div className="h-px flex-1 bg-[#444]" />
+                <span className="text-[10px] text-[#888] font-semibold uppercase tracking-wider whitespace-nowrap">{field.label}</span>
+                <div className="h-px flex-1 bg-[#444]" />
+              </div>
+            );
+          }
+          if (field.dependsOn) {
+            const depValue = item[field.dependsOn.field];
+            if (depValue !== field.dependsOn.value) return null;
+          }
+          return (
+            <div key={field.id} className={field.id === 'name' || field.dependsOn ? 'col-span-2' : ''}>
+              <label className="text-[10px] text-gray-400 mb-1 flex justify-between items-center relative z-10">
+                {field.label}
+                {(field.helpText || field.tooltip) && (
+                  <div className="group relative flex items-center">
+                    <span className="text-white/50 cursor-pointer hover:text-white transition-colors">(?)</span>
+                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 p-2 bg-[#333] border border-[#444] text-white text-[10px] rounded shadow-xl z-50 text-right pointer-events-none">
+                      {field.helpText || field.tooltip}
+                    </div>
+                  </div>
+                )}
+              </label>
+              {field.type === 'select' ? (
+                <select
+                  className="w-full bg-[#1A1A1A] text-white text-sm p-2 rounded border border-[#444] outline-none"
+                  onChange={(e) => onFieldChange(question.id, idx, field.id, e.target.value, field.type)}
+                  value={item[field.id] || ''}
+                >
+                  <option value="">Selecione</option>
+                  {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              ) : field.type === 'file' ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <label className="cursor-pointer flex items-center justify-center bg-[#2A2A2A] border border-[#444] hover:border-[#FFC100] text-white text-xs px-3 py-1.5 rounded transition-colors w-full">
+                    <span>{item[field.id] ? "Alterar Foto" : field.placeholder}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => { onFieldChange(question.id, idx, field.id, reader.result, field.type); };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                  {item[field.id] && (
+                    <img src={item[field.id]} alt="Preview" className="w-6 h-6 rounded-full object-cover border border-[#444]" />
+                  )}
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={item[field.id] || field.defaultValue || ''}
+                  onChange={(e) => !field.readOnly && onFieldChange(question.id, idx, field.id, e.target.value, field.type)}
+                  placeholder={field.placeholder}
+                  readOnly={field.readOnly}
+                  className={`w-full bg-transparent border-b border-[#444] text-white text-sm pb-1 outline-none focus:border-[#FFC100] ${field.readOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {costDisplay && (
+        <div className="mt-3 p-2 bg-[#151515] rounded border border-[#FFC100]/30 flex items-center justify-between">
+          <span className="text-[#FFC100] text-xs font-semibold">{costDisplay}</span>
+          {question.calcType === 'clt_cost' && item.regime === 'CLT' && (
+            <button
+              onClick={() => onShowCLTHelp(cltData)}
+              className="w-5 h-5 rounded-full bg-[#333] flex items-center justify-center text-[10px] text-white hover:bg-white hover:text-black transition-colors"
+              title="Ver cálculo detalhado"
+            >?</button>
+          )}
+        </div>
+      )}
+      {employeeBreakdown && (
+        <div className="mt-2 p-2.5 bg-[#0F0F0F] rounded border border-[#2A2A2A]">
+          <div className="grid grid-cols-3 gap-2 text-[10px]">
+            <div>
+              <div className="text-[#7E7E7E] mb-0.5">Efetivo (caixa/mês)</div>
+              <div className="text-[#E1E1E1] font-semibold">{fmtBRL(employeeBreakdown.efetivoMensal)}</div>
+            </div>
+            <div>
+              <div className="text-[#7E7E7E] mb-0.5">Provisionamento</div>
+              <div className="text-[#F5A623] font-semibold">
+                {fmtBRL(employeeBreakdown.totalProvisionamento)}
+                {employeeBreakdown.percentProv > 0 && (
+                  <span className="text-[#7E7E7E] font-normal ml-1">(+{employeeBreakdown.percentProv.toFixed(0)}%)</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-[#7E7E7E] mb-0.5">Custo Total</div>
+              <div className="text-white font-bold">{fmtBRL(employeeBreakdown.totalCompleto)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+      {riskWarning && (
+        <div className="mt-2 p-2 bg-[#FF4560]/10 border border-[#FF4560]/30 rounded">
+          <div className="text-[10px] text-[#FF8A9C] leading-snug">{riskWarning}</div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 
 
@@ -240,7 +471,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
   };
 
   // Handler for group list (e.g. Partners, Employees) using an array in formData
-  const handleGroupChange = (questionId, index, fieldId, value, type) => {
+  const handleGroupChange = useCallback((questionId, index, fieldId, value, type) => {
       let formattedValue = value;
       if (type === 'currency') {
           formattedValue = formatCurrency(value);
@@ -263,10 +494,10 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
               ...newArray[index],
               [fieldId]: formattedValue
           };
-          
+
           return { ...prev, [questionId]: newArray };
       });
-  };
+  }, []);
 
   const { dashboardData, updateDashboardData } = useDashboard();
 
@@ -618,57 +849,8 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
   };
 
   // --- CALCULATIONS ---
-  const calculateProLabore = (value) => {
-    if (!value) return 0;
-    const num = parseFloat(value.toString().replace(/\D/g, '')) / 100;
-    // Rule: Cost = ProLabore + (ProLabore * 0.11)
-    return num + (num * 0.11);
-  };
-
-  const calculateCLT = (baseSalary) => {
-    if (!baseSalary) return { total: 0, totalEfetivo: 0, totalProvisionamento: 0, breakdown: [] };
-    const salary = parseFloat(baseSalary.toString().replace(/\D/g, '')) / 100;
-
-    // Efetivo: caixa que sai todo mês (salário + FGTS)
-    const fgts = salary * 0.08;
-    const totalEfetivo = salary + fgts;
-
-    // Provisionamento: reservas que viram caixa em datas específicas (13º, férias, rescisão)
-    const prov13 = salary / 12;
-    const provFerias = (salary * 1.3333) / 12;
-    const fgtsProv = (prov13 + provFerias) * 0.08;
-    const multa = (fgts + fgtsProv) * 0.50; // 40% employee + 10% social
-    const aviso = salary / 12;
-    const totalProvisionamento = prov13 + provFerias + fgtsProv + multa + aviso;
-
-    const total = totalEfetivo + totalProvisionamento;
-
-    return {
-        total,
-        totalEfetivo,
-        totalProvisionamento,
-        breakdown: [
-            { item: '01', comp: 'Salário Base', formula: 'Valor Nominal', val: salary, desc: 'Valor bruto em contrato.', type: 'efetivo' },
-            { item: '02', comp: 'FGTS Mensal', formula: 'Salário * 0.08', val: fgts, desc: 'Depósito mensal obrigatório.', type: 'efetivo' },
-            { item: '03', comp: 'Provisão 13º', formula: 'Salário / 12', val: prov13, desc: 'Reserva para 13º salário.', type: 'provisao' },
-            { item: '04', comp: 'Provisão Férias', formula: '(Salário * 1.3333)/12', val: provFerias, desc: 'Férias + 1/3 constitucional.', type: 'provisao' },
-            { item: '05', comp: 'FGTS s/ Prov.', formula: '(13º + Férias) * 0.08', val: fgtsProv, desc: 'FGTS sobre provisões.', type: 'provisao' },
-            { item: '06', comp: 'Reserva Multa', formula: '(FGTS Total) * 0.50', val: multa, desc: 'Multa rescisória (40% + 10%).', type: 'provisao' },
-            { item: '07', comp: 'Aviso Prévio', formula: 'Salário / 12', val: aviso, desc: 'Provisão para indenização.', type: 'provisao' },
-        ]
-    };
-  };
-
-  // Helper: formata BRL
-  const fmtBRL = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-  const calculateDepreciation = (value, lifespan) => {
-      if(!value || !lifespan) return 0;
-      const val = parseFloat(value.toString().replace(/\D/g, '')) / 100;
-      const years = parseFloat(lifespan);
-      if(years <= 0) return 0;
-      return val / (years * 12);
-  };
+  // fmtBRL, calculateProLabore, calculateCLT, calculateDepreciation movidos pro topo
+  // do arquivo (funções puras — referencias via closure do módulo).
 
   // State for CLT Help Modal
   const [showCLTHelp, setShowCLTHelp] = useState(null); // stores employee index/id or data
@@ -702,13 +884,13 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
       }));
   };
 
-  const handleRemoveDynamicItem = (questionId, index) => {
+  const handleRemoveDynamicItem = useCallback((questionId, index) => {
       setFormData(prev => {
           const newArr = [...(prev[questionId] || [])];
           newArr.splice(index, 1);
           return { ...prev, [questionId]: newArr };
       });
-  };
+  }, []);
 
   const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
@@ -725,32 +907,57 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
       return `${question.itemLabel} ${idx + 1}`;
   };
 
+  // Inicializa dynamic_list_calc com minItems quando a question muda.
+  // Antes: setFormData rodava DURANTE render — anti-pattern caro (causava
+  // re-renders extras a cada keystroke).
+  useEffect(() => {
+      const q = currentQuestion;
+      if (!q || q.type !== 'dynamic_list_calc') return;
+      const existing = formData[q.id];
+      if (existing && existing.length > 0) return;
+      const minItems = q.minItems || 1;
+      let items;
+      if (q.id === 'revenue_history') {
+          const now = new Date();
+          items = Array.from({ length: minItems }, (_, i) => {
+              const d = new Date(now.getFullYear(), now.getMonth() - 1 - i, 1);
+              const mm = String(d.getMonth() + 1).padStart(2, '0');
+              const yyyy = d.getFullYear();
+              return { month: `${mm}/${yyyy}` };
+          });
+          setFormData(prev => ({ ...prev, [q.id]: items }));
+      } else {
+          items = Array.from({ length: minItems }, () => {
+              const defaults = {};
+              q.fields.forEach(f => { if (f.defaultValue) defaults[f.id] = f.defaultValue; });
+              return defaults;
+          });
+          if (Object.keys(items[0]).length > 0) {
+              setFormData(prev => ({ ...prev, [q.id]: items }));
+          }
+      }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStepIndex]);
+
   const renderDynamicListCalc = (question) => {
-      // Initialize with minItems if specified (e.g., revenue_history needs 3)
+      // items vem do formData; init feito pelo useEffect acima.
+      // Fallback derivado pra renderizar mesmo no 1º frame antes do effect rodar.
       const minItems = question.minItems || 1;
       let items = formData[question.id];
       if (!items || items.length === 0) {
-          // Auto-generate items with pre-filled months for revenue_history
           if (question.id === 'revenue_history') {
               const now = new Date();
               items = Array.from({ length: minItems }, (_, i) => {
                   const d = new Date(now.getFullYear(), now.getMonth() - 1 - i, 1);
                   const mm = String(d.getMonth() + 1).padStart(2, '0');
-                  const yyyy = d.getFullYear();
-                  return { month: `${mm}/${yyyy}` };
+                  return { month: `${mm}/${d.getFullYear()}` };
               });
-              // Auto-set in form data
-              setFormData(prev => ({ ...prev, [question.id]: items }));
           } else {
               items = Array.from({ length: minItems }, () => {
-                  // Pre-fill defaultValues from fields
                   const defaults = {};
                   question.fields.forEach(f => { if (f.defaultValue) defaults[f.id] = f.defaultValue; });
                   return defaults;
               });
-              if (Object.keys(items[0]).length > 0) {
-                  setFormData(prev => ({ ...prev, [question.id]: items }));
-              }
           }
       }
 
@@ -761,198 +968,19 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                       <p className="text-[#FFC100] text-xs">{question.infoText}</p>
                   </div>
               )}
-              {items.map((item, idx) => {
-                  // Calculate Display Values based on type
-                  let costDisplay = null;
-                  let cltData = null;
-                  let employeeBreakdown = null; // detalhe efetivo/provisionamento + alerta de risco
-                  let riskWarning = null;       // alerta PJ/Freela
-
-                  if (question.calcType === 'pro_labore') {
-                      const cost = calculateProLabore(item.pro_labore);
-                      if (cost > 0) costDisplay = `Custo Real: ${fmtBRL(cost)}`;
-                  } else if (question.calcType === 'clt_cost') {
-                      const premio = parseFloat((item.premio || '0').toString().replace(/\D/g, '')) / 100 || 0;
-                      const baseSal = parseFloat((item.base_salary || '0').toString().replace(/\D/g, '')) / 100 || 0;
-
-                      if (item.regime === 'CLT' && baseSal > 0) {
-                          cltData = calculateCLT(item.base_salary);
-                          const efetivoMensal = cltData.totalEfetivo + premio;
-                          const totalCompleto = cltData.total + premio;
-                          costDisplay = `Custo Total: ${fmtBRL(totalCompleto)}${premio > 0 ? ` (inclui prêmio ${fmtBRL(premio)})` : ''}`;
-                          employeeBreakdown = {
-                              regime: 'CLT',
-                              efetivoMensal,
-                              totalProvisionamento: cltData.totalProvisionamento,
-                              totalCompleto,
-                              percentProv: efetivoMensal > 0 ? (cltData.totalProvisionamento / efetivoMensal) * 100 : 0,
-                          };
-                      } else if (item.regime === 'PJ' && baseSal > 0) {
-                          const total = baseSal + premio;
-                          costDisplay = `Custo PJ: ${fmtBRL(total)}`;
-                          employeeBreakdown = {
-                              regime: 'PJ',
-                              efetivoMensal: total,
-                              totalProvisionamento: 0,
-                              totalCompleto: total,
-                              percentProv: 0,
-                          };
-                          riskWarning = '⚠️ Atenção: exclusividade + subordinação + habitualidade pode gerar passivo trabalhista por vínculo disfarçado.';
-                      } else if (item.regime && item.regime !== 'CLT' && item.regime !== 'PJ' && baseSal > 0) {
-                          // Freelancer ou outros
-                          const total = baseSal + premio;
-                          costDisplay = `Custo ${item.regime}: ${fmtBRL(total)}`;
-                          employeeBreakdown = {
-                              regime: item.regime,
-                              efetivoMensal: total,
-                              totalProvisionamento: 0,
-                              totalCompleto: total,
-                              percentProv: 0,
-                          };
-                          riskWarning = '⚠️ Risco trabalhista: relação contínua com freelancer pode ser caracterizada como vínculo CLT pela Justiça do Trabalho.';
-                      }
-                  } else if (question.calcType === 'depreciation') {
-                      const dep = calculateDepreciation(item.value, item.lifespan);
-                      if(dep > 0) costDisplay = `Depreciação Mensal: ${fmtBRL(dep)}`;
-                  }
-
-                  return (
-                    <div key={idx} className="p-4 bg-[#2A2A2A] rounded-lg border border-[#333] relative">
-                        <div className="flex justify-between items-center mb-3">
-                            <div className="text-xs text-[#FFC100] font-bold uppercase">{getMonthLabel(question, item, idx)}</div>
-                            {items.length > (question.minItems || 1) && (
-                                <button onClick={() => handleRemoveDynamicItem(question.id, idx)} className="text-red-500 text-xs hover:underline">Remover</button>
-                            )}
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                            {question.fields.map(field => {
-                                if (field.type === 'separator') {
-                                    return (
-                                        <div key={field.id} className="col-span-2 flex items-center gap-3 mt-2 mb-1">
-                                            <div className="h-px flex-1 bg-[#444]" />
-                                            <span className="text-[10px] text-[#888] font-semibold uppercase tracking-wider whitespace-nowrap">{field.label}</span>
-                                            <div className="h-px flex-1 bg-[#444]" />
-                                        </div>
-                                    );
-                                }
-                                // Conditional field visibility within dynamic list item
-                                if (field.dependsOn) {
-                                    const depValue = item[field.dependsOn.field];
-                                    if (depValue !== field.dependsOn.value) return null;
-                                }
-                                return (
-                                <div key={field.id} className={field.id === 'name' || field.dependsOn ? 'col-span-2' : ''}>
-                                    <label className="text-[10px] text-gray-400 mb-1 flex justify-between items-center relative z-10">
-                                        {field.label}
-                                        {(field.helpText || field.tooltip) && (
-                                            <div className="group relative flex items-center">
-                                                <span className="text-white/50 cursor-pointer hover:text-white transition-colors">(?)</span>
-                                                <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 p-2 bg-[#333] border border-[#444] text-white text-[10px] rounded shadow-xl z-50 text-right pointer-events-none">
-                                                    {field.helpText || field.tooltip}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </label>
-                                    
-                                    {field.type === 'select' ? (
-                                        <select
-                                            className="w-full bg-[#1A1A1A] text-white text-sm p-2 rounded border border-[#444] outline-none"
-                                            onChange={(e) => handleGroupChange(question.id, idx, field.id, e.target.value, field.type)}
-                                            value={item[field.id] || ''}
-                                        >
-                                            <option value="">Selecione</option>
-                                            {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                        </select>
-                                    ) : field.type === 'file' ? (
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <label className="cursor-pointer flex items-center justify-center bg-[#2A2A2A] border border-[#444] hover:border-[#FFC100] text-white text-xs px-3 py-1.5 rounded transition-colors w-full">
-                                                <span>{item[field.id] ? "Alterar Foto" : field.placeholder}</span>
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    className="hidden"
-                                                    onChange={(e) => {
-                                                        const file = e.target.files[0];
-                                                        if (file) {
-                                                            const reader = new FileReader();
-                                                            reader.onloadend = () => {
-                                                                handleGroupChange(question.id, idx, field.id, reader.result, field.type);
-                                                            };
-                                                            reader.readAsDataURL(file);
-                                                        }
-                                                    }}
-                                                />
-                                            </label>
-                                            {item[field.id] && (
-                                                <img src={item[field.id]} alt="Preview" className="w-6 h-6 rounded-full object-cover border border-[#444]" />
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <input
-                                            type="text"
-                                            value={item[field.id] || field.defaultValue || ''}
-                                            onChange={(e) => !field.readOnly && handleGroupChange(question.id, idx, field.id, e.target.value, field.type)}
-                                            placeholder={field.placeholder}
-                                            readOnly={field.readOnly}
-                                            className={`w-full bg-transparent border-b border-[#444] text-white text-sm pb-1 outline-none focus:border-[#FFC100] ${field.readOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                        />
-                                    )}
-                                </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Cost Display & Helpers */}
-                        {costDisplay && (
-                            <div className="mt-3 p-2 bg-[#151515] rounded border border-[#FFC100]/30 flex items-center justify-between">
-                                <span className="text-[#FFC100] text-xs font-semibold">{costDisplay}</span>
-                                {question.calcType === 'clt_cost' && item.regime === 'CLT' && (
-                                    <button
-                                        onClick={() => setShowCLTHelp(cltData)}
-                                        className="w-5 h-5 rounded-full bg-[#333] flex items-center justify-center text-[10px] text-white hover:bg-white hover:text-black transition-colors"
-                                        title="Ver cálculo detalhado"
-                                    >
-                                        ?
-                                    </button>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Breakdown CLT/PJ/Freela: efetivo + provisionamento + total */}
-                        {employeeBreakdown && (
-                            <div className="mt-2 p-2.5 bg-[#0F0F0F] rounded border border-[#2A2A2A]">
-                                <div className="grid grid-cols-3 gap-2 text-[10px]">
-                                    <div>
-                                        <div className="text-[#7E7E7E] mb-0.5">Efetivo (caixa/mês)</div>
-                                        <div className="text-[#E1E1E1] font-semibold">{fmtBRL(employeeBreakdown.efetivoMensal)}</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-[#7E7E7E] mb-0.5">Provisionamento</div>
-                                        <div className="text-[#F5A623] font-semibold">
-                                            {fmtBRL(employeeBreakdown.totalProvisionamento)}
-                                            {employeeBreakdown.percentProv > 0 && (
-                                                <span className="text-[#7E7E7E] font-normal ml-1">(+{employeeBreakdown.percentProv.toFixed(0)}%)</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="text-[#7E7E7E] mb-0.5">Custo Total</div>
-                                        <div className="text-white font-bold">{fmtBRL(employeeBreakdown.totalCompleto)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Aviso de risco para PJ/Freela */}
-                        {riskWarning && (
-                            <div className="mt-2 p-2 bg-[#FF4560]/10 border border-[#FF4560]/30 rounded">
-                                <div className="text-[10px] text-[#FF8A9C] leading-snug">{riskWarning}</div>
-                            </div>
-                        )}
-                    </div>
-                  );
-              })}
+              {items.map((item, idx) => (
+                <DynamicItemCard
+                  key={idx}
+                  question={question}
+                  item={item}
+                  idx={idx}
+                  itemsCount={items.length}
+                  monthLabel={getMonthLabel(question, item, idx)}
+                  onFieldChange={handleGroupChange}
+                  onRemove={handleRemoveDynamicItem}
+                  onShowCLTHelp={setShowCLTHelp}
+                />
+              ))}
               
               <button
                 onClick={() => handleAddDynamicItem(question.id)}
