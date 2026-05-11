@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
 const bpoRoutes = require('./routes/bpo');
+const { startBackupScheduler } = require('./services/backupScheduler');
 
 dotenv.config();
 
@@ -75,6 +76,10 @@ app.get(/.*/, (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+// Backup automático diário (node-cron, dentro do processo Node).
+// Desabilita com BACKUP_ENABLED=false (dev local).
+startBackupScheduler();
 
 // Global error handler
 app.use((err, req, res, next) => {

@@ -6,12 +6,16 @@ const prisma = new PrismaClient();
 const { sendWelcomeEmail, sendCredentialResetEmail, sendPasswordResetEmail } = require('./services/emailService');
 const { calculateClientFinancials } = require('./services/financialCalc');
 const { syncOnboardingToBpo } = require('./services/onboardingSync');
+const { createSnapshot, pruneOldSnapshots } = require('./services/snapshotService');
+const { deepMerge } = require('./utils/deepMerge');
 const crypto = require('crypto');
 
 // Sub-routers admin (item 4.1)
 const dailyInsightsRoutes = require('./routes/admin/daily-insights');
 const adminUsersRoutes = require('./routes/admin/users');
 const adminReportsRoutes = require('./routes/admin/reports');
+const adminSnapshotsRoutes = require('./routes/admin/snapshots');
+const adminBackupsRoutes = require('./routes/admin/backups');
 
 // Middleware admin (header-based v1, JWT v2)
 const { requireAdmin, requireSuperAdmin } = require('./middleware/adminAuth');
@@ -1142,12 +1146,42 @@ router.post('/client/:hash/sync', async (req, res) => {
     delete newData._hasCredentials;
     delete newData._profile;
 
+    // Detecção de save anômalo: se novo data é >50% menor que o atual,
+    // marca o snapshot como suspeito pra investigação (mas AINDA salva —
+    // não bloqueamos o usuário; só facilitamos recovery).
+    const newDataStr = JSON.stringify(newData);
+    const currentDataStr = currentSavedClient && currentSavedClient.data ? currentSavedClient.data : '';
+    const currentSize = Buffer.byteLength(currentDataStr, 'utf8');
+    const newSize = Buffer.byteLength(newDataStr, 'utf8');
+    const shrinkDetected = currentSize > 0 && newSize < currentSize * 0.5;
+    const snapshotReason = shrinkDetected ? 'auto-shrink-detected' : 'auto';
+
+    if (shrinkDetected) {
+      console.warn(
+        `[sync] SHRINK ANÔMALO clientId=${clientIdToUpdate} current=${currentSize}B new=${newSize}B (-${Math.round((1 - newSize / currentSize) * 100)}%)`
+      );
+    }
+
+    // Snapshot do data ATUAL antes de sobrescrever. Try/catch separado pra
+    // não bloquear o save se snapshot falhar (banco cheio, etc).
+    if (currentSavedClient && currentSavedClient.data) {
+      try {
+        await createSnapshot(prisma, clientIdToUpdate, currentSavedClient.data, snapshotReason);
+      } catch (snapErr) {
+        console.error('[sync] snapshot pré-save falhou (continuando save):', snapErr.message);
+      }
+    }
+
     await prisma.client.update({
       where: { id: clientIdToUpdate },
       data: {
-        data: JSON.stringify(newData)
+        data: newDataStr
       }
     });
+
+    // Best-effort cleanup — mantém só os 20 snapshots mais recentes
+    pruneOldSnapshots(prisma, clientIdToUpdate, 20)
+      .catch(err => console.error('[sync] pruneOldSnapshots falhou:', err.message));
 
     // Espelha sócios/funcionários/payment methods do onboarding pro BPO
     // (best-effort — não bloqueia o save se falhar)
@@ -1156,10 +1190,89 @@ router.post('/client/:hash/sync', async (req, res) => {
         .catch(err => console.error('[onboardingSync] hook failed:', err));
     }
 
-    res.json({ success: true });
+    res.json({ success: true, shrinkDetected: shrinkDetected || undefined });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erro ao sincronizar dados' });
+  }
+});
+
+// Sync Data (Partial) — accepts a `patch` object and deep-merges it into client.data on the server.
+// Drastically reduces payload size vs. full sync (no more shipping 330KB to mutate one field)
+// and avoids the race condition where two concurrent full-syncs clobber each other.
+// Arrays in the patch REPLACE existing arrays (see utils/deepMerge.js for semantics).
+router.post('/client/:hash/sync-partial', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const patch = req.body && req.body.patch;
+
+    // Validate payload
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return res.status(400).json({ error: 'patch obrigatório (objeto)' });
+    }
+
+    // Resolve who is saving (Client or TeamMember)
+    let clientIdToUpdate = null;
+    const client = await prisma.client.findUnique({ where: { hash } });
+
+    if (client) {
+      clientIdToUpdate = client.id;
+    } else {
+      const teamMember = await prisma.teamMember.findUnique({ where: { hash } });
+      if (teamMember) {
+        clientIdToUpdate = teamMember.clientId;
+      }
+    }
+
+    if (!clientIdToUpdate) return res.status(404).json({ error: 'Credenciais inválidas para salvar dados.' });
+
+    // Load current saved state to merge against
+    const currentSavedClient = await prisma.client.findUnique({ where: { id: clientIdToUpdate } });
+    let currentData = {};
+    if (currentSavedClient && currentSavedClient.data) {
+      try {
+        currentData = JSON.parse(currentSavedClient.data);
+      } catch (e) {
+        console.error('Error parsing existing client data before partial save:', e);
+        currentData = {};
+      }
+    }
+
+    // Deep-merge patch into current state
+    let merged = deepMerge(currentData, patch);
+
+    // Owner-profile preservation (same logic as /sync):
+    // A TeamMember may send their own user info in the patch — never overwrite the true Owner's profile.
+    if (currentData.user && patch.user && patch.user.isOwner === false) {
+      merged.user = currentData.user;
+    }
+    // Preserve profile if patch didn't touch it (defensive — deepMerge already handles this)
+    if (currentData.profile && !patch.profile) {
+      merged.profile = currentData.profile;
+    }
+
+    // Strip server-injected metadata fields before persisting
+    delete merged._clientEmail;
+    delete merged._hasCredentials;
+    delete merged._profile;
+
+    await prisma.client.update({
+      where: { id: clientIdToUpdate },
+      data: {
+        data: JSON.stringify(merged)
+      }
+    });
+
+    // BPO hook (best-effort, non-blocking) — only if formData ended up populated
+    if (merged.formData && Object.keys(merged.formData).length > 0) {
+      syncOnboardingToBpo(prisma, clientIdToUpdate, merged.formData)
+        .catch(err => console.error('[onboardingSync] hook failed:', err));
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao sincronizar dados (partial)' });
   }
 });
 
@@ -1889,6 +2002,10 @@ router.delete('/admin/broadcasts/:id', async (req, res) => {
 router.use('/admin', requireAdmin, dailyInsightsRoutes);
 router.use('/admin/users', requireSuperAdmin, adminUsersRoutes);
 router.use('/admin/reports', requireAdmin, adminReportsRoutes);
+// — /admin/clients/:clientId/snapshots* exige super_admin (restore é destrutivo)
+router.use('/admin', requireSuperAdmin, adminSnapshotsRoutes);
+// /admin/backups exige super_admin — backup completo é operação sensível
+router.use('/admin/backups', requireSuperAdmin, adminBackupsRoutes);
 
 module.exports = router;
 
