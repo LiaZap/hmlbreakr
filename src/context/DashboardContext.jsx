@@ -7,6 +7,55 @@ export const DashboardContext = createContext();
 
 export const useDashboard = () => useContext(DashboardContext);
 
+/**
+ * scheduleSync — debounce + AbortController pra evitar:
+ *  - N POSTs sequenciais quando usuário edita rápido
+ *  - race conditions onde sync antigo chega depois do novo
+ *    (causa de perda de dados, ex: Garapas 2026-05-11)
+ *
+ * O debounce mantém o último payload válido. Cada chamada substitui o anterior.
+ * Sync anterior em flight é abortado quando novo dispara.
+ */
+const SYNC_DEBOUNCE_MS = 600;
+const createSyncScheduler = () => {
+  let timer = null;
+  let abortCtl = null;
+  let pendingPayload = null;
+  let pendingHash = null;
+
+  const flush = async () => {
+    if (!pendingPayload || !pendingHash) return;
+    if (abortCtl) abortCtl.abort();
+    abortCtl = new AbortController();
+    const payload = pendingPayload;
+    const hash = pendingHash;
+    pendingPayload = null;
+    try {
+      await fetch(`${API_URL}/api/client/${hash}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: abortCtl.signal,
+      });
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error('Sync failed', e);
+    }
+  };
+
+  return {
+    schedule(hash, payload) {
+      pendingHash = hash;
+      pendingPayload = payload;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, SYNC_DEBOUNCE_MS);
+    },
+    flushNow() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      return flush();
+    },
+  };
+};
+
 export const DashboardProvider = ({ children }) => {
   // Initial Mock Data (Fallback)
   const initialData = {
@@ -44,6 +93,20 @@ export const DashboardProvider = ({ children }) => {
   const [clientDataError, setClientDataError] = useState(false);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(null);
   const recalcPendingRef = useRef(false);
+  // Scheduler singleton — debounce + abort de sync evita race condition
+  // que causou perda de dados (Garapas, 2026-05-11)
+  const syncSchedulerRef = useRef(createSyncScheduler());
+
+  // Flush pendente antes do unmount/refresh pra não perder último save
+  useEffect(() => {
+    const scheduler = syncSchedulerRef.current;
+    const handler = () => { scheduler.flushNow(); };
+    window.addEventListener('beforeunload', handler);
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+      scheduler.flushNow();
+    };
+  }, []);
 
   // Load Client Data if Hash exists
   React.useEffect(() => {
@@ -132,16 +195,10 @@ export const DashboardProvider = ({ children }) => {
              if (prev._clientEmail) updated._clientEmail = prev._clientEmail;
              if (prev._hasCredentials) updated._hasCredentials = prev._hasCredentials;
              updated._profile = { ...(prev._profile || {}), ...(newData._profile || {}) };
-             // Persist to Backend
+             // Persist to Backend — debounced + abortable
              const params = new URLSearchParams(window.location.search);
              const hash = params.get('hash');
-             if (hash) {
-                 fetch(`${API_URL}/api/client/${hash}/sync`, {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify(updated)
-                 }).catch(e => console.error("Sync failed", e));
-             }
+             if (hash) syncSchedulerRef.current.schedule(hash, updated);
              return updated;
          });
          // Only trigger recalc for operational/financial changes, not for profile updates (user/restaurant)
@@ -1065,26 +1122,24 @@ export const DashboardProvider = ({ children }) => {
     });
 
     // Persist full Update to Backend (skip for view-only changes like month selection)
+    // Debounced + abortable pra evitar race condition (perda de dados)
     if (!skipSync) {
         const params = new URLSearchParams(window.location.search);
         const hash = params.get('hash');
-        if (hash) {
-            fetch(`${API_URL}/api/client/${hash}/sync`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newDashboardData)
-            }).catch(e => console.error("Sync failed", e));
-        }
+        if (hash) syncSchedulerRef.current.schedule(hash, newDashboardData);
     }
   };
 
-  // After operational/menuEngineering direct updates, recalculate financial metrics
+  // After operational/menuEngineering direct updates, recalculate financial metrics.
+  // Dep array trigga só quando operational/menuEngineering mudam — antes rodava em
+  // TODA render, dobrando POST sync e setState por edição.
   useEffect(() => {
     if (recalcPendingRef.current && dashboardData.formData && Object.keys(dashboardData.formData).length > 0) {
       recalcPendingRef.current = false;
       updateDashboardData(dashboardData.formData);
     }
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboardData.operational, dashboardData.menuEngineering, dashboardData.tips]);
 
   // Recalculate when selected month changes (view-only, no sync)
   useEffect(() => {
