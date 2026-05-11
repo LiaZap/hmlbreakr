@@ -783,7 +783,18 @@ const AdminPanel = () => {
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSearch(v);
+                  // Sincroniza com a busca rápida do dashboard (QuickSwitcher)
+                  // pra que a busca de cima funcione independente da aba ativa
+                  setQuickSearch(v);
+                  // Auto-navega pra aba clientes quando o usuário digita >= 2 chars
+                  // de fora da aba clientes (busca global universal)
+                  if (v.trim().length >= 2 && activeTab !== 'clients' && activeTab !== 'dashboard') {
+                    setActiveTab('clients');
+                  }
+                }}
                 placeholder="Buscar clientes, comunicados..."
                 className="w-full bg-white/[0.03] border border-white/[0.06] rounded-[10px] pl-10 pr-16 py-2.5 text-[13px] text-white outline-none focus:border-[#F5A623]/40 focus:bg-white/[0.05] transition-all placeholder-[#555]"
               />
