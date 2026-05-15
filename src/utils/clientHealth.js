@@ -78,7 +78,13 @@ export function computeClientHealth(data) {
   const breakEven = data.breakEven || {};
 
   // Faturamento atual (mês mais recente com dados)
-  const revenueHistory = Array.isArray(fd.revenue_history) ? fd.revenue_history : [];
+  // revenue_history shape canônico = Array de { month, amount } (DashboardContext).
+  // A lista leve do admin reshapa pra { months: [{ month }] } SEM amount — nesse
+  // caso não há valor; só dá pra calcular receita com a lista completa (?full=1).
+  const rh = fd.revenue_history;
+  const revenueHistory = Array.isArray(rh)
+    ? rh
+    : (Array.isArray(rh?.months) ? rh.months : []);
   const validRevenues = revenueHistory
     .filter(r => r?.month && r?.amount)
     .map(r => ({ month: r.month, value: parseValue(r.amount) }))

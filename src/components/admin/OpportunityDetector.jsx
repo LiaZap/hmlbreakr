@@ -310,8 +310,18 @@ const OpportunityDetector = ({ clients, onClientClick }) => {
       {/* List */}
       <div className="px-5 pb-5 max-h-[480px] overflow-y-auto space-y-2">
         {filtered.length === 0 ? (
-          <div className="text-[12px] text-[#666] text-center py-8 italic">
-            Nenhuma oportunidade detectada de {TYPE_STYLES[activeTab].label.toLowerCase()} no momento.
+          /* Estado vazio honesto (BAH-096 #2): ausência de oportunidades é um
+             resultado válido, não erro. O bot escaneou o portfólio e não
+             encontrou nada que se qualifique pra esta categoria agora. */
+          <div className="flex flex-col items-center text-center py-10 gap-2">
+            <div className="w-9 h-9 rounded-full bg-[#00B37E]/10 flex items-center justify-center text-[15px]">✓</div>
+            <p className="text-[12px] text-[#999] font-medium">
+              Nenhuma oportunidade de {TYPE_STYLES[activeTab].label.toLowerCase()} no momento
+            </p>
+            <p className="text-[11px] text-[#5A5A5A] max-w-[340px] leading-snug">
+              O portfólio foi escaneado e nada se qualificou pra esta categoria —
+              isso é normal. Volte conforme os clientes evoluírem.
+            </p>
           </div>
         ) : (
           filtered.slice(0, 25).map((opp, idx) => (

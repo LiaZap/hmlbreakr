@@ -15,6 +15,15 @@
  *
  * Visões salvas (combinações nomeadas de filtros) ficam em localStorage
  * sob a chave `breakr.admin.reports.savedViews`.
+ *
+ * BAH-094: a lista de clientes recebida via prop vem do endpoint LIGHTWEIGHT
+ * (`GET /api/admin/clients`), que faz strip de `operational` (fichas/insumos),
+ * de `breakEven` e dos `amount` do `revenue_history`. Com isso
+ * `computeClientHealth`/`aggregatePortfolio` calculam tudo zerado.
+ * Por isso o ReportsPage busca a sua PRÓPRIA cópia COMPLETA via
+ * `GET /api/admin/clients?full=1` — que devolve o campo `data` íntegro
+ * (mesmo formato do dashboard do cliente). A prop `clients` segue como
+ * fallback caso o fetch full falhe.
  */
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -93,6 +102,49 @@ const periodLabelFromRange = (from, to, preset) => {
     return `${d}/${m}/${y}`;
   };
   return `${fmt(from)} → ${fmt(to)}`;
+};
+
+// Converte um ISO 'YYYY-MM-DD' num índice de mês comparável (ano*12 + mês).
+const monthIndexFromISO = (iso) => {
+  if (!iso || typeof iso !== 'string') return null;
+  const [y, m] = iso.split('-').map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+  return y * 12 + (m - 1);
+};
+
+// Converte um 'MM/YYYY' (formato do revenue_history) no mesmo índice.
+const monthIndexFromBR = (mmYYYY) => {
+  if (!mmYYYY || typeof mmYYYY !== 'string') return null;
+  const [m, y] = mmYYYY.split('/').map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+  return y * 12 + (m - 1);
+};
+
+/**
+ * BAH-094: aplica o filtro de Período aos dados do cliente ANTES de calcular
+ * saúde. computeClientHealth sempre usa o mês mais recente de revenue_history;
+ * sem este recorte, o filtro de Período não afetaria nada. Aqui mantemos só os
+ * meses dentro do range [from, to]. Se o cliente não tem revenue_history como
+ * array (ou está vazio), devolvemos o data original intacto.
+ */
+const applyPeriodToData = (data, from, to) => {
+  if (!data || typeof data !== 'object') return data;
+  const fd = data.formData;
+  const history = fd && Array.isArray(fd.revenue_history) ? fd.revenue_history : null;
+  if (!history || history.length === 0) return data;
+  const fromIdx = monthIndexFromISO(from);
+  const toIdx = monthIndexFromISO(to);
+  if (fromIdx === null || toIdx === null) return data;
+  const lo = Math.min(fromIdx, toIdx);
+  const hi = Math.max(fromIdx, toIdx);
+  const trimmed = history.filter((r) => {
+    const idx = monthIndexFromBR(r?.month);
+    return idx !== null && idx >= lo && idx <= hi;
+  });
+  return {
+    ...data,
+    formData: { ...fd, revenue_history: trimmed },
+  };
 };
 
 const computeTopDishes = (client, limit = 5) => {
@@ -226,11 +278,58 @@ const Radio = ({ checked, onChange, label, sub }) => (
 
 // ===== Main =====
 const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' }) => {
+  // ----- Full-data fetch (BAH-094) -----
+  // A prop `clients` é a versão lightweight (sem operational/fichas/insumos/
+  // breakEven/revenue real). Buscamos a versão completa via ?full=1 para que
+  // computeClientHealth/aggregatePortfolio tenham dados reais. Enquanto o fetch
+  // não resolve, ou se ele falhar, caímos no fallback da prop lightweight.
+  const [fullClients, setFullClients] = useState(null);
+  const [loadingClients, setLoadingClients] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingClients(true);
+    setLoadError(null);
+    adminFetch('/api/admin/clients?full=1')
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        if (Array.isArray(data)) {
+          setFullClients(data);
+        } else {
+          throw new Error('Resposta inesperada do servidor.');
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('BAH-094: falha ao buscar clientes completos:', err?.message);
+        setLoadError(err?.message || 'Falha ao carregar dados completos.');
+        setFullClients(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingClients(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fonte de verdade pros cálculos: dados completos quando disponíveis,
+  // senão a prop lightweight (preview ainda renderiza, só sem métricas reais).
+  const effectiveClients = fullClients ?? clients;
+
   // ----- Filter state -----
   const [periodPreset, setPeriodPreset] = useState('month');
   const [dateFrom, setDateFrom] = useState(monthAgoISO());
   const [dateTo, setDateTo] = useState(todayISO());
-  const [selectedClientIds, setSelectedClientIds] = useState(() => clients.map((c) => c.id));
+  const [selectedClientIds, setSelectedClientIds] = useState(() => effectiveClients.map((c) => c.id));
   const [clientSearch, setClientSearch] = useState('');
   const [selectedCuisines, setSelectedCuisines] = useState([]);
   const [primaryMetric, setPrimaryMetric] = useState('cmv');
@@ -272,25 +371,30 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
   const [sendResult, setSendResult] = useState(null);
   const [shareCopied, setShareCopied] = useState(false);
 
-  // Re-sync selection when client list changes
+  // Re-sync selection when client list changes (inclui troca lightweight -> full)
   useEffect(() => {
     setSelectedClientIds((prev) => {
-      const ids = new Set(clients.map((c) => c.id));
+      const ids = new Set(effectiveClients.map((c) => c.id));
       const filtered = prev.filter((id) => ids.has(id));
-      return filtered.length > 0 || prev.length === 0 ? filtered : clients.map((c) => c.id);
+      return filtered.length > 0 || prev.length === 0 ? filtered : effectiveClients.map((c) => c.id);
     });
-  }, [clients]);
+  }, [effectiveClients]);
 
   // ----- Derived data -----
   const cuisineList = useMemo(() => {
     const set = new Set();
-    clients.forEach((c) => set.add(getClientCuisine(c)));
+    effectiveClients.forEach((c) => set.add(getClientCuisine(c)));
     return [...set].filter((c) => c && c !== 'Não informado').sort();
-  }, [clients]);
+  }, [effectiveClients]);
 
+  // Health computado já com o recorte de Período aplicado ao revenue_history.
   const clientsWithHealth = useMemo(
-    () => clients.map((c) => ({ client: c, data: parseClientData(c), health: computeClientHealth(parseClientData(c)) })),
-    [clients]
+    () => effectiveClients.map((c) => {
+      const data = parseClientData(c);
+      const scopedData = applyPeriodToData(data, dateFrom, dateTo);
+      return { client: c, data: scopedData, health: computeClientHealth(scopedData) };
+    }),
+    [effectiveClients, dateFrom, dateTo]
   );
 
   // Apply filters
@@ -323,8 +427,8 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
   // Filtered clients for the multiselect search
   const visibleClientList = useMemo(() => {
     const q = clientSearch.trim().toLowerCase();
-    return clients.filter((c) => !q || (c.name || '').toLowerCase().includes(q));
-  }, [clients, clientSearch]);
+    return effectiveClients.filter((c) => !q || (c.name || '').toLowerCase().includes(q));
+  }, [effectiveClients, clientSearch]);
 
   // ----- Actions -----
   const handlePresetClick = (id) => {
@@ -366,7 +470,7 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
     setPeriodPreset('month');
     setDateFrom(monthAgoISO());
     setDateTo(todayISO());
-    setSelectedClientIds(clients.map((c) => c.id));
+    setSelectedClientIds(effectiveClients.map((c) => c.id));
     setClientSearch('');
     setSelectedCuisines([]);
     setPrimaryMetric('cmv');
@@ -519,10 +623,22 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[11px] font-semibold text-[#F5A623] uppercase tracking-widest bg-[#F5A623]/10 px-2.5 py-1 rounded-full border border-[#F5A623]/20">Relatórios</span>
-          <span className="text-[11px] text-[#555]">{clients.length} clientes na base</span>
+          <span className="text-[11px] text-[#555]">{effectiveClients.length} clientes na base</span>
+          {loadingClients && (
+            <span className="text-[11px] text-[#F5A623] flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full border-2 border-[#F5A623]/30 border-t-[#F5A623] animate-spin" />
+              Carregando dados completos…
+            </span>
+          )}
         </div>
         <h2 className="text-[28px] font-bold text-white tracking-tight">Dashboard de Relatórios</h2>
         <p className="text-[13px] text-[#868686] mt-1">Filtre, explore e envie relatórios personalizados.</p>
+        {loadError && (
+          <div className="mt-3 text-[11px] px-3 py-2 rounded-[8px] bg-amber-500/10 border border-amber-500/20 text-amber-300">
+            Não foi possível carregar os dados completos dos clientes ({loadError}). Exibindo dados resumidos —
+            métricas operacionais (CMV, lucro, fichas) podem aparecer zeradas.
+          </div>
+        )}
       </div>
 
       {/* Saved views chips */}
@@ -591,7 +707,7 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
           </FilterSection>
 
           {/* Clientes */}
-          <FilterSection title={`Clientes (${selectedClientIds.length}/${clients.length})`}>
+          <FilterSection title={`Clientes (${selectedClientIds.length}/${effectiveClients.length})`}>
             <input
               type="text"
               placeholder="Buscar cliente..."

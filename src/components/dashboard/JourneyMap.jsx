@@ -15,13 +15,21 @@
 import { useMemo, useState, useEffect } from 'react';
 import InfoTooltip from './InfoTooltip';
 
-const JourneyMap = ({ dashboardData, onNavigate }) => {
-  const steps = useMemo(() => {
-    const formData = dashboardData?.formData || {};
-    const operational = dashboardData?.operational || {};
-    const insumos = operational.insumos || [];
-    const fichas = operational.fichas || [];
-    const menuEngineering = dashboardData?.menuEngineering || [];
+/**
+ * computeJourneySteps — lógica pura de cálculo das etapas do caminho.
+ *
+ * Extraída do componente (BAH-097) pra ser a ÚNICA fonte de verdade do
+ * progresso. Tanto o JourneyMap quanto o Dashboard derivam "concluído"
+ * a partir daqui — sem duplicar regra de negócio.
+ *
+ * Retorna array de steps, cada um com { id, status, progress, ... }.
+ */
+const computeJourneySteps = (dashboardData) => {
+  const formData = dashboardData?.formData || {};
+  const operational = dashboardData?.operational || {};
+  const insumos = operational.insumos || [];
+  const fichas = operational.fichas || [];
+  const menuEngineering = dashboardData?.menuEngineering || [];
 
     // 1) Onboarding
     const onboardingDone = !!formData.onboarding_completed;
@@ -126,7 +134,44 @@ const JourneyMap = ({ dashboardData, onNavigate }) => {
         ),
       },
     ];
-  }, [dashboardData]);
+};
+
+/**
+ * computeJourneyProgress — resumo do progresso geral do caminho.
+ *
+ * Reusa computeJourneySteps. Usado pelo Dashboard (BAH-097) pra decidir
+ * se o Mapa do Caminho ainda deve aparecer no dashboard.
+ */
+const computeJourneyProgress = (dashboardData) => {
+  const steps = computeJourneySteps(dashboardData);
+  const overallPct = Math.round(
+    steps.reduce((acc, s) => acc + s.progress, 0) / steps.length,
+  );
+  const completedCount = steps.filter(s => s.status === 'done').length;
+  return { steps, overallPct, completedCount, totalSteps: steps.length };
+};
+
+/**
+ * isJourneyComplete — true quando o cliente já passou da fase de
+ * onboarding/setup (BAH-097).
+ *
+ * "Concluído" = onboarding feito E todas as etapas core marcadas como
+ * 'done' (insumos, fichas, engenharia, equipe). A etapa 'bpo' é opcional
+ * (serviço pago à parte) e NÃO entra no critério — senão o mapa nunca
+ * sairia do dashboard pra quem não contratou BPO.
+ */
+const CORE_STEP_IDS = ['onboarding', 'insumos', 'fichas', 'engenharia', 'equipe'];
+
+const isJourneyComplete = (dashboardData) => {
+  const { steps } = computeJourneyProgress(dashboardData);
+  return CORE_STEP_IDS.every(id => {
+    const step = steps.find(s => s.id === id);
+    return step && step.status === 'done';
+  });
+};
+
+const JourneyMap = ({ dashboardData, onNavigate }) => {
+  const steps = useMemo(() => computeJourneySteps(dashboardData), [dashboardData]);
 
   const overallPct = useMemo(() => {
     const total = steps.reduce((acc, s) => acc + s.progress, 0);
@@ -269,5 +314,10 @@ const JourneyMap = ({ dashboardData, onNavigate }) => {
     </div>
   );
 };
+
+// BAH-097: anexado como prop estática (em vez de named export) pra não
+// quebrar o react-refresh/only-export-components — o arquivo continua
+// exportando apenas o componente. O Dashboard chama JourneyMap.isComplete().
+JourneyMap.isComplete = isJourneyComplete;
 
 export default JourneyMap;

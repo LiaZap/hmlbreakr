@@ -129,12 +129,31 @@ router.post('/admin/clients', async (req, res) => {
   }
 });
 
-// List Clients — returns lightweight summary (strips fichas/insumos/large arrays)
+// List Clients
+//
+// Modo padrão (sem query param): retorna uma versão LIGHTWEIGHT — faz strip de
+// `operational` (fichas/insumos podem ter centenas de KB) e reduz `formData` a
+// flags booleanas. Usado pela tabela de clientes e dashboards do AdminPanel que
+// só precisam de nome/status/indicadores agregados (`_financial`).
+//
+// Modo FULL (`?full=1`): NÃO faz strip — retorna cada cliente com o campo `data`
+// = JSON string COMPLETO, exatamente como está no banco (inclui operational e
+// revenue_history com valores). Consumido pelas telas de análise admin
+// (Análises, Gestão de Clientes, ReportsPage) que precisam dos dados crus pra
+// calcular CMV, margens, engenharia de menu, etc. Payload grande — o cliente
+// deve buscar UMA vez e reutilizar, não por componente.
+// Contrato: `?full=1` → `data` é JSON string completo (não parseado).
 router.get('/admin/clients', async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
       select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true }
     });
+
+    // Modo FULL: devolve os clientes com `data` cru (JSON string completo do banco).
+    if (req.query.full === '1') {
+      return res.json(clients);
+    }
+
     const lightweight = clients.map(c => {
       try {
         const d = JSON.parse(c.data || '{}');

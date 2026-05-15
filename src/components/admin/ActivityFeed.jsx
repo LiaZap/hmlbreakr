@@ -16,8 +16,13 @@
  * presentes (ver comentários "TODO" para cada um).
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
+
+// ─── Persistência do filtro de tipos de evento (BAH-093 #3) ─────
+// O admin escolhe quais TIPOS de evento quer monitorar; a escolha
+// é persistida em localStorage para sobreviver a reloads.
+const FILTERS_STORAGE_KEY = 'breakr.admin.activity.filters';
 
 // ─── Tempo relativo ─────────────────────────────────────────────
 const formatRelativeTime = (ts) => {
@@ -86,6 +91,37 @@ const EVENT_STYLES = {
   bpo_activated: { icon: '🏦', color: '#7C5CFF', bg: 'bg-[#7C5CFF]/10', border: 'border-[#7C5CFF]/30' },
   insumos_added: { icon: '📦', color: '#06B6D4', bg: 'bg-[#06B6D4]/10', border: 'border-[#06B6D4]/30' },
   client_created: { icon: '✨', color: '#EC4899', bg: 'bg-[#EC4899]/10', border: 'border-[#EC4899]/30' },
+};
+
+// ─── Tipos de evento monitoráveis (BAH-093 #3) ──────────────────
+// Lista canônica dos tipos que o ActivityFeed sabe derivar — usada
+// para montar o seletor de filtros. A ordem aqui é a ordem dos chips.
+const EVENT_TYPES = [
+  { type: 'client_created',      label: 'Novo cadastro' },
+  { type: 'onboarding_complete', label: 'Onboarding concluído' },
+  { type: 'new_fichas',          label: 'Pratos novos' },
+  { type: 'ficha_update',        label: 'Fichas atualizadas' },
+  { type: 'insumos_added',       label: 'Insumos cadastrados' },
+  { type: 'revenue',             label: 'Faturamento lançado' },
+  { type: 'bpo_activated',       label: 'BPO ativada' },
+];
+
+const ALL_EVENT_TYPES = EVENT_TYPES.map((e) => e.type);
+
+// Lê os tipos selecionados do localStorage. Default: todos ativos.
+// Robusto a JSON inválido, chave ausente e tipos obsoletos.
+const loadSelectedTypes = () => {
+  try {
+    const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
+    if (!raw) return [...ALL_EVENT_TYPES];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...ALL_EVENT_TYPES];
+    // Mantém só tipos ainda válidos (defesa contra versões antigas).
+    const valid = parsed.filter((t) => ALL_EVENT_TYPES.includes(t));
+    return valid.length > 0 ? valid : [...ALL_EVENT_TYPES];
+  } catch {
+    return [...ALL_EVENT_TYPES];
+  }
 };
 
 // ─── Derivação de eventos por cliente ───────────────────────────
@@ -207,22 +243,45 @@ const deriveClientEvents = (client) => {
     }
   }
 
-  // 4. Onboarding concluído (heurística: completed=true + atividade recente)
+  // 4. Onboarding concluído (BAH-093 #2)
+  //
+  // BUG anterior: o evento só era emitido se houvesse atividade recente
+  // (ficha/insumo/faturamento) nos últimos 7 dias para servir de "proxy"
+  // de timestamp. Mas a listagem /admin/clients é LEVE — ela remove
+  // `operational` (fichas/insumos) e `daily_revenue`, então o proxy era
+  // SEMPRE null no painel admin e o evento NUNCA aparecia.
+  //
+  // FIX: não existe timestamp dedicado de conclusão de onboarding. Usamos,
+  // em ordem de preferência: (a) qualquer proxy de atividade detalhada
+  // disponível (quando o objeto cliente vem completo, ex.: dashboard),
+  // (b) `client.updatedAt` (última escrita — o onboarding marca a flag
+  // numa escrita), (c) `client.createdAt`. Assim a conclusão SEMPRE gera
+  // um evento visível na timeline.
   if (fd.onboarding_completed) {
-    // Usa timestamp da atividade mais recente do cliente como proxy
-    let proxyTs = null;
-    if (recentFichaCreates.length > 0) proxyTs = recentFichaCreates[0].createdAt;
-    else if (recentFichaUpdates.length > 0) proxyTs = recentFichaUpdates[0].lastUpdated;
-    else if (dailyEntries.length > 0) proxyTs = dailyEntries[0].ts;
+    let onboardingTs = null;
+    if (recentFichaCreates.length > 0) onboardingTs = recentFichaCreates[0].createdAt;
+    else if (recentFichaUpdates.length > 0) onboardingTs = recentFichaUpdates[0].lastUpdated;
+    else if (dailyEntries.length > 0) onboardingTs = dailyEntries[0].ts;
 
-    if (proxyTs && proxyTs > cutoff) {
+    if (!onboardingTs) {
+      const updatedRaw = client.updatedAt || client.createdAt || null;
+      if (updatedRaw) {
+        const parsed = typeof updatedRaw === 'number' ? updatedRaw : Date.parse(updatedRaw);
+        if (!isNaN(parsed) && parsed <= now) onboardingTs = parsed;
+      }
+    }
+
+    if (onboardingTs) {
+      const detail = (fichas.length > 0 || insumos.length > 0)
+        ? `${fichas.length} ficha${fichas.length !== 1 ? 's' : ''} · ${insumos.length} insumo${insumos.length !== 1 ? 's' : ''}`
+        : 'Cadastro de custos e estrutura finalizado';
       events.push(
         baseEvent({
-          id: `${client.id}-onboarding_complete-${proxyTs}`,
+          id: `${client.id}-onboarding_complete-${onboardingTs}`,
           type: 'onboarding_complete',
-          timestamp: proxyTs,
+          timestamp: onboardingTs,
           text: 'Concluiu o onboarding',
-          detail: `${fichas.length} ficha${fichas.length !== 1 ? 's' : ''} · ${insumos.length} insumo${insumos.length !== 1 ? 's' : ''}`,
+          detail,
         }),
       );
     }
@@ -372,6 +431,28 @@ const EventCard = ({ event, onClick }) => {
 const ActivityFeed = ({ clients, maxItems = 30, onClientClick }) => {
   const [filter, setFilter] = useState('week');
 
+  // BAH-093 #3 — tipos de evento que o admin escolheu monitorar.
+  // Inicializa do localStorage (lazy) e persiste a cada mudança.
+  const [selectedTypes, setSelectedTypes] = useState(loadSelectedTypes);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(selectedTypes));
+    } catch {
+      // localStorage indisponível (modo privado/quota) — ignora silenciosamente.
+    }
+  }, [selectedTypes]);
+
+  const toggleType = useCallback((type) => {
+    setSelectedTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
+    );
+  }, []);
+
+  const setAllTypes = useCallback((on) => {
+    setSelectedTypes(on ? [...ALL_EVENT_TYPES] : []);
+  }, []);
+
   const allEvents = useMemo(() => {
     const items = [];
     (clients || []).forEach((client) => {
@@ -386,18 +467,33 @@ const ActivityFeed = ({ clients, maxItems = 30, onClientClick }) => {
     return items;
   }, [clients]);
 
+  // Eventos após o filtro de TIPO (independente do filtro de período).
+  const typeFilteredEvents = useMemo(
+    () => allEvents.filter((e) => selectedTypes.includes(e.type)),
+    [allEvents, selectedTypes],
+  );
+
   const filtered = useMemo(() => {
     const cutoff = (TIME_FILTERS[filter] || TIME_FILTERS.all).cutoff();
-    return allEvents.filter((e) => (e.timestamp || 0) >= cutoff).slice(0, maxItems);
-  }, [allEvents, filter, maxItems]);
+    return typeFilteredEvents.filter((e) => (e.timestamp || 0) >= cutoff).slice(0, maxItems);
+  }, [typeFilteredEvents, filter, maxItems]);
 
   const counts = useMemo(() => {
     return {
-      all: allEvents.length,
-      today: allEvents.filter((e) => (e.timestamp || 0) >= TIME_FILTERS.today.cutoff()).length,
-      week: allEvents.filter((e) => (e.timestamp || 0) >= TIME_FILTERS.week.cutoff()).length,
+      all: typeFilteredEvents.length,
+      today: typeFilteredEvents.filter((e) => (e.timestamp || 0) >= TIME_FILTERS.today.cutoff()).length,
+      week: typeFilteredEvents.filter((e) => (e.timestamp || 0) >= TIME_FILTERS.week.cutoff()).length,
     };
+  }, [typeFilteredEvents]);
+
+  // Contagem por tipo (sobre todos os eventos) — exibida em cada chip.
+  const typeCounts = useMemo(() => {
+    const acc = {};
+    allEvents.forEach((e) => { acc[e.type] = (acc[e.type] || 0) + 1; });
+    return acc;
   }, [allEvents]);
+
+  const allTypesOn = selectedTypes.length === ALL_EVENT_TYPES.length;
 
   return (
     <motion.div
@@ -439,12 +535,64 @@ const ActivityFeed = ({ clients, maxItems = 30, onClientClick }) => {
             </button>
           ))}
         </div>
+
+        {/* Filtro de tipos de evento (BAH-093 #3) — escolha persistida em localStorage */}
+        <div className="mt-3 pt-3 border-t border-white/[0.04]">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-[#666]">
+              Monitorar
+            </span>
+            <button
+              onClick={() => setAllTypes(!allTypesOn)}
+              className="text-[10px] font-semibold text-[#F5A623] hover:text-[#FFC100] transition-colors"
+            >
+              {allTypesOn ? 'Limpar tudo' : 'Marcar tudo'}
+            </button>
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {EVENT_TYPES.map(({ type, label }) => {
+              const active = selectedTypes.includes(type);
+              const style = EVENT_STYLES[type] || EVENT_STYLES.ficha_update;
+              const n = typeCounts[type] || 0;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => toggleType(type)}
+                  aria-pressed={active}
+                  title={active ? `Ocultar: ${label}` : `Mostrar: ${label}`}
+                  className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                    active
+                      ? 'text-white'
+                      : 'border-white/[0.06] bg-white/[0.02] text-[#666] hover:bg-white/[0.05]'
+                  }`}
+                  style={active ? {
+                    borderColor: `${style.color}55`,
+                    backgroundColor: `${style.color}1F`,
+                  } : undefined}
+                >
+                  <span aria-hidden="true" className="text-[10px] leading-none">
+                    {style.icon}
+                  </span>
+                  {label}
+                  <span className={active ? 'text-white/55' : 'text-[#555]'}>
+                    {n}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Lista de eventos */}
       <div className="p-3 max-h-[560px] overflow-y-auto">
         {filtered.length === 0 ? (
-          <EmptyState filter={filter} hasAny={allEvents.length > 0} />
+          <EmptyState
+            filter={filter}
+            hasAny={allEvents.length > 0}
+            noTypesSelected={selectedTypes.length === 0}
+          />
         ) : (
           <div className="space-y-2">
             {filtered.map((event) => (
@@ -466,7 +614,7 @@ const ActivityFeed = ({ clients, maxItems = 30, onClientClick }) => {
   );
 };
 
-const EmptyState = ({ filter, hasAny }) => {
+const EmptyState = ({ filter, hasAny, noTypesSelected }) => {
   const messages = {
     all: hasAny
       ? 'Nenhum evento ainda.'
@@ -474,6 +622,10 @@ const EmptyState = ({ filter, hasAny }) => {
     today: 'Nenhuma atividade hoje.',
     week: 'Nenhuma atividade essa semana.',
   };
+  // Caso o admin tenha desmarcado todos os tipos no filtro "Monitorar".
+  const text = noTypesSelected
+    ? 'Nenhum tipo de evento selecionado. Marque ao menos um tipo em "Monitorar" acima.'
+    : (messages[filter] || messages.all);
   return (
     <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
       <div className="w-12 h-12 rounded-full bg-white/[0.04] flex items-center justify-center mb-3">
@@ -483,7 +635,7 @@ const EmptyState = ({ filter, hasAny }) => {
         </svg>
       </div>
       <div className="text-[12px] text-[#868686] max-w-[260px] leading-snug">
-        {messages[filter] || messages.all}
+        {text}
       </div>
     </div>
   );

@@ -10,7 +10,6 @@ import { HealthScoreBadge } from './HealthScoreBadge';
 import ActivityFeed from './ActivityFeed';
 import CuisineBenchmarks from './CuisineBenchmarks';
 import RestaurantComparator from './RestaurantComparator';
-import BrazilMap from './BrazilMap';
 import AggregatedMenuInsights from './AggregatedMenuInsights';
 import DailyBriefing from './DailyBriefing';
 import OpportunityDetector from './OpportunityDetector';
@@ -60,6 +59,13 @@ const AdminPanel = () => {
   const roleLabel = ROLE_LABELS[adminRole] || 'Admin';
   const roleColor = ROLE_COLORS[adminRole] || '#F5A623';
   const [clients, setClients] = useState([]);
+  // Lista COMPLETA (endpoint ?full=1) — inclui operational (fichas/insumos) e
+  // revenue_history com valores. Buscada UMA vez e reutilizada pelas telas de
+  // análise (aba Análises) e pela aba Gestão de Clientes, que precisam dos
+  // dados crus pra calcular CMV, margens, receita real, etc. A lista leve
+  // (`clients`) continua sendo usada onde só precisamos de nome/status.
+  const [fullClients, setFullClients] = useState([]);
+  const [fullClientsLoading, setFullClientsLoading] = useState(true);
   const [newClientName, setNewClientName] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [resetModal, setResetModal] = useState(null); // { clientId, clientName, hash, currentEmail }
@@ -135,6 +141,15 @@ const AdminPanel = () => {
         if (Array.isArray(data)) setClients(data);
       })
       .catch(err => console.error("Failed to fetch clients", err));
+    // Lista completa (?full=1) — uma única requisição, reutilizada pelas telas
+    // de análise. Payload maior, por isso é separada e cacheada em fullClients.
+    fetch('/api/admin/clients?full=1')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setFullClients(data);
+      })
+      .catch(err => console.error("Failed to fetch full clients", err))
+      .finally(() => setFullClientsLoading(false));
     fetch('/api/admin/broadcasts')
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setBroadcasts(data); })
@@ -493,19 +508,63 @@ const AdminPanel = () => {
         { key: 'fees_marketplaces',   check: () => hasData(d.fees_marketplaces) },
         { key: 'fees_cards',          check: () => Array.isArray(d.fees_cards) ? d.fees_cards.some(f => hasData(f?.name || f?.brand)) : hasData(d.fees_cards) },
         { key: 'other_fixed_costs',   check: () => hasData(d.other_fixed_costs) },
-        { key: 'revenue_history',     check: () => hasData(d.revenue_history?.months) && d.revenue_history.months.length >= 1 },
+        // revenue_history: na lista leve vem como { months: [...] }; na lista
+        // completa (?full=1) vem como Array de { month, amount }. Aceita ambos.
+        { key: 'revenue_history',     check: () => {
+            const rh = d.revenue_history;
+            if (Array.isArray(rh)) return rh.length >= 1;
+            return hasData(rh?.months) && rh.months.length >= 1;
+          } },
       ];
       const filled = steps.filter(s => { try { return s.check(); } catch { return false; } }).length;
       return Math.round((filled / steps.length) * 100);
     } catch { return 0; }
   };
 
+  // Parser de moeda BR — "R$ 12.345,67" / "12345.67" / number -> Number
+  const parseRevenueValue = (val) => {
+    if (val == null) return 0;
+    if (typeof val === 'number') return val;
+    let s = String(val).replace(/R\$/g, '').trim();
+    if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else if (s.includes(',')) s = s.replace(',', '.');
+    return parseFloat(s) || 0;
+  };
+
+  // Extrai receita bruta mais recente do revenue_history.
+  // revenue_history é um Array de { month: 'MM/AAAA', amount } (shape canônico
+  // do DashboardContext). Na lista leve pode chegar reshapado como
+  // { months: [{ month }] } SEM amount — nesse caso não há valor calculável.
+  // Pega o mês cronologicamente mais recente.
+  const getGrossRevenue = (formData) => {
+    if (!formData) return 0;
+    const rh = formData.revenue_history;
+    const arr = Array.isArray(rh) ? rh : (Array.isArray(rh?.months) ? rh.months : []);
+    const valid = arr
+      .filter(r => r && r.month && r.amount != null)
+      .map(r => ({ month: String(r.month), value: parseRevenueValue(r.amount) }))
+      .filter(r => r.value > 0);
+    if (valid.length === 0) return 0;
+    valid.sort((a, b) => {
+      const [ma, ya] = a.month.split('/').map(Number);
+      const [mb, yb] = b.month.split('/').map(Number);
+      return (yb - ya) || (mb - ma);
+    });
+    return valid[0].value;
+  };
+
   const getFinancial = (client) => {
     try {
       const raw = typeof client.data === 'string' ? JSON.parse(client.data) : client.data;
-      // _financial está no nível root do data (não dentro de formData)
-      // Mantém fallback pra formData por compat com versões antigas
-      return raw?._financial || raw?.formData?._financial || null;
+      // _financial está no nível root do data (não dentro de formData) e é
+      // pré-calculado pelo backend (cfPct, fichas, dre).
+      const fin = raw?._financial || raw?.formData?._financial || null;
+      // A receita do _financial vinha 0 (calculateRevenue no backend lê
+      // revenue_history.months/m.value, mas o shape real é Array {month,amount}).
+      // Recalcula a receita bruta direto do revenue_history pra garantir valor real.
+      const revenue = getGrossRevenue(raw?.formData);
+      if (!fin && revenue === 0) return null;
+      return { ...(fin || {}), revenue };
     } catch { return null; }
   };
 
@@ -530,9 +589,23 @@ const AdminPanel = () => {
     return String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   };
 
+  // Lista "enriquecida": mantém a lista leve como fonte de verdade do CRUD,
+  // mas substitui o campo `data` pelo JSON completo (?full=1) quando disponível.
+  // Assim a tabela de clientes e os cálculos de receita/health usam dados reais
+  // (fichas, insumos, revenue_history com valores) sem perder os clientes
+  // criados/removidos que ainda não estão no fullClients.
+  const clientsView = (() => {
+    if (!fullClients.length) return clients;
+    const fullById = new Map(fullClients.map(fc => [fc.id, fc]));
+    return clients.map(c => {
+      const full = fullById.get(c.id);
+      return full ? { ...c, data: full.data } : c;
+    });
+  })();
+
   const filteredClients = (() => {
     const q = normalizeSearch(search);
-    const filtered = clients.filter(c => {
+    const filtered = clientsView.filter(c => {
       if (!q) return true;
       // Busca em: name, email, displayName (restaurante), ownerName, hash
       const { displayName, ownerName } = getClientDisplay(c);
@@ -602,16 +675,17 @@ const AdminPanel = () => {
     );
   };
 
-  // SaaS metrics
+  // SaaS metrics — usa clientsView (dados completos quando disponíveis) pra que
+  // receita bruta e contagem de fichas sejam reais, não zeradas.
   const metrics = (() => {
-    const total = clients.length;
-    const completedArr = clients.filter(c => getOnboardingProgress(c) >= 100);
-    const inProgressArr = clients.filter(c => { const p = getOnboardingProgress(c); return p > 0 && p < 100; });
-    const pendingArr = clients.filter(c => getOnboardingProgress(c) === 0);
-    const withRevenue = clients.filter(c => { const f = getFinancial(c); return f && f.revenue > 0; });
-    const cfHighArr = clients.filter(c => { const f = getFinancial(c); return f && f.cfPct > 33; });
-    const totalRevenue = clients.reduce((s, c) => { const f = getFinancial(c); return s + (f?.revenue || 0); }, 0);
-    const totalFichas = clients.reduce((s, c) => { const f = getFinancial(c); return s + (f?.fichas || 0); }, 0);
+    const total = clientsView.length;
+    const completedArr = clientsView.filter(c => getOnboardingProgress(c) >= 100);
+    const inProgressArr = clientsView.filter(c => { const p = getOnboardingProgress(c); return p > 0 && p < 100; });
+    const pendingArr = clientsView.filter(c => getOnboardingProgress(c) === 0);
+    const withRevenue = clientsView.filter(c => { const f = getFinancial(c); return f && f.revenue > 0; });
+    const cfHighArr = clientsView.filter(c => { const f = getFinancial(c); return f && f.cfPct > 33; });
+    const totalRevenue = clientsView.reduce((s, c) => { const f = getFinancial(c); return s + (f?.revenue || 0); }, 0);
+    const totalFichas = clientsView.reduce((s, c) => { const f = getFinancial(c); return s + (f?.fichas || 0); }, 0);
     return { total, completed: completedArr.length, inProgress: inProgressArr.length, pending: pendingArr.length, withRevenue: withRevenue.length, cfHigh: cfHighArr.length, totalRevenue, totalFichas };
   })();
 
@@ -1043,7 +1117,7 @@ const AdminPanel = () => {
             clients={clients}
             onOpenClient={(hash, page) => openClientAsAdmin(hash, page ? { section: page } : {})}
           />
-          <PortfolioKPIs clients={clients} />
+          <PortfolioKPIs clients={fullClients.length ? fullClients : clients} />
           <MaturityFunnel
             clients={clients}
             onStageClick={(stageId, stuckClients) => {
@@ -1223,24 +1297,34 @@ const AdminPanel = () => {
             <h2 className="text-[22px] font-bold text-white tracking-tight">Análises</h2>
             <p className="text-[12px] text-[#868686] mt-1">Insights detalhados e oportunidades de upsell, consultoria e revisão de margem.</p>
           </div>
+          {fullClientsLoading ? (
+            <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[18px] p-10 text-center">
+              <div className="w-8 h-8 mx-auto mb-3 border-2 border-[#F5A623]/30 border-t-[#F5A623] rounded-full animate-spin" />
+              <p className="text-[12px] text-[#868686]">Carregando dados completos do portfólio…</p>
+            </div>
+          ) : (
           <div className="space-y-4">
+            {/* As telas de análise consomem fullClients (dados completos com
+                fichas/insumos/revenue_history). Sem fullClients carregado, não
+                há como calcular — cai pra lista leve só pra não quebrar. */}
             <OpportunityDetector
-              clients={clients}
+              clients={fullClients}
               onClientClick={(client) => openClientAsAdmin(client.hash)}
             />
             <MarginHunter
-              clients={clients}
+              clients={fullClients}
               onClientClick={(client) => openClientAsAdmin(client.hash, { section: 'fichaTecnica' })}
             />
-            <AggregatedMenuInsights clients={clients} />
+            <AggregatedMenuInsights clients={fullClients} />
             <CuisineBenchmarks
-              clients={clients}
+              clients={fullClients}
               onCuisineClick={(cuisineType, restaurants) => {
                 console.log('Cuisine clicked:', cuisineType, restaurants.length, 'restaurants');
               }}
             />
-            <RestaurantComparator clients={clients} />
+            <RestaurantComparator clients={fullClients} />
           </div>
+          )}
         </motion.div>
 
         ) : activeTab === 'activity' ? (
@@ -1248,19 +1332,13 @@ const AdminPanel = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <div className="mb-6">
             <h2 className="text-[22px] font-bold text-white tracking-tight">Atividade</h2>
-            <p className="text-[12px] text-[#868686] mt-1">Timeline de eventos do portfolio + distribuição geográfica.</p>
+            <p className="text-[12px] text-[#868686] mt-1">Timeline de eventos do portfolio.</p>
           </div>
           <div className="space-y-4">
             <ActivityFeed
-              clients={clients}
+              clients={fullClients.length ? fullClients : clients}
               maxItems={50}
               onClientClick={(hash) => openClientAsAdmin(hash)}
-            />
-            <BrazilMap
-              clients={clients}
-              onClientClick={(clientList) => {
-                if (clientList && clientList[0]?.hash) openClientAsAdmin(clientList[0].hash);
-              }}
             />
           </div>
         </motion.div>
@@ -1323,8 +1401,13 @@ const AdminPanel = () => {
           {/* Table — scrollable on mobile (min-w to preserve columns) */}
           <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[18px] overflow-x-auto">
             <div className="min-w-[780px]">
-            {/* Table Header — sortable */}
-            <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_0.8fr_auto] gap-4 px-5 py-3 border-b border-white/[0.06] text-[10px] text-[#555] uppercase tracking-widest font-bold bg-white/[0.01]">
+            {/* Table Header — sortable.
+                Coluna "Ações" tem largura FIXA (não `auto`): cada linha é seu
+                próprio grid, então `auto` dimensionava conforme a quantidade de
+                botões da linha (varia por cliente) e desalinhava todas as
+                colunas ("fazendo curva" — BAH-095 #1). Largura fixa garante que
+                todas as linhas usem o mesmo gabarito de colunas. */}
+            <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_0.8fr_172px] gap-4 px-5 py-3 border-b border-white/[0.06] text-[10px] text-[#555] uppercase tracking-widest font-bold bg-white/[0.01]">
               <button onClick={() => toggleSort('name')} className="text-left flex items-center gap-1.5 hover:text-white transition-colors">
                 Cliente <SortIcon column="name" />
               </button>
@@ -1359,7 +1442,7 @@ const AdminPanel = () => {
                 const fin = getFinancial(client);
                 return (
                   <motion.div key={client.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }}
-                    className="grid grid-cols-[2fr_1.2fr_1fr_1fr_0.8fr_auto] gap-4 px-5 py-3.5 border-b border-white/[0.03] last:border-0 items-center hover:bg-white/[0.02] transition-colors group">
+                    className="grid grid-cols-[2fr_1.2fr_1fr_1fr_0.8fr_172px] gap-4 px-5 py-3.5 border-b border-white/[0.03] last:border-0 items-center hover:bg-white/[0.02] transition-colors group">
                     {/* Name */}
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative">
@@ -1455,14 +1538,30 @@ const AdminPanel = () => {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                         )}
                       </button>
-                      {isSuperAdmin && client.email && (
+                      {/* BAH-095 #2: estas ações antes só apareciam quando
+                          `client.email` existia — clientes sem email cadastrado
+                          ficavam sem nenhuma ação de credencial, de forma
+                          inconsistente. Agora aparecem SEMPRE para super_admin.
+                          - "Reenviar credenciais": precisa de email; sem email
+                            fica desabilitado com tooltip explicando.
+                          - "Redefinir credenciais": abre o modal mesmo sem
+                            email — é justamente o fluxo pra CADASTRAR o email
+                            e definir a senha do cliente. */}
+                      {isSuperAdmin && (
                         <>
                           <button
-                            onClick={() => handleResendWelcome(client.id)}
-                            className={`p-2 rounded-[8px] transition-colors ${resentId === client.id ? 'text-[#00B37E] bg-[#00B37E]/10' : 'text-[#868686] hover:text-white hover:bg-[#252527]'}`}
-                            title="Reenviar email de boas-vindas"
+                            onClick={() => client.email && handleResendWelcome(client.id)}
+                            disabled={!client.email}
+                            className={`p-2 rounded-[8px] transition-colors ${
+                              !client.email
+                                ? 'text-[#3A3A3A] cursor-not-allowed'
+                                : resentId === client.id
+                                  ? 'text-[#00B37E] bg-[#00B37E]/10'
+                                  : 'text-[#868686] hover:text-white hover:bg-[#252527]'
+                            }`}
+                            title={client.email ? 'Reenviar email de boas-vindas' : 'Cliente sem email — redefina as credenciais primeiro para cadastrar um email'}
                           >
-                            {resentId === client.id ? (
+                            {resentId === client.id && client.email ? (
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             ) : (
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9L22 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -1471,7 +1570,7 @@ const AdminPanel = () => {
                           <button
                             onClick={() => { setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash, currentEmail: client.email }); setResetEmail(client.email || ''); }}
                             className="p-2 rounded-[8px] text-[#868686] hover:text-white hover:bg-[#252527] transition-colors"
-                            title="Redefinir credenciais"
+                            title={client.email ? 'Redefinir credenciais (bloquear/liberar acesso)' : 'Cadastrar credenciais de acesso'}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 10V7a4 4 0 018 0v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                           </button>
@@ -1541,13 +1640,20 @@ const AdminPanel = () => {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
               className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[16px] p-5 relative overflow-hidden group hover:border-[#00B37E]/20 transition-all">
               <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-[#00B37E] opacity-[0.05] blur-2xl group-hover:opacity-[0.1] transition-opacity" />
+              {/* BAH-095 #4: o card antes mostrava "Taxa de Retenção" com a
+                  fórmula (total - pendentes) / total — isso NÃO é retenção, é
+                  taxa de onboarding iniciado. O sistema não registra evento de
+                  cancelamento/churn, então não há base real pra calcular
+                  retenção. Card honestamente renomeado pra "Onboarding Iniciado"
+                  (métrica real) e retenção marcada como indisponível. */}
               <div className="relative">
                 <div className="flex items-center gap-2 mb-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" stroke="#00B37E" strokeWidth="1.5" strokeLinecap="round"/><path d="M22 4L12 14.01l-3-3" stroke="#00B37E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  <p className="text-[10px] text-[#666] uppercase tracking-widest font-bold">Taxa de Retenção</p>
+                  <p className="text-[10px] text-[#666] uppercase tracking-widest font-bold">Onboarding Iniciado</p>
                 </div>
                 <p className="text-[32px] font-bold text-white leading-none tracking-tight">{metrics.total > 0 ? Math.round(((metrics.total - metrics.pending) / metrics.total) * 100) : 0}%</p>
-                <p className="text-[11px] text-[#00B37E] mt-2 font-medium">{metrics.total - metrics.pending} de {metrics.total} ativos</p>
+                <p className="text-[11px] text-[#00B37E] mt-2 font-medium">{metrics.total - metrics.pending} de {metrics.total} começaram</p>
+                <p className="text-[10px] text-[#555] mt-1.5 leading-snug">Retenção/churn: <span className="text-[#666] font-medium">indisponível</span> — sem registro de cancelamento.</p>
               </div>
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}

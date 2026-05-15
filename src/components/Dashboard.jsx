@@ -126,8 +126,15 @@ const Dashboard = () => {
         {/* BPO Alerts — só aparece se cliente tem BPO ativado */}
         <BpoClientAlerts bpoInfo={dashboardData._bpo} onNavigateToFinance={() => setActivePage('financeiro')} />
 
-        {/* BAH-023: Mapa do Caminho — sumário visual das etapas de configuração */}
-        <JourneyMap dashboardData={dashboardData} onNavigate={(page) => setActivePage(page)} />
+        {/* BAH-097: Mapa do Caminho é um SUPORTE só pra fase de onboarding/setup.
+            Renderiza enquanto o cliente ainda não concluiu as etapas core
+            (onboarding, insumos, fichas, engenharia, equipe). Quando tudo está
+            'done', some do dashboard — não pode ficar empurrando o conteúdo
+            financeiro. O critério de "concluído" vem de JourneyMap.isComplete(),
+            que reusa a mesma lógica de progresso do próprio JourneyMap. */}
+        {!JourneyMap.isComplete(dashboardData) && (
+          <JourneyMap dashboardData={dashboardData} onNavigate={(page) => setActivePage(page)} />
+        )}
 
         {/* MAIN GRID - 4 columns layout (responsive fluid) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-4 xl:gap-6 mb-0 min-h-0">
