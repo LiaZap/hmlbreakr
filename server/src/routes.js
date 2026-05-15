@@ -143,7 +143,9 @@ router.post('/admin/clients', async (req, res) => {
 // calcular CMV, margens, engenharia de menu, etc. Payload grande — o cliente
 // deve buscar UMA vez e reutilizar, não por componente.
 // Contrato: `?full=1` → `data` é JSON string completo (não parseado).
-router.get('/admin/clients', async (req, res) => {
+// Protegido por requireAdmin — expõe dados de TODOS os clientes (e em ?full=1
+// o `data` cru completo), não pode ser público.
+router.get('/admin/clients', requireAdmin, async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
       select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true }

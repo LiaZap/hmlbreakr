@@ -147,12 +147,36 @@ function calculateFixedCosts(formData) {
   };
 }
 
+// Parse "MM/AAAA" -> número comparável (AAAA*12 + MM). Inválido -> -Infinity.
+function monthKey(m) {
+  const parts = String(m?.month || '').split('/');
+  if (parts.length !== 2) return -Infinity;
+  const mm = parseInt(parts[0], 10);
+  const yyyy = parseInt(parts[1], 10);
+  if (!mm || !yyyy) return -Infinity;
+  return yyyy * 12 + mm;
+}
+
 function calculateRevenue(formData) {
-  if (!formData?.revenue_history?.months) return { latest: 0, avg: 0, months: 0 };
-  const months = formData.revenue_history.months;
-  const values = months.map(m => parseCurrency(m?.value)).filter(v => v > 0);
+  // Shape canônico (onboarding): revenue_history = Array de { month, amount }.
+  // Shape legado tolerado: { months: [{ month, value }] }.
+  const rh = formData?.revenue_history;
+  const months = Array.isArray(rh)
+    ? rh
+    : (Array.isArray(rh?.months) ? rh.months : null);
+  if (!months || months.length === 0) return { latest: 0, avg: 0, months: 0 };
+
+  // amount é o campo canônico; value é fallback do shape legado.
+  const valOf = (m) => parseCurrency(m?.amount != null ? m.amount : m?.value);
+  const values = months.map(valOf).filter(v => v > 0);
   if (values.length === 0) return { latest: 0, avg: 0, months: months.length };
-  const latest = parseCurrency(months[months.length - 1]?.value);
+
+  // "latest" = mês cronologicamente mais recente (o array do onboarding é
+  // gerado em ordem retroativa, então não dá pra confiar na posição).
+  const latestMonth = months.reduce((best, m) =>
+    monthKey(m) > monthKey(best) ? m : best
+  );
+  const latest = valOf(latestMonth);
   const avg = values.reduce((s, v) => s + v, 0) / values.length;
   return {
     latest: Math.round(latest * 100) / 100,

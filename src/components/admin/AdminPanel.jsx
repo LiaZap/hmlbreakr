@@ -18,6 +18,7 @@ import CommandPalette from './CommandPalette';
 import EmployeesAdmin from './EmployeesAdmin';
 import ReportsPage from './ReportsPage';
 import { computeClientHealth } from '../../utils/clientHealth';
+import { adminFetch } from '../../utils/adminAuth';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
 // import BpoApp from '../bpo/BpoApp';
 
@@ -135,7 +136,7 @@ const AdminPanel = () => {
   }, []);
 
   useEffect(() => {
-    fetch('/api/admin/clients')
+    adminFetch('/api/admin/clients')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setClients(data);
@@ -143,7 +144,7 @@ const AdminPanel = () => {
       .catch(err => console.error("Failed to fetch clients", err));
     // Lista completa (?full=1) — uma única requisição, reutilizada pelas telas
     // de análise. Payload maior, por isso é separada e cacheada em fullClients.
-    fetch('/api/admin/clients?full=1')
+    adminFetch('/api/admin/clients?full=1')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setFullClients(data);
