@@ -1502,7 +1502,12 @@ const AdminPanel = () => {
                       })()}
                       {fin && fin.revenue > 0 ? (
                         <>
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${fin.cfPct > 33 ? 'bg-red-500/15 text-red-400' : 'bg-[#00B37E]/15 text-[#00B37E]'}`}>CF {fin.cfPct.toFixed(0)}%</span>
+                          {/* CF% só vem do _financial (lista leve). Na lista
+                              completa (?full=1) o data é cru e não tem cfPct —
+                              renderiza o badge só quando o número existe. */}
+                          {typeof fin.cfPct === 'number' && Number.isFinite(fin.cfPct) && (
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${fin.cfPct > 33 ? 'bg-red-500/15 text-red-400' : 'bg-[#00B37E]/15 text-[#00B37E]'}`}>CF {fin.cfPct.toFixed(0)}%</span>
+                          )}
                           <span className="px-1.5 py-0.5 rounded bg-[#1E1E1E] text-[9px] text-[#868686]">R${(fin.revenue/1000).toFixed(0)}k</span>
                         </>
                       ) : (
