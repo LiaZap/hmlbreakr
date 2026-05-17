@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import boltIcon from '../../assets/bolt.svg';
 
-const Sidebar = ({ activePage = 'home', onNavigate, isOwner = true }) => {
-  const [expanded, setExpanded] = useState(false);
+const Sidebar = ({ activePage = 'home', onNavigate, isOwner = true, lockCollapsed = false }) => {
+  const [expandedRaw, setExpanded] = useState(false);
+  // lockCollapsed: na pagina Financeiro o modulo BPO tem seu proprio menu
+  // lateral; se o Sidebar expandisse no hover, cobriria esse menu. Trava
+  // colapsado (so icones) pra os dois menus coexistirem sem sobreposicao.
+  const expanded = expandedRaw && !lockCollapsed;
 
   const navItems = [
     { id: 'home', label: 'Página Inicial', icon: (active) => (

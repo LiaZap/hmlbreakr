@@ -90,7 +90,7 @@ const Dashboard = () => {
       )}
 
       <BroadcastPopup restaurantCategory={dashboardData.restaurant?.category} />
-      <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} />
+      <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} lockCollapsed={activePage === 'financeiro'} />
 
       {activePage === 'fichaTecnica' ? (
         <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
