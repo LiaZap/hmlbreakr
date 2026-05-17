@@ -418,7 +418,7 @@ const CuisineBenchmarks = ({ clients = [], onCuisineClick }) => {
                       </div>
 
                       {/* Mini-KPIs */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[11px]">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-2 text-[11px]">
                         <Metric
                           label="CMV"
                           value={g.cmvAvg != null ? `${g.cmvAvg}%` : '—'}

@@ -304,7 +304,7 @@ const CommandPalette = ({
         >
           <Avatar client={item.client} />
           <span className="flex-1 truncate font-medium">{item.client.name || 'Sem nome'}</span>
-          <span className="text-xs text-white/40 flex-shrink-0 ml-2 truncate max-w-[150px]">{cuisine}</span>
+          <span className="text-xs text-white/40 flex-shrink-0 ml-2 truncate max-w-[90px] sm:max-w-[150px]">{cuisine}</span>
         </div>
       );
     }
@@ -348,7 +348,7 @@ const CommandPalette = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -8 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="w-full max-w-[600px] bg-[#1a1d23] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+            className="w-full max-w-[92vw] sm:max-w-[600px] bg-[#1a1d23] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-label="Paleta de comandos"

@@ -202,19 +202,19 @@ const MatrizPreco = () => {
                 
                 <div className="space-y-1">
                   {categoryItems.map(item => (
-                    <div 
-                      key={item.id} 
-                      className={`flex items-center justify-between p-2 rounded-[8px] border border-transparent hover:bg-[#1E1E1E] transition-colors ${hoveredItem === item.id ? 'bg-[#1E1E1E] border-[#333]' : 'bg-transparent'}`}
+                    <div
+                      key={item.id}
+                      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 p-2 rounded-[8px] border border-transparent hover:bg-[#1E1E1E] transition-colors ${hoveredItem === item.id ? 'bg-[#1E1E1E] border-[#333]' : 'bg-transparent'}`}
                       onMouseEnter={() => setHoveredItem(item.id)}
                       onMouseLeave={() => setHoveredItem(null)}
                     >
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0`} style={{ backgroundColor: config.color }} />
-                        <span className={`text-[11px] truncate ${item.hasFicha ? 'text-[#E1E1E1]' : 'text-red-500'}`} title={!item.hasFicha ? 'Produto sem ficha técnica' : ''}>{item.name}</span>
+                      <div className="flex items-start sm:items-center gap-2 min-w-0">
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 sm:mt-0`} style={{ backgroundColor: config.color }} />
+                        <span className={`text-[11px] leading-snug break-words sm:truncate ${item.hasFicha ? 'text-[#E1E1E1]' : 'text-red-500'}`} title={!item.hasFicha ? 'Produto sem ficha técnica' : ''}>{item.name}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-[10px]">
+                      <div className="flex items-center gap-4 text-[10px] shrink-0 pl-3.5 sm:pl-0">
                         <span className="text-[#868686]">Vendas <span className="text-white font-medium">{item.sales}</span></span>
-                        <span className="text-[#868686] w-[60px] text-right">R$ {item.price.toFixed(2)}</span>
+                        <span className="text-[#868686] sm:w-[60px] text-right">R$ {item.price.toFixed(2)}</span>
                       </div>
                     </div>
                   ))}

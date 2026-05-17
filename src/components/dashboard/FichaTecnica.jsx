@@ -2757,8 +2757,8 @@ const FichaTecnica = () => {
         </div>
         )}
 
-        {/* MIDDLE PANEL - Submenu (horizontal on mobile, vertical on desktop) */}
-        <div className="w-full lg:w-[220px] shrink-0 bg-[#131313] p-3 lg:py-6 lg:px-4 flex flex-row lg:flex-col gap-2 lg:gap-4 lg:border-r border-[#1E1E1E] overflow-x-auto">
+        {/* MIDDLE PANEL - Submenu (horizontal chip bar on mobile, vertical sidebar on desktop) */}
+        <div className="w-full lg:w-[220px] shrink-0 bg-[#131313] p-2 lg:py-6 lg:px-4 flex flex-row lg:flex-col gap-2 lg:gap-4 border-b lg:border-b-0 lg:border-r border-[#1E1E1E]">
           {/* Operacional Header — desktop only */}
           <div className="hidden lg:flex items-center justify-between mb-2">
             <div>
@@ -2775,7 +2775,7 @@ const FichaTecnica = () => {
           {/* Insumos Tab */}
           <button
             onClick={() => setActiveTab('insumos')}
-            className={`flex items-center gap-2 lg:gap-3 p-2.5 lg:p-3 rounded-[12px] transition-colors w-auto lg:w-full text-left whitespace-nowrap ${
+            className={`flex items-center justify-center lg:justify-start gap-2 lg:gap-3 p-2.5 lg:p-3 rounded-[12px] transition-colors flex-1 lg:flex-none lg:w-full text-left whitespace-nowrap ${
               activeTab === 'insumos' ? 'bg-[#1E1E1E]' : 'hover:bg-[#1A1A1A]'
             }`}
           >
@@ -2798,7 +2798,7 @@ const FichaTecnica = () => {
           {/* Ficha Técnica Tab */}
           <button
             onClick={() => setActiveTab('fichas')}
-            className={`flex items-center gap-2 lg:gap-3 p-2.5 lg:p-3 rounded-[12px] transition-colors w-auto lg:w-full text-left whitespace-nowrap ${
+            className={`flex items-center justify-center lg:justify-start gap-2 lg:gap-3 p-2.5 lg:p-3 rounded-[12px] transition-colors flex-1 lg:flex-none lg:w-full text-left whitespace-nowrap ${
               activeTab === 'fichas' ? 'bg-[#1E1E1E]' : 'hover:bg-[#1A1A1A]'
             }`}
           >
