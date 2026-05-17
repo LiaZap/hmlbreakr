@@ -23,9 +23,10 @@ const fmtBRL = (n) => (n || 0).toLocaleString('pt-BR', { style: 'currency', curr
  * Fórmula:
  *   CMV alvo = 100% - BASE - LucroAlvo
  *   Preço cardápio próprio = custoTotal / (CMV / 100)
- *   Preço marketplace = preço próprio / (1 - comissão_marketplace)
+ *   Preço marketplace = (preço próprio + taxa entrega) / (1 - comissão_marketplace)
  *
- * BAH-039
+ * BAH-039 / BAH-087 (taxa de entrega absorvida entra no numerador do
+ * preço de marketplace — opcional, default 0 mantém o cálculo antigo).
  */
 const SimuladorPrecificacao = ({ onClose }) => {
   const { dashboardData } = useDashboard();
@@ -51,6 +52,10 @@ const SimuladorPrecificacao = ({ onClose }) => {
   const [selectedFichaId, setSelectedFichaId] = useState(fichas[0]?.id || null);
   const [lucroAlvo, setLucroAlvo] = useState(20); // padrão 20%
   const [search, setSearch] = useState('');
+  // BAH-087: taxa de entrega que o restaurante absorve por pedido no
+  // marketplace. Opcional — vazio/0 = preço marketplace sem componente
+  // de entrega (comportamento anterior).
+  const [taxaEntrega, setTaxaEntrega] = useState('');
 
   const filteredFichas = useMemo(
     () => fichas.filter((f) => (f.name || '').toLowerCase().includes(search.toLowerCase())),
@@ -69,10 +74,15 @@ const SimuladorPrecificacao = ({ onClose }) => {
 
     const precoProprio = custoTotal / cmvAlvoFraction;
 
-    // Preço por marketplace — cada um aplica SUA comissão sobre o preço próprio
+    // Taxa de entrega absorvida — entra no numerador do preço marketplace.
+    const entrega = parseCurrency(taxaEntrega);
+
+    // Preço por marketplace — cada um aplica SUA comissão sobre
+    // (preço próprio + taxa de entrega absorvida).
     const precosMarketplaces = marketplaces.map((m) => {
       const c = m.commission;
-      const preco = c > 0 && c < 100 ? precoProprio / (1 - c / 100) : precoProprio;
+      const base = precoProprio + entrega;
+      const preco = c > 0 && c < 100 ? base / (1 - c / 100) : base;
       return {
         name: m.name,
         commission: c,
@@ -94,7 +104,7 @@ const SimuladorPrecificacao = ({ onClose }) => {
       lucroAtualPct,
       deltaProprio,
     };
-  }, [selectedFicha, basePct, cmvAlvoFraction, marketplaces]);
+  }, [selectedFicha, basePct, cmvAlvoFraction, marketplaces, taxaEntrega]);
 
   // CMV negativo = combinação BASE+Lucro inviável
   const cmvInviavel = cmvAlvo <= 0;
@@ -189,6 +199,24 @@ const SimuladorPrecificacao = ({ onClose }) => {
                     ⚠️ BASE + Lucro {'>'} 100%. Reduza o lucro alvo ou trabalhe pra baixar a BASE.
                   </div>
                 )}
+              </div>
+
+              {/* Taxa de entrega absorvida (opcional) — entra no preço de marketplace */}
+              <div>
+                <label className="text-[11px] text-[#868686] uppercase tracking-wider font-semibold mb-2 block">
+                  Taxa de entrega por pedido <span className="text-[#555] normal-case tracking-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={taxaEntrega}
+                  onChange={(e) => setTaxaEntrega(e.target.value)}
+                  placeholder="R$ 0,00"
+                  inputMode="decimal"
+                  className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[10px] px-3 py-2 text-[13px] text-white placeholder:text-[#555] outline-none focus:border-[#F5A623]"
+                />
+                <p className="text-[10px] text-[#555] mt-1 leading-snug">
+                  Valor da entrega que você absorve por pedido. Soma ao preço de marketplace antes da comissão.
+                </p>
               </div>
 
               {/* Resultado: card de Cardápio Próprio + 1 card por marketplace */}
