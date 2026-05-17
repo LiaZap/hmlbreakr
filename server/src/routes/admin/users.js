@@ -29,9 +29,80 @@ const safeAdmin = (a) => {
   return { ...rest, hasPassword: !!password };
 };
 
+// Marcador pra reconhecer contas materializadas a partir do ADMIN_ACCOUNTS legado.
+// Reusa o campo `invitedBy` (já existe no model AdminUser) — NÃO altera o schema.
+const LEGACY_MARKER = 'system-legacy';
+
+/**
+ * BAH-085 — Seed idempotente dos admins legados na tabela AdminUser.
+ *
+ * Contexto: os admins históricos (gustavo/contato/gabriela/jeff) viviam APENAS
+ * no array hardcoded ADMIN_ACCOUNTS de routes.js — nunca foram para a tabela.
+ * A tela "Funcionários Breakr" lê só a tabela, então eles "ficavam pra trás".
+ *
+ * Esta função garante que cada conta de ADMIN_ACCOUNTS exista como AdminUser:
+ *  - match por email (lowercase); se já existe → NÃO toca (não duplica, não
+ *    sobrescreve senha de quem já trocou, não rebaixa role/permissões).
+ *  - se não existe → cria com name/email/role do legado + hash bcrypt da senha
+ *    legada, pra que o login DB-first passe a funcionar pelo caminho do banco.
+ *
+ * Idempotência: rodar N vezes converge para o mesmo estado. Best-effort —
+ * qualquer erro é logado e engolido pra nunca derrubar o endpoint de listagem.
+ *
+ * O `require` de routes.js é lazy (dentro da função) de propósito: routes.js
+ * faz `require` deste arquivo no topo, então um require circular no topo
+ * devolveria exports vazio. Em runtime o módulo já está totalmente carregado.
+ */
+async function seedLegacyAdmins() {
+  let ADMIN_ACCOUNTS;
+  try {
+    ({ ADMIN_ACCOUNTS } = require('../../routes'));
+  } catch (e) {
+    console.error('[seedLegacyAdmins] não foi possível carregar ADMIN_ACCOUNTS', e);
+    return;
+  }
+  if (!Array.isArray(ADMIN_ACCOUNTS) || ADMIN_ACCOUNTS.length === 0) return;
+
+  for (const acc of ADMIN_ACCOUNTS) {
+    try {
+      const email = String(acc.email || '').toLowerCase().trim();
+      if (!email || !acc.password) continue;
+
+      // Idempotência: se já existe (foi criado pela UI ou por seed anterior),
+      // não mexe — preserva senha trocada, role e permissões atuais.
+      const existing = await prisma.adminUser.findUnique({ where: { email } });
+      if (existing) continue;
+
+      const role = VALID_ROLES.includes(acc.role) ? acc.role : 'admin';
+      const hashedPassword = await bcrypt.hash(acc.password, 10);
+
+      await prisma.adminUser.create({
+        data: {
+          name: (acc.name || email).trim(),
+          email,
+          password: hashedPassword,
+          role,
+          permissions: [...(ROLE_TEMPLATES[role] || [])],
+          invitedBy: LEGACY_MARKER,
+          invitedAt: new Date(),
+        },
+      });
+    } catch (e) {
+      // Corrida (duas requisições simultâneas → P2002 unique) ou qualquer outro
+      // erro: ignora. Idempotente — a próxima passada já vê o registro existente.
+      if (e && e.code === 'P2002') continue;
+      console.error('[seedLegacyAdmins] falha ao materializar', acc && acc.email, e);
+    }
+  }
+}
+
 // LIST — todos os admins ativos (e inativos opcional via ?showInactive=1)
 router.get('/', async (req, res) => {
   try {
+    // BAH-085: materializa admins legados na tabela antes de listar, pra que
+    // a tela "Funcionários Breakr" reflita o banco real. Idempotente.
+    await seedLegacyAdmins();
+
     const showInactive = req.query.showInactive === '1';
     const where = showInactive ? {} : { active: true };
     const items = await prisma.adminUser.findMany({
@@ -171,3 +242,5 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+// Exportado pra permitir rodar o seed no boot do servidor, se desejado (BAH-085).
+module.exports.seedLegacyAdmins = seedLegacyAdmins;

@@ -11,6 +11,17 @@ const CATEGORIES = {
   CRITICO: { label: 'Críticos', color: '#FF4560', description: 'Baixa popularidade e baixa rentabilidade.', icon: '●' },
 };
 
+// BAH-083: categorias que NÃO são pratos vendáveis e não devem aparecer
+// na Engenharia de Menu. "Insumo Pronto Preparado" gera uma ficha técnica
+// auto-criada (FichaTecnica.jsx) apenas para ser usada como ingrediente
+// dentro de outras fichas — não é um item de cardápio que o restaurante vende.
+const NON_MENU_CATEGORIES = new Set(['insumo pronto preparado']);
+
+// Verdadeiro quando o item/ficha é um insumo (não um prato vendável).
+// Critério: a categoria/type marca explicitamente o item como insumo.
+const isInsumoItem = (categoryOrType) =>
+  NON_MENU_CATEGORIES.has(String(categoryOrType || '').toLowerCase().trim());
+
 const MatrizPreco = () => {
   const { dashboardData } = useDashboard();
   const [activeCategory, setActiveCategory] = useState(null); // Filter by click on chips (classification)
@@ -41,8 +52,23 @@ const MatrizPreco = () => {
   };
 
   const itemsWithMetrics = useMemo(() => {
-    const displayItems = dashboardData.menuEngineering || [];
     const allFichas = dashboardData.operational?.fichas || [];
+
+    // BAH-083: nomes das fichas que são insumos (ex.: "Insumo Pronto Preparado").
+    // Itens de menuEngineering antigos podem não carregar a categoria correta;
+    // cruzamos pelo nome da ficha de origem para garantir a exclusão.
+    const insumoFichaNames = new Set(
+      allFichas
+        .filter(f => isInsumoItem(f.type))
+        .map(f => f.name?.toLowerCase().trim())
+        .filter(Boolean)
+    );
+
+    // Mantém apenas pratos vendáveis: exclui itens cuja categoria é de insumo
+    // ou cujo nome bate com uma ficha-insumo auto-criada.
+    const displayItems = (dashboardData.menuEngineering || []).filter(
+      item => !isInsumoItem(item.category) && !insumoFichaNames.has(item.name?.toLowerCase().trim())
+    );
     const fichaNames = new Set(allFichas.map(f => f.name?.toLowerCase().trim()));
     const fichaIds = new Set(allFichas.map(f => `ft_${f.id}`));
 

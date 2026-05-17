@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 
 import { useDashboard } from '../../context/DashboardContext';
 
+// BAH-083: a Engenharia de Menu lista somente pratos vendáveis. A categoria
+// "Insumo Pronto Preparado" gera uma ficha técnica auto-criada (ver
+// FichaTecnica.jsx) que serve apenas como ingrediente de outras fichas —
+// não é um item de cardápio. Itens com essa categoria não entram no menu.
+const NON_MENU_CATEGORIES = new Set(['insumo pronto preparado']);
+
+const isInsumoCategory = (categoryOrType) =>
+  NON_MENU_CATEGORIES.has(String(categoryOrType || '').toLowerCase().trim());
+
 const EngenhariaMenu = () => {
   const { dashboardData, updateDashboardData } = useDashboard();
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -40,7 +49,13 @@ const EngenhariaMenu = () => {
         if (!res.ok) throw new Error('Upload failed');
         return res.json();
       })
-      .then(menuItems => {
+      .then(rawMenuItems => {
+        // BAH-083: descarta itens importados cuja categoria indica insumo —
+        // insumos não são pratos vendáveis e não pertencem à Engenharia de Menu.
+        const menuItems = (rawMenuItems || []).filter(
+          item => !isInsumoCategory(item.category || item.categoria)
+        );
+
         // Merge with existing matrix (by name) — never wipe previous items
         const existingMenu = dashboardData.menuEngineering || [];
         const mergedMap = new Map(
@@ -51,7 +66,11 @@ const EngenhariaMenu = () => {
           if (!key) return;
           mergedMap.set(key, { ...(mergedMap.get(key) || {}), ...item });
         });
-        const mergedMenu = Array.from(mergedMap.values());
+        // BAH-083: também remove da matriz mesclada quaisquer itens-insumo
+        // remanescentes de importações anteriores (auto-saneamento).
+        const mergedMenu = Array.from(mergedMap.values()).filter(
+          m => !isInsumoCategory(m.category)
+        );
 
         // Create fichas técnicas for each imported item (existing fichas preserved)
         const existingFichas = dashboardData.operational?.fichas || [];

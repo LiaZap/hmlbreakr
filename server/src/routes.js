@@ -52,6 +52,11 @@ const ADMIN_ACCOUNTS = [
   }
 ];
 
+// Exposto pra que o seed idempotente de admins legados (routes/admin/users.js)
+// consiga materializar cada conta hardcoded na tabela AdminUser. Ver BAH-085.
+// Anexado ao router porque o módulo termina com `module.exports = router`.
+router.ADMIN_ACCOUNTS = ADMIN_ACCOUNTS;
+
 // Admin Login — checa AdminUser do banco PRIMEIRO, fallback pra ADMIN_ACCOUNTS legado
 router.post('/admin/login', async (req, res) => {
   const { email, password } = req.body;

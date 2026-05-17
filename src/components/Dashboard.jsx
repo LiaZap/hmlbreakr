@@ -330,11 +330,8 @@ const Dashboard = () => {
               </p>
             </div>
 
-            {/* Base Info Box — display inline (BAH-036: modal removido, indicadores ficam em CostStructure e Fichas Técnicas) */}
-            <div
-              className="p-3 md:p-4 bg-[#FF9406] rounded-[12px] md:rounded-[14px] flex flex-col items-center justify-center text-center"
-              title={`BASE = Custos Fixos (${dashboardData.breakEven.base.breakdown?.custosFixos || '0'}%) + Impostos (${dashboardData.breakEven.base.breakdown?.impostos || '0'}%) + Cartão (${dashboardData.breakEven.base.breakdown?.taxasCartao || '0'}%)`}
-            >
+            {/* Base Info Box — display inline (BAH-036: modal removido; BAH-086: fórmula removida da UI) */}
+            <div className="p-3 md:p-4 bg-[#FF9406] rounded-[12px] md:rounded-[14px] flex flex-col items-center justify-center text-center">
               <div className="flex items-center gap-2 mb-1 md:mb-2">
                 <span className="font-bold text-[11px] text-black">Base</span>
                 <span className="px-2.5 py-0.5 bg-black/15 rounded-full text-[9px] font-medium text-black flex items-center gap-1">
@@ -343,11 +340,17 @@ const Dashboard = () => {
                     <path d="M12 3l1.5 5.5H19l-4.5 3.5L16 17.5 12 14l-4 3.5L9.5 12 5 8.5h5.5z"/>
                   </svg>
                 </span>
+                <InfoTooltip
+                  position="bottom-left"
+                  content="Indicador de custos fundamentais que precisam ser incluídos em todas suas vendas"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="cursor-pointer shrink-0">
+                    <circle cx="12" cy="12" r="10" stroke="black" strokeWidth="1.5"/>
+                    <path d="M12 16v-4M12 8h.01" stroke="black" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </InfoTooltip>
               </div>
-              <span className="font-bold text-[24px] md:text-[28px] text-black leading-none mb-1">{dashboardData.breakEven.base.value}</span>
-              <p className="font-medium text-[10px] text-black/60">
-                CF {dashboardData.breakEven.base.breakdown?.custosFixos || '0'}% · Imp {dashboardData.breakEven.base.breakdown?.impostos || '0'}% · Cartão {dashboardData.breakEven.base.breakdown?.taxasCartao || '0'}%
-              </p>
+              <span className="font-bold text-[24px] md:text-[28px] text-black leading-none">{dashboardData.breakEven.base.value}</span>
             </div>
           </div>
 
