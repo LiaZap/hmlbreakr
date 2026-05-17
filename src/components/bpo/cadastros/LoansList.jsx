@@ -126,71 +126,146 @@ const LoansList = () => {
           description="Cadastre contratos de financiamento ou capital de giro pra acompanhar saldo devedor e parcelas."
         /></Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Banco / Descrição</Th>
-            <Th align="right">Principal</Th>
-            <Th align="right">Taxa a.m.</Th>
-            <Th align="right">Parcelas</Th>
-            <Th align="right">Parcela R$</Th>
-            <Th align="right">Saldo devedor</Th>
-            <Th>Status</Th>
-            <Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Banco / Descrição</Th>
+                <Th align="right">Principal</Th>
+                <Th align="right">Taxa a.m.</Th>
+                <Th align="right">Parcelas</Th>
+                <Th align="right">Parcela R$</Th>
+                <Th align="right">Saldo devedor</Th>
+                <Th>Status</Th>
+                <Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((loan) => {
+                  const progress = loan.totalInstallments > 0
+                    ? Math.round((loan.paidInstallments / loan.totalInstallments) * 100)
+                    : 0;
+                  const stt = STATUS_LABELS[loan.status] || STATUS_LABELS.active;
+                  return (
+                    <Tr key={loan.id} onClick={() => setEditing(loan)}>
+                      <Td>
+                        <div className="font-medium text-text-strong">{loan.bankName}</div>
+                        {loan.description && <div className="text-[11px] text-text-muted">{loan.description}</div>}
+                        {loan.contractNumber && <div className="text-[10px] text-text-subtle">Contrato {loan.contractNumber}</div>}
+                      </Td>
+                      <Td align="right" className="tabular-nums">{fmtBRL(loan.principal)}</Td>
+                      <Td align="right" className="tabular-nums text-xs">{fmtPct(loan.interestRateMonthly)}</Td>
+                      <Td align="right" className="tabular-nums text-xs">
+                        <div>{loan.paidInstallments}/{loan.totalInstallments}</div>
+                        <div className="w-full h-1 bg-border rounded mt-1 overflow-hidden">
+                          <div className="h-full bg-success" style={{ width: `${progress}%` }} />
+                        </div>
+                      </Td>
+                      <Td align="right" className="tabular-nums">{fmtBRL(loan.installmentValue)}</Td>
+                      <Td align="right" className="tabular-nums font-semibold text-warning">{fmtBRL(loan.currentBalance)}</Td>
+                      <Td><Badge variant={stt.color}>{stt.label}</Badge></Td>
+                      <Td align="right">
+                        <div className="flex justify-end gap-2">
+                          {loan.status === 'active' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handlePayInstallment(loan); }}
+                              className="text-xs text-success hover:underline"
+                              title="Registrar uma parcela paga"
+                            >
+                              + Parcela paga
+                            </button>
+                          )}
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const ok = await confirm({ title: 'Excluir contrato?', message: `"${loan.bankName}" será cancelado.`, confirmLabel: 'Excluir', variant: 'danger' });
+                              if (!ok) return;
+                              try {
+                                const res = await fetch(bpoUrl(`/loans/${loan.id}`), { method: 'DELETE' });
+                                if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                                toast.success('Contrato cancelado');
+                                fetchItems();
+                              } catch (err) { toast.error(err.message); }
+                            }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
+                        </div>
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((loan) => {
               const progress = loan.totalInstallments > 0
                 ? Math.round((loan.paidInstallments / loan.totalInstallments) * 100)
                 : 0;
               const stt = STATUS_LABELS[loan.status] || STATUS_LABELS.active;
               return (
-                <Tr key={loan.id} onClick={() => setEditing(loan)}>
-                  <Td>
-                    <div className="font-medium text-text-strong">{loan.bankName}</div>
-                    {loan.description && <div className="text-[11px] text-text-muted">{loan.description}</div>}
-                    {loan.contractNumber && <div className="text-[10px] text-text-subtle">Contrato {loan.contractNumber}</div>}
-                  </Td>
-                  <Td align="right" className="tabular-nums">{fmtBRL(loan.principal)}</Td>
-                  <Td align="right" className="tabular-nums text-xs">{fmtPct(loan.interestRateMonthly)}</Td>
-                  <Td align="right" className="tabular-nums text-xs">
-                    <div>{loan.paidInstallments}/{loan.totalInstallments}</div>
-                    <div className="w-full h-1 bg-border rounded mt-1 overflow-hidden">
+                <Card key={loan.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(loan)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm text-text-strong truncate">{loan.bankName}</div>
+                      {loan.description && <div className="text-[11px] text-text-muted truncate">{loan.description}</div>}
+                      {loan.contractNumber && <div className="text-[10px] text-text-subtle truncate">Contrato {loan.contractNumber}</div>}
+                    </div>
+                    <Badge variant={stt.color}>{stt.label}</Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                    <div>
+                      <span className="text-text-subtle">Principal</span>
+                      <div className="tabular-nums text-text-strong">{fmtBRL(loan.principal)}</div>
+                    </div>
+                    <div>
+                      <span className="text-text-subtle">Taxa a.m.</span>
+                      <div className="tabular-nums text-text-strong">{fmtPct(loan.interestRateMonthly)}</div>
+                    </div>
+                    <div>
+                      <span className="text-text-subtle">Parcela</span>
+                      <div className="tabular-nums text-text-strong">{fmtBRL(loan.installmentValue)}</div>
+                    </div>
+                    <div>
+                      <span className="text-text-subtle">Saldo devedor</span>
+                      <div className="tabular-nums font-semibold text-warning">{fmtBRL(loan.currentBalance)}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-[11px] text-text-muted mb-1">
+                      <span>Parcelas pagas</span>
+                      <span className="tabular-nums">{loan.paidInstallments}/{loan.totalInstallments}</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-border rounded overflow-hidden">
                       <div className="h-full bg-success" style={{ width: `${progress}%` }} />
                     </div>
-                  </Td>
-                  <Td align="right" className="tabular-nums">{fmtBRL(loan.installmentValue)}</Td>
-                  <Td align="right" className="tabular-nums font-semibold text-warning">{fmtBRL(loan.currentBalance)}</Td>
-                  <Td><Badge variant={stt.color}>{stt.label}</Badge></Td>
-                  <Td align="right">
-                    <div className="flex justify-end gap-2">
-                      {loan.status === 'active' && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handlePayInstallment(loan); }}
-                          className="text-xs text-success hover:underline"
-                          title="Registrar uma parcela paga"
-                        >
-                          + Parcela paga
-                        </button>
-                      )}
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const ok = await confirm({ title: 'Excluir contrato?', message: `"${loan.bankName}" será cancelado.`, confirmLabel: 'Excluir', variant: 'danger' });
-                          if (!ok) return;
-                          try {
-                            const res = await fetch(bpoUrl(`/loans/${loan.id}`), { method: 'DELETE' });
-                            if (!res.ok) throw new Error((await res.json()).error || 'Falha');
-                            toast.success('Contrato cancelado');
-                            fetchItems();
-                          } catch (err) { toast.error(err.message); }
-                        }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
-                    </div>
-                  </Td>
-                </Tr>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-border-subtle">
+                    {loan.status === 'active' && (
+                      <Button variant="primary" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); handlePayInstallment(loan); }}>
+                        + Parcela paga
+                      </Button>
+                    )}
+                    <Button variant="secondary" size="sm" className="flex-1" onClick={async (e) => {
+                      e.stopPropagation();
+                      const ok = await confirm({ title: 'Excluir contrato?', message: `"${loan.bankName}" será cancelado.`, confirmLabel: 'Excluir', variant: 'danger' });
+                      if (!ok) return;
+                      try {
+                        const res = await fetch(bpoUrl(`/loans/${loan.id}`), { method: 'DELETE' });
+                        if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                        toast.success('Contrato cancelado');
+                        fetchItems();
+                      } catch (err) { toast.error(err.message); }
+                    }}>Excluir</Button>
+                  </div>
+                </Card>
               );
             })}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {editing && (

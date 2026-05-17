@@ -100,29 +100,79 @@ const ReceivableAdvancesList = () => {
           description="Cadastre as antecipações que você faz nas operadoras pra ver o impacto real no seu caixa."
         /></Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Descrição</Th>
-            <Th>Operadora</Th>
-            <Th align="right">Valor médio/mês</Th>
-            <Th align="right">Taxa a.m.</Th>
-            <Th align="right">Dias antec.</Th>
-            <Th align="right">Desconto/mês</Th>
-            <Th align="right">Líquido/mês</Th>
-            <Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Descrição</Th>
+                <Th>Operadora</Th>
+                <Th align="right">Valor médio/mês</Th>
+                <Th align="right">Taxa a.m.</Th>
+                <Th align="right">Dias antec.</Th>
+                <Th align="right">Desconto/mês</Th>
+                <Th align="right">Líquido/mês</Th>
+                <Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((a) => (
+                  <Tr key={a.id} onClick={() => setEditing(a)}>
+                    <Td className="font-medium text-text-strong">{a.description}</Td>
+                    <Td>{a.paymentMethod ? <Badge variant="default">{a.paymentMethod.name}</Badge> : <span className="text-xs text-text-subtle">—</span>}</Td>
+                    <Td align="right" className="tabular-nums">{fmtBRL(a.averageValue)}</Td>
+                    <Td align="right" className="tabular-nums">{fmtPct(a.monthlyRate)}</Td>
+                    <Td align="right" className="tabular-nums text-xs">{a.daysAdvanced} dias</Td>
+                    <Td align="right" className="tabular-nums text-warning font-semibold">-{fmtBRL(a.totalDiscount)}</Td>
+                    <Td align="right" className="tabular-nums">{fmtBRL(a.finalValue)}</Td>
+                    <Td align="right">
+                      <button onClick={async (e) => {
+                        e.stopPropagation();
+                        const ok = await confirm({ title: 'Excluir antecipação?', message: `"${a.description}" será removida.`, confirmLabel: 'Excluir', variant: 'danger' });
+                        if (!ok) return;
+                        try {
+                          const res = await fetch(bpoUrl(`/advances/${a.id}`), { method: 'DELETE' });
+                          if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                          toast.success(`"${a.description}" excluída`);
+                          fetchItems();
+                        } catch (err) { toast.error(err.message); }
+                      }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((a) => (
-              <Tr key={a.id} onClick={() => setEditing(a)}>
-                <Td className="font-medium text-text-strong">{a.description}</Td>
-                <Td>{a.paymentMethod ? <Badge variant="default">{a.paymentMethod.name}</Badge> : <span className="text-xs text-text-subtle">—</span>}</Td>
-                <Td align="right" className="tabular-nums">{fmtBRL(a.averageValue)}</Td>
-                <Td align="right" className="tabular-nums">{fmtPct(a.monthlyRate)}</Td>
-                <Td align="right" className="tabular-nums text-xs">{a.daysAdvanced} dias</Td>
-                <Td align="right" className="tabular-nums text-warning font-semibold">-{fmtBRL(a.totalDiscount)}</Td>
-                <Td align="right" className="tabular-nums">{fmtBRL(a.finalValue)}</Td>
-                <Td align="right">
-                  <button onClick={async (e) => {
+              <Card key={a.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(a)}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-medium text-sm text-text-strong truncate min-w-0">{a.description}</div>
+                  {a.paymentMethod && <Badge variant="default">{a.paymentMethod.name}</Badge>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                  <div>
+                    <span className="text-text-subtle">Valor médio/mês</span>
+                    <div className="tabular-nums text-text-strong">{fmtBRL(a.averageValue)}</div>
+                  </div>
+                  <div>
+                    <span className="text-text-subtle">Taxa a.m.</span>
+                    <div className="tabular-nums text-text-strong">{fmtPct(a.monthlyRate)} · {a.daysAdvanced} dias</div>
+                  </div>
+                  <div>
+                    <span className="text-text-subtle">Desconto/mês</span>
+                    <div className="tabular-nums text-warning font-semibold">-{fmtBRL(a.totalDiscount)}</div>
+                  </div>
+                  <div>
+                    <span className="text-text-subtle">Líquido/mês</span>
+                    <div className="tabular-nums text-success font-semibold">{fmtBRL(a.finalValue)}</div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-1 border-t border-border-subtle">
+                  <Button variant="secondary" size="sm" onClick={async (e) => {
                     e.stopPropagation();
                     const ok = await confirm({ title: 'Excluir antecipação?', message: `"${a.description}" será removida.`, confirmLabel: 'Excluir', variant: 'danger' });
                     if (!ok) return;
@@ -132,12 +182,12 @@ const ReceivableAdvancesList = () => {
                       toast.success(`"${a.description}" excluída`);
                       fetchItems();
                     } catch (err) { toast.error(err.message); }
-                  }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
-                </Td>
-              </Tr>
+                  }}>Excluir</Button>
+                </div>
+              </Card>
             ))}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {editing && (
@@ -231,7 +281,7 @@ const ReceivableAdvanceModal = ({ item, paymentMethods, onClose, onSaved }) => {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div>
             <label className="text-xs text-text-muted block mb-1">Taxa a.m. (%)</label>
             <Input

@@ -115,9 +115,9 @@ const DRE = ({ data }) => {
                 {needsDividerBefore && (
                   <div className="w-full h-px bg-[#2A2A2C] my-2" />
                 )}
-                <div className={`flex items-center gap-2 py-[5px] px-2 rounded-[8px] ${isResult ? 'bg-[#1F1F1F]' : ''}`}>
+                <div className={`flex items-center gap-1.5 md:gap-2 py-[5px] px-1.5 md:px-2 rounded-[8px] ${isResult ? 'bg-[#1F1F1F]' : ''}`}>
                   {/* Sign badge */}
-                  <div className={`w-[18px] h-[18px] rounded-[4px] flex items-center justify-center shrink-0 text-[10px] font-bold
+                  <div className={`w-[16px] h-[16px] md:w-[18px] md:h-[18px] rounded-[4px] flex items-center justify-center shrink-0 text-[10px] font-bold
                     ${isResult
                       ? (data.isProfit ? 'bg-[#00B37E]/20 text-[#00B37E]' : 'bg-[#FF4560]/20 text-[#FF4560]')
                       : isSubtotal
@@ -132,7 +132,7 @@ const DRE = ({ data }) => {
 
                   {/* Label */}
                   <div className="flex-1 min-w-0">
-                    <div className={`text-[11px] leading-tight ${row.bold ? 'font-semibold' : 'font-normal'}`}
+                    <div className={`text-[10px] md:text-[11px] leading-tight ${row.bold ? 'font-semibold' : 'font-normal'}`}
                       style={{ color: row.color || (isDeduction ? '#868686' : '#C8C8C8') }}
                     >
                       {row.label}
@@ -143,14 +143,14 @@ const DRE = ({ data }) => {
                   </div>
 
                   {/* Pct */}
-                  <div className={`text-[10px] w-[38px] text-right shrink-0 ${row.bold ? 'font-semibold' : 'font-normal'}`}
+                  <div className={`text-[9px] md:text-[10px] w-[34px] md:w-[38px] text-right shrink-0 tabular-nums ${row.bold ? 'font-semibold' : 'font-normal'}`}
                     style={{ color: row.color || (isDeduction ? '#555' : '#7E7E7E') }}
                   >
                     {row.pct}
                   </div>
 
                   {/* Value */}
-                  <div className={`text-[11px] w-[90px] text-right shrink-0 ${row.bold ? 'font-semibold' : 'font-normal'}`}
+                  <div className={`text-[10px] md:text-[11px] w-[78px] md:w-[90px] text-right shrink-0 tabular-nums ${row.bold ? 'font-semibold' : 'font-normal'}`}
                     style={{ color: row.color || (isDeduction ? '#868686' : '#C8C8C8') }}
                   >
                     {row.value}

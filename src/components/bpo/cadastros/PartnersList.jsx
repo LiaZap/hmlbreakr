@@ -58,20 +58,57 @@ const PartnersList = () => {
           description="Cadastre os sócios pra registrar pró-labore e retiradas."
         /></Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Nome</Th><Th>CPF</Th><Th>Contato</Th>
-            <Th align="right">Pró-Labore</Th><Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Nome</Th><Th>CPF</Th><Th>Contato</Th>
+                <Th align="right">Pró-Labore</Th><Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((p) => (
+                  <Tr key={p.id} onClick={() => setEditing(p)}>
+                    <Td className="font-medium text-text-strong">{p.name}</Td>
+                    <Td className="font-mono text-xs">{fmtCpf(p.cpf)}</Td>
+                    <Td className="text-xs text-text-muted">{p.email || p.phone || '—'}</Td>
+                    <Td align="right" className="font-semibold tabular-nums">{fmtBRL(p.prolaboreAmount)}</Td>
+                    <Td align="right">
+                      <button onClick={async (e) => {
+                        e.stopPropagation();
+                        const ok = await confirm({ title: 'Excluir sócio?', message: `O sócio "${p.name}" será removido.`, confirmLabel: 'Excluir', variant: 'danger' });
+                        if (!ok) return;
+                        try {
+                          const res = await fetch(bpoUrl(`/partners/${p.id}`), { method: 'DELETE' });
+                          if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                          toast.success(`Sócio "${p.name}" excluído`);
+                          fetchItems();
+                        } catch (err) { toast.error(err.message); }
+                      }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((p) => (
-              <Tr key={p.id} onClick={() => setEditing(p)}>
-                <Td className="font-medium text-text-strong">{p.name}</Td>
-                <Td className="font-mono text-xs">{fmtCpf(p.cpf)}</Td>
-                <Td className="text-xs text-text-muted">{p.email || p.phone || '—'}</Td>
-                <Td align="right" className="font-semibold tabular-nums">{fmtBRL(p.prolaboreAmount)}</Td>
-                <Td align="right">
-                  <button onClick={async (e) => {
+              <Card key={p.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(p)}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm text-text-strong truncate">{p.name}</div>
+                    <div className="text-xs font-mono text-text-muted truncate">{fmtCpf(p.cpf)}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-[10px] text-text-subtle uppercase tracking-wider">Pró-Labore</div>
+                    <div className="font-semibold text-sm tabular-nums text-text-strong">{fmtBRL(p.prolaboreAmount)}</div>
+                  </div>
+                </div>
+                <span className="text-xs text-text-muted truncate">{p.email || p.phone || 'Sem contato'}</span>
+                <div className="flex justify-end pt-1 border-t border-border-subtle">
+                  <Button variant="secondary" size="sm" onClick={async (e) => {
                     e.stopPropagation();
                     const ok = await confirm({ title: 'Excluir sócio?', message: `O sócio "${p.name}" será removido.`, confirmLabel: 'Excluir', variant: 'danger' });
                     if (!ok) return;
@@ -81,12 +118,12 @@ const PartnersList = () => {
                       toast.success(`Sócio "${p.name}" excluído`);
                       fetchItems();
                     } catch (err) { toast.error(err.message); }
-                  }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
-                </Td>
-              </Tr>
+                  }}>Excluir</Button>
+                </div>
+              </Card>
             ))}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {editing && <PartnerModal item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); fetchItems(); }} />}
@@ -135,12 +172,12 @@ const PartnerModal = ({ item, onClose, onSaved }) => {
       <div className="flex flex-col gap-4">
         {error && <div className="bg-danger-soft border border-danger/30 rounded-md px-3 py-2 text-xs text-danger">{error}</div>}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Nome" value={form.name} onChange={(v) => update('name', v)} required />
           <Input label="CPF" value={form.cpf} onChange={(v) => update('cpf', v)} placeholder="000.000.000-00" required />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Email" value={form.email} onChange={(v) => update('email', v)} type="email" />
           <Input label="Telefone" value={form.phone} onChange={(v) => update('phone', v)} />
         </div>
@@ -148,7 +185,7 @@ const PartnerModal = ({ item, onClose, onSaved }) => {
         <Input label="Pró-Labore Mensal (R$)" type="number" value={form.prolaboreAmount} onChange={(v) => update('prolaboreAmount', v)} placeholder="0,00" required helper="Valor fixo recebido todo mês como pró-labore" />
 
         <div className="text-[10px] uppercase tracking-wider font-semibold text-text-subtle">Conta corrente pessoal (pra controle de retiradas)</div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Input label="Banco" value={form.personalAccountBank} onChange={(v) => update('personalAccountBank', v)} />
           <Input label="Agência" value={form.personalAccountAgency} onChange={(v) => update('personalAccountAgency', v)} />
           <Input label="Conta" value={form.personalAccountNumber} onChange={(v) => update('personalAccountNumber', v)} />

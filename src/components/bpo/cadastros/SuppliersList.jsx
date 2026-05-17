@@ -115,45 +115,72 @@ const SuppliersList = () => {
           />
         </Card>
       ) : (
-        <Table>
-          <thead>
-            <tr>
-              <Th>Nome</Th>
-              <Th>CNPJ</Th>
-              <Th>Contato</Th>
-              <Th>Categoria padrão</Th>
-              <Th align="right">Contas a pagar</Th>
-              <Th align="right">Ações</Th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Nome</Th>
+                  <Th>CNPJ</Th>
+                  <Th>Contato</Th>
+                  <Th>Categoria padrão</Th>
+                  <Th align="right">Contas a pagar</Th>
+                  <Th align="right">Ações</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((s) => (
+                  <Tr key={s.id} onClick={() => setEditing(s)}>
+                    <Td className="font-medium text-text-strong">{s.name}</Td>
+                    <Td className="font-mono text-xs">{fmtCnpj(s.cnpj)}</Td>
+                    <Td className="text-xs text-text-muted">{s.email || s.phone || '—'}</Td>
+                    <Td>
+                      {s.defaultCategory ? (
+                        <Badge variant="default">{s.defaultCategory.name}</Badge>
+                      ) : <span className="text-xs text-text-subtle">—</span>}
+                    </Td>
+                    <Td align="right" className="text-xs">
+                      {s._count?.payables > 0 ? (
+                        <Badge variant="brand">{s._count.payables}</Badge>
+                      ) : '—'}
+                    </Td>
+                    <Td align="right">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(s); }}
+                        className="text-xs text-text-muted hover:text-danger transition-colors"
+                      >
+                        Excluir
+                      </button>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((s) => (
-              <Tr key={s.id} onClick={() => setEditing(s)}>
-                <Td className="font-medium text-text-strong">{s.name}</Td>
-                <Td className="font-mono text-xs">{fmtCnpj(s.cnpj)}</Td>
-                <Td className="text-xs text-text-muted">{s.email || s.phone || '—'}</Td>
-                <Td>
-                  {s.defaultCategory ? (
-                    <Badge variant="default">{s.defaultCategory.name}</Badge>
-                  ) : <span className="text-xs text-text-subtle">—</span>}
-                </Td>
-                <Td align="right" className="text-xs">
-                  {s._count?.payables > 0 ? (
-                    <Badge variant="brand">{s._count.payables}</Badge>
-                  ) : '—'}
-                </Td>
-                <Td align="right">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(s); }}
-                    className="text-xs text-text-muted hover:text-danger transition-colors"
-                  >
-                    Excluir
-                  </button>
-                </Td>
-              </Tr>
+              <Card key={s.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(s)}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm text-text-strong truncate">{s.name}</div>
+                    <div className="text-xs font-mono text-text-muted truncate">{fmtCnpj(s.cnpj)}</div>
+                  </div>
+                  {s._count?.payables > 0 && <Badge variant="brand">{s._count.payables} contas</Badge>}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-text-muted truncate">{s.email || s.phone || 'Sem contato'}</span>
+                  {s.defaultCategory && <Badge variant="default">{s.defaultCategory.name}</Badge>}
+                </div>
+                <div className="flex justify-end pt-1 border-t border-border-subtle">
+                  <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(s); }}>Excluir</Button>
+                </div>
+              </Card>
             ))}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {/* Modal CRUD */}
@@ -286,7 +313,7 @@ const SupplierModal = ({ supplier, onClose, onSaved }) => {
           helper="Pra pagamentos via PIX automático"
         />
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Input label="Banco" value={form.bankCode} onChange={(v) => update('bankCode', v)} placeholder="237" />
           <Input label="Agência" value={form.agency} onChange={(v) => update('agency', v)} placeholder="0001" />
           <Input label="Conta" value={form.account} onChange={(v) => update('account', v)} placeholder="12345-6" />

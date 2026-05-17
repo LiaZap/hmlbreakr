@@ -76,7 +76,7 @@ const AdminDREModal = ({ client, dre, onClose }) => {
         </div>
 
         {/* DRE Body */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto p-3 md:p-5">
           <div className="flex flex-col gap-0.5">
             {rows.map((row, idx) => {
               const isResult = row.type === 'result';
@@ -89,10 +89,10 @@ const AdminDREModal = ({ client, dre, onClose }) => {
               return (
                 <div key={idx}>
                   {needsDivider && idx > 0 && <div className="w-full h-px bg-[#2A2A2C] my-2" />}
-                  <div className={`flex items-center gap-2 py-1.5 px-2 rounded-[8px] ${isResult ? 'bg-[#1F1F1F]' : ''} ${isSub ? 'pl-6' : ''}`}>
+                  <div className={`flex items-center gap-1.5 md:gap-2 py-1.5 px-1.5 md:px-2 rounded-[8px] ${isResult ? 'bg-[#1F1F1F]' : ''} ${isSub ? 'pl-3 md:pl-6' : ''}`}>
                     {/* Sign */}
                     {row.sign && (
-                      <div className={`w-[18px] h-[18px] rounded-[4px] flex items-center justify-center shrink-0 text-[10px] font-bold
+                      <div className={`w-[16px] h-[16px] md:w-[18px] md:h-[18px] rounded-[4px] flex items-center justify-center shrink-0 text-[10px] font-bold
                         ${isResult
                           ? (dre.isProfit ? 'bg-[#00B37E]/20 text-[#00B37E]' : 'bg-[#FF4560]/20 text-[#FF4560]')
                           : isSubtotal
@@ -103,12 +103,12 @@ const AdminDREModal = ({ client, dre, onClose }) => {
                         {row.sign}
                       </div>
                     )}
-                    {!row.sign && <div className="w-[18px] shrink-0" />}
+                    {!row.sign && <div className="w-[16px] md:w-[18px] shrink-0" />}
 
                     {/* Label */}
                     <div className="flex-1 min-w-0">
                       <div
-                        className={`text-[12px] leading-tight ${row.bold || isGroup ? 'font-semibold' : 'font-normal'}`}
+                        className={`text-[11px] md:text-[12px] leading-tight ${row.bold || isGroup ? 'font-semibold' : 'font-normal'}`}
                         style={{ color: row.color || (isSub ? '#7E7E7E' : isGroup ? '#A0A0A0' : '#C8C8C8') }}
                       >
                         {row.label}
@@ -118,7 +118,7 @@ const AdminDREModal = ({ client, dre, onClose }) => {
 
                     {/* Pct */}
                     <div
-                      className={`text-[10px] w-[48px] text-right shrink-0 ${row.bold ? 'font-semibold' : 'font-normal'}`}
+                      className={`text-[9px] md:text-[10px] w-[40px] md:w-[48px] text-right shrink-0 tabular-nums ${row.bold ? 'font-semibold' : 'font-normal'}`}
                       style={{ color: row.color || (isSub ? '#555' : '#7E7E7E') }}
                     >
                       {row.pct >= 0 ? '+' : ''}{row.pct.toFixed(1)}%
@@ -126,7 +126,7 @@ const AdminDREModal = ({ client, dre, onClose }) => {
 
                     {/* Value */}
                     <div
-                      className={`text-[12px] w-[110px] text-right shrink-0 tabular-nums ${row.bold ? 'font-semibold' : 'font-normal'}`}
+                      className={`text-[11px] md:text-[12px] w-[88px] md:w-[110px] text-right shrink-0 tabular-nums ${row.bold ? 'font-semibold' : 'font-normal'}`}
                       style={{ color: row.color || (isSub ? '#7E7E7E' : isGroup ? '#A0A0A0' : '#C8C8C8') }}
                     >
                       {fmtBRL(row.value)}

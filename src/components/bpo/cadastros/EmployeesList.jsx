@@ -58,25 +58,66 @@ const EmployeesList = () => {
           description="Cadastre funcionários pra registrar pagamentos de salários."
         /></Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Nome</Th><Th>CPF</Th><Th>Cargo</Th><Th>Tipo</Th>
-            <Th align="right">Salário</Th><Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Nome</Th><Th>CPF</Th><Th>Cargo</Th><Th>Tipo</Th>
+                <Th align="right">Salário</Th><Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((e) => (
+                  <Tr key={e.id} onClick={() => setEditing(e)}>
+                    <Td className="font-medium text-text-strong">{e.name}</Td>
+                    <Td className="font-mono text-xs">{fmtCpf(e.cpf)}</Td>
+                    <Td>{e.role}</Td>
+                    <Td>
+                      {e.isMotoboy && <Badge variant="info" size="xs">Motoboy</Badge>}
+                      {e.isFreelancer && <Badge variant="warning" size="xs">Freela</Badge>}
+                      {!e.isMotoboy && !e.isFreelancer && <Badge variant="default" size="xs">CLT</Badge>}
+                    </Td>
+                    <Td align="right" className="font-semibold tabular-nums">{e.baseSalary ? fmtBRL(e.baseSalary) : '—'}</Td>
+                    <Td align="right">
+                      <button onClick={async (ev) => {
+                        ev.stopPropagation();
+                        const ok = await confirm({ title: 'Excluir funcionário?', message: `${e.name} será removido do cadastro.`, confirmLabel: 'Excluir', variant: 'danger' });
+                        if (!ok) return;
+                        try {
+                          const res = await fetch(bpoUrl(`/employees/${e.id}`), { method: 'DELETE' });
+                          if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                          toast.success(`${e.name} excluído`);
+                          fetchItems();
+                        } catch (err) { toast.error(err.message); }
+                      }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((e) => (
-              <Tr key={e.id} onClick={() => setEditing(e)}>
-                <Td className="font-medium text-text-strong">{e.name}</Td>
-                <Td className="font-mono text-xs">{fmtCpf(e.cpf)}</Td>
-                <Td>{e.role}</Td>
-                <Td>
-                  {e.isMotoboy && <Badge variant="info" size="xs">Motoboy</Badge>}
-                  {e.isFreelancer && <Badge variant="warning" size="xs">Freela</Badge>}
-                  {!e.isMotoboy && !e.isFreelancer && <Badge variant="default" size="xs">CLT</Badge>}
-                </Td>
-                <Td align="right" className="font-semibold tabular-nums">{e.baseSalary ? fmtBRL(e.baseSalary) : '—'}</Td>
-                <Td align="right">
-                  <button onClick={async (ev) => {
+              <Card key={e.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(e)}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm text-text-strong truncate">{e.name}</div>
+                    <div className="text-xs font-mono text-text-muted truncate">{fmtCpf(e.cpf)}</div>
+                  </div>
+                  {e.isMotoboy
+                    ? <Badge variant="info" size="xs">Motoboy</Badge>
+                    : e.isFreelancer
+                      ? <Badge variant="warning" size="xs">Freela</Badge>
+                      : <Badge variant="default" size="xs">CLT</Badge>}
+                </div>
+                <div className="flex items-end justify-between gap-2">
+                  <span className="text-xs text-text-muted truncate">{e.role}</span>
+                  <span className="font-semibold text-sm tabular-nums text-text-strong shrink-0">{e.baseSalary ? fmtBRL(e.baseSalary) : '—'}</span>
+                </div>
+                <div className="flex justify-end pt-1 border-t border-border-subtle">
+                  <Button variant="secondary" size="sm" onClick={async (ev) => {
                     ev.stopPropagation();
                     const ok = await confirm({ title: 'Excluir funcionário?', message: `${e.name} será removido do cadastro.`, confirmLabel: 'Excluir', variant: 'danger' });
                     if (!ok) return;
@@ -86,12 +127,12 @@ const EmployeesList = () => {
                       toast.success(`${e.name} excluído`);
                       fetchItems();
                     } catch (err) { toast.error(err.message); }
-                  }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
-                </Td>
-              </Tr>
+                  }}>Excluir</Button>
+                </div>
+              </Card>
             ))}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {editing && <EmployeeModal item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); fetchItems(); }} />}
@@ -141,17 +182,17 @@ const EmployeeModal = ({ item, onClose, onSaved }) => {
       <div className="flex flex-col gap-4">
         {error && <div className="bg-danger-soft border border-danger/30 rounded-md px-3 py-2 text-xs text-danger">{error}</div>}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Nome" value={form.name} onChange={(v) => update('name', v)} required />
           <Input label="CPF" value={form.cpf} onChange={(v) => update('cpf', v)} placeholder="000.000.000-00" required />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Email" value={form.email} onChange={(v) => update('email', v)} type="email" />
           <Input label="Telefone" value={form.phone} onChange={(v) => update('phone', v)} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-text-muted font-medium mb-1.5 block">Cargo *</label>
             <select value={form.role} onChange={(e) => update('role', e.target.value)}
@@ -174,7 +215,7 @@ const EmployeeModal = ({ item, onClose, onSaved }) => {
         </div>
 
         <div className="text-[10px] uppercase tracking-wider font-semibold text-text-subtle">Remuneração</div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Input label="Salário base" type="number" value={form.baseSalary} onChange={(v) => update('baseSalary', v)} placeholder="0,00" />
           <Input label="Comissão %" type="number" value={form.commissionPct} onChange={(v) => update('commissionPct', v)} placeholder="0" />
           <Input label="Gorjetas" type="number" value={form.tipsAmount} onChange={(v) => update('tipsAmount', v)} placeholder="0,00" />
@@ -183,7 +224,7 @@ const EmployeeModal = ({ item, onClose, onSaved }) => {
 
         <div className="text-[10px] uppercase tracking-wider font-semibold text-text-subtle">Dados bancários (pra pagamento)</div>
         <Input label="Chave PIX" value={form.pixKey} onChange={(v) => update('pixKey', v)} placeholder="CPF, email, telefone ou aleatória" />
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs text-text-muted font-medium mb-1.5 block">Banco</label>
             <select value={form.bankCode} onChange={(e) => update('bankCode', e.target.value)}

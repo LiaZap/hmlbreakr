@@ -637,18 +637,20 @@ const RestaurantComparator = ({ clients = [] }) => {
       {/* Tabela comparativa */}
       {bothSelected && (
         <div className="border border-white/[0.06] rounded-xl overflow-hidden">
-          {/* Header da tabela com nomes */}
-          <div className="grid grid-cols-[1.4fr_1fr_1fr] bg-white/[0.03] border-b border-white/[0.06]">
-            <div className="px-4 py-3 text-[11px] uppercase tracking-wider text-white/40 font-medium">
+          {/* Header da tabela com nomes — mobile: empilha os 2 nomes; desktop: 3 colunas */}
+          <div className="md:grid md:grid-cols-[1.4fr_1fr_1fr] bg-white/[0.03] border-b border-white/[0.06]">
+            <div className="hidden md:block px-4 py-3 text-[11px] uppercase tracking-wider text-white/40 font-medium">
               Metrica
             </div>
-            <div className="px-4 py-3 flex items-center gap-2 border-l border-white/[0.06]">
-              <ClientAvatar client={clients.find((c) => c.id === idA)} size={26} />
-              <span className="text-sm font-medium text-white truncate">{snapA.name}</span>
-            </div>
-            <div className="px-4 py-3 flex items-center gap-2 border-l border-white/[0.06]">
-              <ClientAvatar client={clients.find((c) => c.id === idB)} size={26} />
-              <span className="text-sm font-medium text-white truncate">{snapB.name}</span>
+            <div className="grid grid-cols-2 md:contents">
+              <div className="px-4 py-3 flex items-center gap-2 min-w-0 md:border-l md:border-white/[0.06]">
+                <ClientAvatar client={clients.find((c) => c.id === idA)} size={26} />
+                <span className="text-sm font-medium text-white truncate">{snapA.name}</span>
+              </div>
+              <div className="px-4 py-3 flex items-center gap-2 min-w-0 border-l border-white/[0.06]">
+                <ClientAvatar client={clients.find((c) => c.id === idB)} size={26} />
+                <span className="text-sm font-medium text-white truncate">{snapB.name}</span>
+              </div>
             </div>
           </div>
 
@@ -673,36 +675,39 @@ const RestaurantComparator = ({ clients = [] }) => {
                 return (
                   <div
                     key={spec.key}
-                    className="grid grid-cols-[1.4fr_1fr_1fr] border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.015] transition-colors"
+                    className="md:grid md:grid-cols-[1.4fr_1fr_1fr] border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.015] transition-colors"
                   >
-                    <div className="px-4 py-2.5 text-sm text-white/70">
+                    <div className="px-4 pt-2.5 pb-1 md:py-2.5 text-[11px] uppercase tracking-wider text-white/40 font-medium md:text-sm md:normal-case md:tracking-normal md:font-normal md:text-white/70">
                       {spec.label}
                     </div>
-                    <div className="px-4 py-2.5 border-l border-white/[0.04] flex items-center gap-1.5">
-                      <span
-                        className={`text-sm tabular-nums ${aText === '—' ? 'text-white/30' : 'text-white'}`}
-                        title={aText === '—' ? (spec.tooltip || '') : ''}
-                      >
-                        {aText}
-                      </span>
-                      {winner === 'a' && (
-                        <span className="text-[10px] font-medium text-[#00B37E] bg-[#00B37E]/[0.10] border border-[#00B37E]/[0.25] rounded px-1.5 py-0.5">
-                          ←melhor
+                    {/* Mobile: 2 colunas de valores; desktop: vira parte do grid pai */}
+                    <div className="grid grid-cols-2 md:contents">
+                      <div className="px-4 pb-2.5 pt-0.5 md:py-2.5 md:border-l md:border-white/[0.04] flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={`text-sm tabular-nums ${aText === '—' ? 'text-white/30' : 'text-white'}`}
+                          title={aText === '—' ? (spec.tooltip || '') : ''}
+                        >
+                          {aText}
                         </span>
-                      )}
-                    </div>
-                    <div className="px-4 py-2.5 border-l border-white/[0.04] flex items-center gap-1.5">
-                      <span
-                        className={`text-sm tabular-nums ${bText === '—' ? 'text-white/30' : 'text-white'}`}
-                        title={bText === '—' ? (spec.tooltip || '') : ''}
-                      >
-                        {bText}
-                      </span>
-                      {winner === 'b' && (
-                        <span className="text-[10px] font-medium text-[#00B37E] bg-[#00B37E]/[0.10] border border-[#00B37E]/[0.25] rounded px-1.5 py-0.5">
-                          ←melhor
+                        {winner === 'a' && (
+                          <span className="text-[10px] font-medium text-[#00B37E] bg-[#00B37E]/[0.10] border border-[#00B37E]/[0.25] rounded px-1.5 py-0.5 shrink-0">
+                            ←melhor
+                          </span>
+                        )}
+                      </div>
+                      <div className="px-4 pb-2.5 pt-0.5 md:py-2.5 border-l border-white/[0.04] flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={`text-sm tabular-nums ${bText === '—' ? 'text-white/30' : 'text-white'}`}
+                          title={bText === '—' ? (spec.tooltip || '') : ''}
+                        >
+                          {bText}
                         </span>
-                      )}
+                        {winner === 'b' && (
+                          <span className="text-[10px] font-medium text-[#00B37E] bg-[#00B37E]/[0.10] border border-[#00B37E]/[0.25] rounded px-1.5 py-0.5 shrink-0">
+                            ←melhor
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useBpo } from '../../../context/BpoContext';
 import { Button, Card, Input, Badge, EmptyState, Modal, Table, Th, Td, Tr, ErrorBanner, useToast, useConfirm } from '../../ui/primitives';
 import { useBpoList } from '../useBpoList';
@@ -52,36 +52,71 @@ const BankAccountsList = () => {
           />
         </Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Banco</Th><Th>Agência / Conta</Th><Th>Tipo</Th>
-            <Th align="right">Saldo</Th><Th align="right">Movimentos</Th><Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Banco</Th><Th>Agência / Conta</Th><Th>Tipo</Th>
+                <Th align="right">Saldo</Th><Th align="right">Movimentos</Th><Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((b) => (
+                  <Tr key={b.id} onClick={() => setEditing(b)}>
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-md bg-bg-input flex items-center justify-center text-xs font-bold text-text-strong">
+                          {b.bankCode}
+                        </div>
+                        <div>
+                          <div className="font-medium text-text-strong">{b.bankName}</div>
+                          {b.openFinanceConnected && <Badge variant="success" size="xs">Open Finance</Badge>}
+                        </div>
+                      </div>
+                    </Td>
+                    <Td className="font-mono text-xs">{b.agency} / {b.account}</Td>
+                    <Td><Badge variant="default">{b.type}</Badge></Td>
+                    <Td align="right" className="font-semibold tabular-nums">{fmtBRL(b.currentBalance)}</Td>
+                    <Td align="right" className="text-xs text-text-muted">{b._count?.payments || 0}</Td>
+                    <Td align="right">
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(b); }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((b) => (
-              <Tr key={b.id} onClick={() => setEditing(b)}>
-                <Td>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-md bg-bg-input flex items-center justify-center text-xs font-bold text-text-strong">
+              <Card key={b.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(b)}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-md bg-bg-input flex items-center justify-center text-xs font-bold text-text-strong shrink-0">
                       {b.bankCode}
                     </div>
-                    <div>
-                      <div className="font-medium text-text-strong">{b.bankName}</div>
-                      {b.openFinanceConnected && <Badge variant="success" size="xs">Open Finance</Badge>}
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm text-text-strong truncate">{b.bankName}</div>
+                      <div className="text-xs font-mono text-text-muted truncate">{b.agency} / {b.account}</div>
                     </div>
                   </div>
-                </Td>
-                <Td className="font-mono text-xs">{b.agency} / {b.account}</Td>
-                <Td><Badge variant="default">{b.type}</Badge></Td>
-                <Td align="right" className="font-semibold tabular-nums">{fmtBRL(b.currentBalance)}</Td>
-                <Td align="right" className="text-xs text-text-muted">{b._count?.payments || 0}</Td>
-                <Td align="right">
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(b); }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
-                </Td>
-              </Tr>
+                  <div className="text-right shrink-0">
+                    <div className="font-bold text-base tabular-nums text-text-strong">{fmtBRL(b.currentBalance)}</div>
+                    <div className="text-[11px] text-text-muted">{b._count?.payments || 0} mov.</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="default">{b.type}</Badge>
+                  {b.openFinanceConnected && <Badge variant="success" size="xs">Open Finance</Badge>}
+                </div>
+                <div className="flex justify-end pt-1 border-t border-border-subtle">
+                  <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(b); }}>Excluir</Button>
+                </div>
+              </Card>
             ))}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {editing && (
@@ -152,12 +187,12 @@ const BankAccountModal = ({ item, onClose, onSaved }) => {
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Agência" value={form.agency} onChange={(v) => setForm({ ...form, agency: v })} placeholder="0001" required />
           <Input label="Conta" value={form.account} onChange={(v) => setForm({ ...form, account: v })} placeholder="12345-6" required />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-text-muted font-medium mb-1.5 block">Tipo</label>
             <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}

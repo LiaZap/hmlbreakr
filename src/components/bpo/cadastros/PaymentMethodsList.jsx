@@ -86,21 +86,58 @@ const PaymentMethodsList = () => {
           description='Use "Criar padrão" pra adicionar os 6 mais comuns ou crie manualmente.'
         /></Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Nome</Th><Th>Tipo</Th>
-            <Th align="right">Taxa</Th><Th align="right">Repasse</Th><Th align="right">Recebimentos</Th><Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Nome</Th><Th>Tipo</Th>
+                <Th align="right">Taxa</Th><Th align="right">Repasse</Th><Th align="right">Recebimentos</Th><Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((p) => (
+                  <Tr key={p.id} onClick={() => setEditing(p)}>
+                    <Td className="font-medium text-text-strong">{p.name}</Td>
+                    <Td><Badge variant="default">{TYPES.find((t) => t.id === p.type)?.label || p.type}</Badge></Td>
+                    <Td align="right" className="font-semibold tabular-nums">{Number(p.feePercent).toFixed(2)}%</Td>
+                    <Td align="right" className="text-xs">{p.settlementDays} dia{p.settlementDays !== 1 ? 's' : ''}</Td>
+                    <Td align="right" className="text-xs text-text-muted">{p._count?.receivables || 0}</Td>
+                    <Td align="right">
+                      <button onClick={async (e) => {
+                        e.stopPropagation();
+                        const ok = await confirm({ title: 'Excluir meio de pagamento?', message: `"${p.name}" será removido.`, confirmLabel: 'Excluir', variant: 'danger' });
+                        if (!ok) return;
+                        try {
+                          const res = await fetch(bpoUrl(`/payment-methods/${p.id}`), { method: 'DELETE' });
+                          if (!res.ok) throw new Error((await res.json()).error || 'Falha');
+                          toast.success(`"${p.name}" excluído`);
+                          fetchItems();
+                        } catch (err) { toast.error(err.message); }
+                      }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((p) => (
-              <Tr key={p.id} onClick={() => setEditing(p)}>
-                <Td className="font-medium text-text-strong">{p.name}</Td>
-                <Td><Badge variant="default">{TYPES.find((t) => t.id === p.type)?.label || p.type}</Badge></Td>
-                <Td align="right" className="font-semibold tabular-nums">{Number(p.feePercent).toFixed(2)}%</Td>
-                <Td align="right" className="text-xs">{p.settlementDays} dia{p.settlementDays !== 1 ? 's' : ''}</Td>
-                <Td align="right" className="text-xs text-text-muted">{p._count?.receivables || 0}</Td>
-                <Td align="right">
-                  <button onClick={async (e) => {
+              <Card key={p.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(p)}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm text-text-strong truncate">{p.name}</div>
+                    <div className="text-xs text-text-muted truncate">{TYPES.find((t) => t.id === p.type)?.label || p.type}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-semibold text-sm tabular-nums text-text-strong">{Number(p.feePercent).toFixed(2)}%</div>
+                    <div className="text-[11px] text-text-muted">{p.settlementDays} dia{p.settlementDays !== 1 ? 's' : ''} repasse</div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle">
+                  <span className="text-xs text-text-muted">{p._count?.receivables || 0} recebimentos</span>
+                  <Button variant="secondary" size="sm" onClick={async (e) => {
                     e.stopPropagation();
                     const ok = await confirm({ title: 'Excluir meio de pagamento?', message: `"${p.name}" será removido.`, confirmLabel: 'Excluir', variant: 'danger' });
                     if (!ok) return;
@@ -110,12 +147,12 @@ const PaymentMethodsList = () => {
                       toast.success(`"${p.name}" excluído`);
                       fetchItems();
                     } catch (err) { toast.error(err.message); }
-                  }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
-                </Td>
-              </Tr>
+                  }}>Excluir</Button>
+                </div>
+              </Card>
             ))}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {editing && <PaymentMethodModal item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); fetchItems(); }} />}
@@ -169,7 +206,7 @@ const PaymentMethodModal = ({ item, onClose, onSaved }) => {
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Taxa (%)" type="number" value={form.feePercent} onChange={(v) => setForm({ ...form, feePercent: v })} placeholder="0" helper="% sobre o valor da venda" />
           <Input label="Dias de repasse" type="number" value={form.settlementDays} onChange={(v) => setForm({ ...form, settlementDays: v })} placeholder="0" helper="Quantos dias até receber" />
         </div>

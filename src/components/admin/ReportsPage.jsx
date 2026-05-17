@@ -665,9 +665,9 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="flex flex-col lg:grid lg:grid-cols-3 gap-5">
         {/* ===== LEFT: FILTERS ===== */}
-        <div className="lg:col-span-1 bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[16px] p-5 self-start">
+        <div className="w-full min-w-0 lg:col-span-1 bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[16px] p-4 sm:p-5 self-start">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-[14px] font-bold text-white">Filtros</h3>
             <button onClick={clearAll} className="text-[10px] text-[#666] hover:text-white uppercase tracking-widest font-bold">
@@ -826,7 +826,7 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
         </div>
 
         {/* ===== RIGHT: PREVIEW ===== */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="w-full min-w-0 lg:col-span-2 space-y-4">
           {/* Header */}
           <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[16px] p-5">
             <div className="flex items-start justify-between flex-wrap gap-3">
@@ -954,7 +954,7 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
               <button
                 onClick={() => setShowSendModal(true)}
                 disabled={mode !== 'client' || !activeSingleClient}
-                className={`flex-1 min-w-[180px] px-4 py-2.5 rounded-[10px] text-[12px] font-semibold flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-[10px] text-[12px] font-semibold flex items-center justify-center gap-2 transition-all ${
                   mode === 'client' && activeSingleClient
                     ? 'bg-gradient-to-b from-[#F5B638] to-[#E5961E] text-black hover:shadow-[0_8px_24px_-6px_rgba(245,166,35,0.4)]'
                     : 'bg-white/[0.03] text-[#555] cursor-not-allowed border border-white/[0.05]'
@@ -965,14 +965,14 @@ const ReportsPage = ({ clients = [], adminName = 'Admin', adminRole = 'admin' })
               </button>
               <button
                 onClick={handleExportPdf}
-                className="flex-1 min-w-[160px] bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.2] hover:text-white text-[#cfcfcf] px-4 py-2.5 rounded-[10px] text-[12px] font-semibold flex items-center justify-center gap-2 transition-all"
+                className="flex-1 min-w-[140px] bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.2] hover:text-white text-[#cfcfcf] px-4 py-2.5 rounded-[10px] text-[12px] font-semibold flex items-center justify-center gap-2 transition-all"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 Exportar PDF
               </button>
               <button
                 onClick={handleShareLink}
-                className="flex-1 min-w-[160px] bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.2] hover:text-white text-[#cfcfcf] px-4 py-2.5 rounded-[10px] text-[12px] font-semibold flex items-center justify-center gap-2 transition-all"
+                className="flex-1 min-w-[140px] bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.2] hover:text-white text-[#cfcfcf] px-4 py-2.5 rounded-[10px] text-[12px] font-semibold flex items-center justify-center gap-2 transition-all"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71 M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 {shareCopied ? 'Link copiado!' : 'Compartilhar Link'}

@@ -81,29 +81,56 @@ const CategoriesList = () => {
           />
         </Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Nome</Th><Th>Tipo</Th><Th>Grupo DRE</Th><Th align="right">Lançamentos</Th><Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Nome</Th><Th>Tipo</Th><Th>Grupo DRE</Th><Th align="right">Lançamentos</Th><Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((c) => (
+                  <Tr key={c.id} onClick={() => setEditing(c)}>
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        {c.color && <div className="w-3 h-3 rounded-full" style={{ background: c.color }} />}
+                        <span className="font-medium text-text-strong">{c.name}</span>
+                      </div>
+                    </Td>
+                    <Td><Badge variant={c.type === 'receita' ? 'success' : 'warning'}>{c.type}</Badge></Td>
+                    <Td className="text-xs text-text-muted">{DRE_GROUPS.find((g) => g.id === c.dreGroup)?.label || '—'}</Td>
+                    <Td align="right" className="text-xs">{(c._count?.payables || 0) + (c._count?.receivables || 0)}</Td>
+                    <Td align="right">
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(c); }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((c) => (
-              <Tr key={c.id} onClick={() => setEditing(c)}>
-                <Td>
-                  <div className="flex items-center gap-2">
-                    {c.color && <div className="w-3 h-3 rounded-full" style={{ background: c.color }} />}
-                    <span className="font-medium text-text-strong">{c.name}</span>
+              <Card key={c.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(c)}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {c.color && <div className="w-3 h-3 rounded-full shrink-0" style={{ background: c.color }} />}
+                    <span className="font-medium text-sm text-text-strong truncate">{c.name}</span>
                   </div>
-                </Td>
-                <Td><Badge variant={c.type === 'receita' ? 'success' : 'warning'}>{c.type}</Badge></Td>
-                <Td className="text-xs text-text-muted">{DRE_GROUPS.find((g) => g.id === c.dreGroup)?.label || '—'}</Td>
-                <Td align="right" className="text-xs">{(c._count?.payables || 0) + (c._count?.receivables || 0)}</Td>
-                <Td align="right">
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(c); }} className="text-xs text-text-muted hover:text-danger">Excluir</button>
-                </Td>
-              </Tr>
+                  <Badge variant={c.type === 'receita' ? 'success' : 'warning'}>{c.type}</Badge>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                  <span className="truncate">DRE: {DRE_GROUPS.find((g) => g.id === c.dreGroup)?.label || '—'}</span>
+                  <span className="shrink-0">{(c._count?.payables || 0) + (c._count?.receivables || 0)} lanç.</span>
+                </div>
+                <div className="flex justify-end pt-1 border-t border-border-subtle">
+                  <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(c); }}>Excluir</Button>
+                </div>
+              </Card>
             ))}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {editing && (
@@ -153,7 +180,7 @@ const CategoryModal = ({ item, onClose, onSaved }) => {
 
         <Input label="Nome da categoria" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Ex: Aluguel, Vendas Cartão..." required />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-text-muted font-medium mb-1.5 block">Tipo *</label>
             <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
