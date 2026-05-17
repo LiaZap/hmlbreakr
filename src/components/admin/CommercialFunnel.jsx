@@ -17,15 +17,11 @@ import { motion } from 'framer-motion';
  * Regras de negócio:
  *  - Clientes que JÁ PAGARAM não entram no funil.
  *    Critério "pago": `stripeSubscriptionId` OU `stripeCustomerId` preenchido.
- *    NOTA: hoje o endpoint GET /admin/clients NÃO retorna esses campos no
- *    `select` (server/src/routes.js ~L151). O filtro é defensivo: funciona
- *    automaticamente assim que o backend passar a expor esses campos.
- *  - Clientes cadastrados MANUALMENTE pelo admin (POST /admin/clients) não
- *    entram no funil. Não existe flag explícita no model Client; heurística:
- *    um signup self-service pelo site tem `clerkUserId`. Se o cliente não tem
- *    `clerkUserId` (campo também não exposto no select atual) consideramos
- *    cadastro manual. Enquanto o backend não expõe o campo, o critério recai
- *    sobre a marcação manual via localStorage (abaixo).
+ *    O endpoint GET /admin/clients EXPÕE esses campos no `select`
+ *    (server/src/routes.js) — o filtro de pago funciona automaticamente.
+ *  - Clientes cadastrados MANUALMENTE: não há flag explícita no model Client
+ *    nem `clerkUserId` exposto no select. Enquanto isso, a exclusão de
+ *    cadastros manuais recai sobre a marcação manual via localStorage (abaixo).
  *  - Clientes com mais de 7 dias e não convertidos saem do funil ativo e vão
  *    para um bloco separado "Expirados (fora do funil)".
  *  - Marcação manual de "cliente/pago": persistida em localStorage (V1
