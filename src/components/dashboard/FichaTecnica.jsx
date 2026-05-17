@@ -2413,6 +2413,44 @@ const FichaTecnica = () => {
     }
   };
 
+  // BAH-088: normaliza categoria removendo case/acento/espaços extras.
+  // NFD separa os acentos como diacríticos combináveis (̀-ͯ), que são removidos.
+  // Resolve com 100% de segurança: "Smash Burger" === "smash  burger" === "SMASH BÚRGER".
+  const normalizeCat = (s) =>
+    String(s || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  // BAH-088: distância de Levenshtein — usada apenas para DETECTAR (não unir
+  // automaticamente) variações de grafia tipo "Burger" vs "Burguer".
+  const levenshtein = (a, b) => {
+    a = String(a || '');
+    b = String(b || '');
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 0; i < a.length; i++) {
+      let cur = i + 1;
+      let diag = prev[0];
+      prev[0] = i + 1;
+      for (let j = 0; j < b.length; j++) {
+        const tmp = prev[j + 1];
+        cur = Math.min(
+          prev[j + 1] + 1,
+          cur + 1,
+          diag + (a[i] === b[j] ? 0 : 1)
+        );
+        prev[j + 1] = cur;
+        diag = tmp;
+      }
+    }
+    return prev[b.length];
+  };
+
   const handleImportFichas = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -2422,6 +2460,33 @@ const FichaTecnica = () => {
         const text = e.target.result;
         const lines = text.split('\n');
         const newItems = [];
+
+        // BAH-088: Map<categoria normalizada, grafia canônica>.
+        // Semeia com as categorias já existentes (em operational.categories.fichas)
+        // e as categorias das fichas já cadastradas (campo `type`).
+        // A 1ª ocorrência de cada categoria vira a grafia canônica e é reusada;
+        // assim variações de case/acento/espaço convergem para UMA categoria.
+        const canonicalCats = new Map();
+        const registerCat = (raw) => {
+            const clean = String(raw || '').replace(/\s+/g, ' ').trim();
+            if (!clean) return;
+            const key = normalizeCat(clean);
+            if (!key) return;
+            if (!canonicalCats.has(key)) canonicalCats.set(key, clean);
+        };
+        (dashboardData.operational?.categories?.fichas || []).forEach(registerCat);
+        (fichas || []).forEach(f => registerCat(f?.type));
+
+        // Resolve a categoria de uma linha do import para a grafia canônica.
+        // Categoria vazia/só-espaços → fallback 'Prato Principal'.
+        const resolveCat = (raw) => {
+            const clean = String(raw || '').replace(/\s+/g, ' ').trim();
+            if (!clean) return 'Prato Principal';
+            const key = normalizeCat(clean);
+            if (canonicalCats.has(key)) return canonicalCats.get(key);
+            canonicalCats.set(key, clean);
+            return clean;
+        };
 
         // Detect separator from header line
         const headerLine = (lines[0] || '').trim();
@@ -2458,7 +2523,7 @@ const FichaTecnica = () => {
                 newItems.push({
                     id: `imp_ft_${Date.now()}_${i}`,
                     name: name,
-                    type: cat || 'Prato Principal',
+                    type: resolveCat(cat),
                     progress: 0,
                     insumos: 0,
                     ingredients: [],
@@ -2507,14 +2572,89 @@ const FichaTecnica = () => {
                 else updatedMenuEngineering.push(menuData);
             });
 
+            // BAH-088: persiste as categorias canônicas resultantes (defaults
+            // filtrados fora — eles já são adicionados pela UI; aqui guardamos
+            // apenas as customizadas, sem duplicatas).
+            const DEFAULT_CATS = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
+            const defaultKeys = new Set(DEFAULT_CATS.map(normalizeCat));
+            const canonicalFichaCats = Array.from(canonicalCats.entries())
+                .filter(([key]) => !defaultKeys.has(key))
+                .map(([, label]) => label);
+
             updateDashboardData({
                 operational: {
                     ...dashboardData.operational,
-                    fichas: updatedFichas
+                    fichas: updatedFichas,
+                    categories: {
+                        ...(dashboardData.operational?.categories || {}),
+                        fichas: canonicalFichaCats
+                    }
                 },
                 menuEngineering: updatedMenuEngineering
             });
             alert(`${newItems.length} fichas pré-processadas com sucesso!`);
+
+            // BAH-088: detecção CONSERVADORA de variações de grafia.
+            // Normalização já resolveu case/acento/espaço. Aqui só detectamos
+            // pares com distância de Levenshtein <= 2 (ex.: "Burger" vs "Burguer").
+            // Decisão: NÃO unir automaticamente — distância pequena também ocorre
+            // entre categorias legítimas distintas (ex.: "Bebida"/"Bebidas" ok,
+            // mas erros possíveis). Mostramos UM aviso consolidado e só unimos
+            // se o usuário confirmar explicitamente.
+            const catList = Array.from(canonicalCats.values());
+            const similarPairs = [];
+            for (let a = 0; a < catList.length; a++) {
+                for (let b = a + 1; b < catList.length; b++) {
+                    const ka = normalizeCat(catList[a]);
+                    const kb = normalizeCat(catList[b]);
+                    const dist = levenshtein(ka, kb);
+                    // exige nomes com tamanho razoável p/ evitar falsos positivos curtos
+                    if (dist > 0 && dist <= 2 && Math.min(ka.length, kb.length) >= 4) {
+                        similarPairs.push([catList[a], catList[b]]);
+                    }
+                }
+            }
+
+            if (similarPairs.length > 0) {
+                const listText = similarPairs
+                    .map(([x, y]) => `  • "${x}"  ↔  "${y}"`)
+                    .join('\n');
+                const wantsMerge = window.confirm(
+                    'BAH-088 — Categorias com grafia parecida foram detectadas:\n\n' +
+                    listText +
+                    '\n\nDeseja unificar cada par na PRIMEIRA grafia (a da esquerda)?\n' +
+                    'Cancele se forem categorias realmente diferentes.'
+                );
+                if (wantsMerge) {
+                    // remap: para cada par, a 2ª grafia passa a usar a 1ª
+                    const remap = new Map();
+                    similarPairs.forEach(([keep, drop]) => {
+                        remap.set(normalizeCat(drop), keep);
+                    });
+                    const mergedFichas = updatedFichas.map(f => {
+                        const r = remap.get(normalizeCat(f.type));
+                        return r ? { ...f, type: r } : f;
+                    });
+                    const mergedMenu = updatedMenuEngineering.map(m => {
+                        const r = remap.get(normalizeCat(m.category));
+                        return r ? { ...m, category: r } : m;
+                    });
+                    const mergedCats = canonicalFichaCats.filter(
+                        c => !remap.has(normalizeCat(c))
+                    );
+                    updateDashboardData({
+                        operational: {
+                            ...dashboardData.operational,
+                            fichas: mergedFichas,
+                            categories: {
+                                ...(dashboardData.operational?.categories || {}),
+                                fichas: mergedCats
+                            }
+                        },
+                        menuEngineering: mergedMenu
+                    });
+                }
+            }
         }
     };
     reader.readAsText(file);

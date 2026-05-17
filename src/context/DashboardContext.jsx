@@ -610,9 +610,37 @@ export const DashboardProvider = ({ children }) => {
 
     // CMV Teórico: only from fichas técnicas (menuEngineering data)
     // If no fichas exist, CMV = 0 (not 35% default)
+    //
+    // BAH-089 — Custos Variáveis Totais divergentes:
+    //   O campo `sales` da ficha técnica é a MÉDIA/estimativa de vendas que o
+    //   cliente digita — NÃO é venda realizada. O sistema usa esse `sales` como
+    //   peso de MIX para derivar o CMV% teórico. Como CMV% é uma razão
+    //   (custo/preço ponderado), o mix-weighting é estatisticamente válido para
+    //   uma ESTIMATIVA — mas o resultado precisa ser tratado HONESTAMENTE como
+    //   estimativa, não como CMV realizado.
+    //
+    //   Problema: quando o cliente "chuta" o `sales` (ou deixa preços/custos
+    //   incoerentes numa ficha), o CMV% pode disparar para valores absurdos
+    //   (ex.: > 90%). Isso inflava os Custos Variáveis Totais e, via margem de
+    //   contribuição, gerava uma curva de Ponto de Equilíbrio IRREAL
+    //   (break-even tendendo ao infinito).
+    //
+    //   Correção (escopo atual, SEM integração DRE):
+    //     1. CMV% continua sendo uma ESTIMATIVA derivada das fichas — sinalizado
+    //        por `cmvIsEstimate` para a UI deixar isso claro.
+    //     2. Clamp de sanidade: CMV% teórico é limitado a 95%. Acima disso é
+    //        quase certamente erro de cadastro (preço < custo) e não pode
+    //        engessar o P/E num valor irreal.
+    //   FUTURO (fora de escopo agora): o CMV "realizado" deveria vir do DRE /
+    //   contas a pagar (integração Suitable + conciliação de relatório de
+    //   vendas). Enquanto essa integração não existe, este valor permanece
+    //   declaradamente uma estimativa.
+    const CMV_THEORETICAL_CAP = 0.95; // teto de sanidade p/ não gerar P/E irreal
     let cmvPercentage = 0;
     let hasCmvData = false;
-    
+    let cmvIsEstimate = false;
+    let cmvWasCapped = false;
+
     if (dashboardData.menuEngineering && dashboardData.menuEngineering.length > 0) {
         let totalSalesRevenue = 0;
         let totalSalesCost = 0;
@@ -624,8 +652,12 @@ export const DashboardProvider = ({ children }) => {
             totalSalesCost += sales * cost;
         });
         if (totalSalesRevenue > 0) {
-            cmvPercentage = totalSalesCost / totalSalesRevenue;
+            const rawCmv = totalSalesCost / totalSalesRevenue;
+            cmvWasCapped = rawCmv > CMV_THEORETICAL_CAP;
+            cmvPercentage = Math.min(rawCmv, CMV_THEORETICAL_CAP);
             hasCmvData = true;
+            // Sem DRE/integração de vendas reais, o CMV é sempre estimativa.
+            cmvIsEstimate = true;
         }
     }
 
@@ -753,13 +785,16 @@ export const DashboardProvider = ({ children }) => {
     // 1. If fichas have precoVenda → use fichas avg (same as panel)
     // 2. Else if menuEngineering has sales data → use cmvPercentageDisplay (same as panel fallback)
     // 3. Else → 0
+    // BAH-089: mesmo teto de sanidade aplicado ao cmvEffective — uma única
+    // ficha com preço < custo não pode disparar o CMV e gerar P/E irreal.
     const allFichasForCmv = dashboardData.operational?.fichas || [];
     const fichasComPreco = allFichasForCmv.filter(f => parseCurrency(f.precoVenda) > 0 && parseCurrency(f.custoTotal) > 0);
     const cmvFromFichas = fichasComPreco.length > 0
       ? (fichasComPreco.reduce((sum, f) => sum + (parseCurrency(f.custoTotal) / parseCurrency(f.precoVenda)), 0) / fichasComPreco.length) * 100
       : 0;
     // Mirror cmvTeorico: fichas take priority, then menuEngineering, then 0
-    const cmvEffective = fichasComPreco.length > 0 ? cmvFromFichas : (hasCmvData ? cmvPercentageDisplay : 0);
+    const cmvEffectiveRaw = fichasComPreco.length > 0 ? cmvFromFichas : (hasCmvData ? cmvPercentageDisplay : 0);
+    const cmvEffective = Math.min(cmvEffectiveRaw, CMV_THEORETICAL_CAP * 100);
 
     // BASE = %CF + %Impostos + %Cartão/Voucher (+ Royalties if franchise)
     // Marketplace commissions weighted by sales_percentage
@@ -802,7 +837,45 @@ export const DashboardProvider = ({ children }) => {
     // mot_actions: previously acknowledged excess values { [key]: { rawValue, date } }
     const motActions = formData.mot_actions || {};
 
+    // ─── Dinheiro na Mesa — "recuperado" DINÂMICO (mês a mês) ────────────────
+    // Causa-raiz do bug "valor recuperado estático": o `calcRecovered` antigo
+    // comparava o excesso atual SÓ contra `mot_actions[key].rawValue` — um
+    // snapshot gravado UMA única vez, quando o usuário clicava em "Tratar".
+    // Sem clique não havia baseline; e mesmo com clique o baseline nunca
+    // acompanhava a virada do mês. Resultado: o "R$ X recuperado este mês"
+    // mostrava sempre o mesmo número (confirmado no cliente Pizzaiolo).
+    //
+    // Correção: o "recuperado" passa a refletir a MELHORA REAL entre o mês
+    // ANTERIOR e o mês corrente. Guardamos um snapshot mensal dos quatro
+    // drivers do Dinheiro na Mesa em `formData.metric_snapshots`, indexado por
+    // "YYYY-MM" (fuso America/Sao_Paulo). O baseline é o snapshot do mês
+    // anterior; se ele não existir ainda (primeiro mês monitorado), caímos no
+    // `mot_actions` como fallback. Assim:
+    //   - CMV Teórico cai (alteração no histórico de preço da ficha) → recupera
+    //   - %CF cai (vs. último mês) → recupera
+    //   - taxa de cartão cai (vs. últimos 30 dias / mês anterior) → recupera
+    //   - data do P/E adianta → menos excesso → recupera
+    // tudo recalculado a cada mês, sem engessar.
+    const motSpNow = getSaoPauloNow();
+    const currentMonthSnapKey = `${motSpNow.year}-${String(motSpNow.month).padStart(2, '0')}`;
+    // Mês anterior (fuso Brasil) — baseline de comparação.
+    const prevMonthDate = motSpNow.month === 1
+        ? { year: motSpNow.year - 1, month: 12 }
+        : { year: motSpNow.year, month: motSpNow.month - 1 };
+    const prevMonthSnapKey = `${prevMonthDate.year}-${String(prevMonthDate.month).padStart(2, '0')}`;
+    const metricSnapshots = formData.metric_snapshots || {};
+    const prevSnapshot = metricSnapshots[prevMonthSnapKey] || null;
+    // Acumula os excessos do mês corrente para gravar o snapshot ao final.
+    const currentMonthExcess = {};
+
     const calcRecovered = (key, currentExcess) => {
+        currentMonthExcess[key] = currentExcess;
+        // 1) Baseline preferencial: snapshot do mês ANTERIOR (comparação dinâmica).
+        if (prevSnapshot && typeof prevSnapshot[key] === 'number') {
+            const baseline = prevSnapshot[key];
+            return baseline > currentExcess ? baseline - currentExcess : 0;
+        }
+        // 2) Fallback (sem histórico mensal ainda): acknowledgement manual via "Tratar".
         const stored = motActions[key];
         if (!stored || stored.rawValue <= currentExcess) return 0;
         return stored.rawValue - currentExcess;
@@ -874,17 +947,49 @@ export const DashboardProvider = ({ children }) => {
     }
 
     // Items that were previously above threshold but are now resolved (threshold crossed in right direction)
+    // BAH — "recuperado" dinâmico: um driver que estava com excesso no mês
+    // ANTERIOR e zerou no mês corrente (não aparece mais em moneyOnTableItems)
+    // conta o excesso anterior INTEIRO como recuperado. Baseline = snapshot do
+    // mês anterior; fallback = mot_actions (acknowledgement manual).
     const resolvedKeys = ['marketplace', 'fixedCosts', 'cmv', 'cardFee', 'advances', 'loans'];
     const activeKeys = new Set(moneyOnTableItems.map(i => i.key));
     let resolvedRecoveredTotal = 0;
     resolvedKeys.forEach(key => {
+        if (activeKeys.has(key)) return;
+        // Driver resolvido: registra excesso 0 no snapshot do mês corrente.
+        currentMonthExcess[key] = 0;
+        // Baseline preferencial: excesso do mês anterior.
+        if (prevSnapshot && typeof prevSnapshot[key] === 'number' && prevSnapshot[key] > 0) {
+            resolvedRecoveredTotal += prevSnapshot[key];
+            return;
+        }
+        // Fallback: acknowledgement manual.
         const stored = motActions[key];
-        if (stored && stored.rawValue > 0 && !activeKeys.has(key)) {
+        if (stored && stored.rawValue > 0) {
             resolvedRecoveredTotal += stored.rawValue;
         }
     });
 
     const totalRecovered = moneyOnTableItems.reduce((s, i) => s + (i.recovered || 0), 0) + resolvedRecoveredTotal;
+
+    // Persiste o snapshot do mês corrente (drivers do Dinheiro na Mesa) em
+    // formData.metric_snapshots["YYYY-MM"]. Isto vira o baseline do mês seguinte
+    // e mantém o "recuperado" dinâmico de mês para mês. Só grava se:
+    //   - o usuário está vendo o MÊS CORRENTE (não um mês passado selecionado);
+    //   - há faturamento corrente (evita snapshots vazios distorcendo a base);
+    //   - algo mudou (evita POST sync desnecessário).
+    if (currentRevenue > 0 && selectedMonthIndex === null) {
+        const existingSnap = metricSnapshots[currentMonthSnapKey] || {};
+        const snapChanged = resolvedKeys.some(k => {
+            const v = currentMonthExcess[k] || 0;
+            return (existingSnap[k] || 0) !== v;
+        });
+        if (snapChanged) {
+            const nextSnapshot = { ...existingSnap };
+            resolvedKeys.forEach(k => { nextSnapshot[k] = currentMonthExcess[k] || 0; });
+            formData.metric_snapshots = { ...metricSnapshots, [currentMonthSnapKey]: nextSnapshot };
+        }
+    }
 
     // Break Even Point (Ponto de Equilíbrio)
     // BEP = Fixed Costs / Marge Contribution Percentage
@@ -939,9 +1044,16 @@ export const DashboardProvider = ({ children }) => {
                     percentage: currentRevenue > 0 ? `${((totalVariableCosts / currentRevenue) * 100).toFixed(1)}%` : "0%",
                     status: "neutral",
                     icon: "pie",
-                    tooltip: "Custos que sobem/descem com o faturamento. Composição:",
+                    // BAH-089: o CMV usado aqui é TEÓRICO/estimado (derivado das
+                    // fichas técnicas), não realizado. O tooltip declara isso
+                    // explicitamente para o cliente não tomar a estimativa como
+                    // venda realizada. `isEstimate` permite a UI marcar o card.
+                    isEstimate: cmvIsEstimate,
+                    tooltip: cmvIsEstimate
+                        ? "Custos que sobem/descem com o faturamento. O CMV é uma ESTIMATIVA teórica a partir das fichas técnicas (médias cadastradas) — não é o CMV realizado do mês. Composição:"
+                        : "Custos que sobem/descem com o faturamento. Composição:",
                     breakdown: [
-                        { label: "CMV (insumos)", value: currentRevenue > 0 ? `${((cmvCost / currentRevenue) * 100).toFixed(1)}%` : "0%" },
+                        { label: cmvIsEstimate ? "CMV (estimado)" : "CMV (insumos)", value: currentRevenue > 0 ? `${((cmvCost / currentRevenue) * 100).toFixed(1)}%` : "0%" },
                         { label: "Taxa de cartão", value: `${(cardFeePercentage * 100).toFixed(1)}%` },
                         { label: "Comissão marketplace", value: currentRevenue > 0 ? `${((marketplaceCommissionCost / currentRevenue) * 100).toFixed(1)}%` : "0%" },
                         { label: "Impostos (Simples)", value: `${(percentTaxSimples * 100).toFixed(1)}%` },
@@ -959,11 +1071,29 @@ export const DashboardProvider = ({ children }) => {
             const isCurrentMonth = activeMonthIdx === nowMonthIdx && selectedMonthIndex === null;
             const daysInMonth = new Date(bepNow.year, activeMonthIdx + 1, 0).getDate();
 
-            let revenueForCalc, dailyAvg;
+            // BAH-099 — Ponto de Equilíbrio dinâmico (zera no virar do mês):
+            //   `revenueForCalc` é o CONTADOR do "potinho" do dashboard. Para o mês
+            //   corrente ele DEVE refletir APENAS o que foi faturado dentro do mês
+            //   corrente (fuso Brasil). No dia 1, sem nenhum lançamento do mês, o
+            //   contador vale 0 e o ponteiro do gráfico volta ao início.
+            //
+            //   Bug anterior: quando o mês corrente não tinha lançamento diário, o
+            //   código fazia `dailyAvg = currentRevenue / daysInMonth` e
+            //   `revenueForCalc = dailyAvg * today`. Como `currentRevenue` é
+            //   resolvido por um searchOrder que faz wrap-around para meses
+            //   anteriores, o "potinho" começava o mês já cheio com a proração do
+            //   faturamento do mês ANTERIOR — ou seja, o P/E nunca zerava.
+            //
+            //   `dailyAvg` (projeção do dia estimado do P/E) continua podendo usar
+            //   a média histórica como FORECAST — isso é só uma previsão de "quando
+            //   você bate a meta", não infla o contador.
+            let revenueForCalc; // contador do mês corrente — zera no dia 1
+            let dailyAvg;       // média diária usada SÓ para projetar o dia do P/E
             let hasDailyData = false;
+            let projectionFromHistory = false;
 
             if (isCurrentMonth) {
-                // Current month: use daily entries if available, else prorate
+                // Mês corrente: o contador só conta faturamento DESTE mês.
                 const dailyRevenue = formData.daily_revenue || {};
                 const currentMonthPrefix = `${bepNow.year}-${String(bepNow.month).padStart(2, '0')}`;
                 const currentMonthEntries = Object.entries(dailyRevenue)
@@ -971,16 +1101,22 @@ export const DashboardProvider = ({ children }) => {
                     .map(([, amount]) => (typeof amount === 'number' ? amount : parseCurrency(amount)));
                 hasDailyData = currentMonthEntries.length > 0;
 
-                const today = bepNow.day;
                 if (hasDailyData) {
+                    // Faturamento real registrado no mês corrente.
                     revenueForCalc = currentMonthEntries.reduce((sum, v) => sum + v, 0);
+                    // Projeção do dia do P/E: extrapola a média dos dias já lançados.
                     dailyAvg = revenueForCalc / currentMonthEntries.length;
                 } else {
+                    // Sem nenhum lançamento no mês corrente: o "potinho" está vazio.
+                    // O contador zera (causa-raiz do BAH-099). A média histórica
+                    // (`currentRevenue`, que pode vir de meses anteriores) serve
+                    // apenas como FORECAST do dia estimado do P/E, nunca como saldo.
+                    revenueForCalc = 0;
                     dailyAvg = currentRevenue > 0 ? currentRevenue / daysInMonth : 0;
-                    revenueForCalc = dailyAvg * today;
+                    projectionFromHistory = dailyAvg > 0;
                 }
             } else {
-                // Selected/past month: use the full month revenue
+                // Mês selecionado/passado: usa o faturamento completo do mês (histórico).
                 revenueForCalc = currentRevenue;
                 dailyAvg = currentRevenue > 0 ? currentRevenue / daysInMonth : 0;
             }
@@ -1015,6 +1151,18 @@ export const DashboardProvider = ({ children }) => {
                 exceedsMonth: exceedsMonth,
                 daysInMonth: daysInMonth,
                 hasDailyData: hasDailyData,
+                // BAH-099: dia estimado é apenas FORECAST (média histórica), não há
+                // faturamento real lançado no mês corrente — o contador está zerado.
+                projectionFromHistory: projectionFromHistory,
+                // BAH-099: mês de referência do contador (YYYY-MM, fuso Brasil).
+                // O contador zera quando este valor muda no virar do mês.
+                currentMonthRef: `${bepNow.year}-${String(bepNow.month).padStart(2, '0')}`,
+                // BAH-089: a curva do P/E depende de um CMV ESTIMADO (fichas),
+                // não realizado. `cmvIsEstimate` permite a UI sinalizar isso e
+                // `cmvWasCapped` indica que o CMV foi limitado ao teto de
+                // sanidade (cadastro provavelmente incoerente: preço < custo).
+                cmvIsEstimate: cmvIsEstimate,
+                cmvWasCapped: cmvWasCapped,
                 base: {
                     value: basePercentage.toFixed(0),
                     valueRaw: basePercentage,

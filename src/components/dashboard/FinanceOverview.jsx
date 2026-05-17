@@ -57,7 +57,7 @@ const FinanceOverview = ({ data, onSelectMonth }) => {
             // Timeline mode: oldest → newest, left → right
             const maxVal = Math.max(...timeline.map(e => e.value), 1);
             const lastKey = timeline[timeline.length - 1]?.key;
-            return timeline.map((entry, idx) => {
+            return timeline.map((entry) => {
               const isMostRecent = entry.key === lastKey;
               const isSelected = selectedKey === entry.key;
               const hasData = entry.value > 0;

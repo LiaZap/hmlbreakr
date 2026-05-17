@@ -176,15 +176,12 @@ const SimuladorPrecificacao = ({ onClose }) => {
                 </div>
               </div>
 
-              {/* Fórmula visual */}
+              {/* CMV máximo permitido — exibe só o resultado, sem a fórmula */}
               <div className="bg-[#161616] border border-[#2A2A2C] rounded-[12px] p-3">
                 <div className="text-[10px] text-[#7E7E7E] uppercase tracking-wider font-semibold mb-2">CMV máximo permitido</div>
                 <div className="flex items-baseline gap-2 mb-2 flex-wrap">
                   <span className="text-[24px] font-bold" style={{ color: cmvInviavel ? '#FF4560' : '#00B37E' }}>
                     {cmvAlvo.toFixed(0)}%
-                  </span>
-                  <span className="text-[11px] text-[#868686]">
-                    = 100% − BASE ({basePct.toFixed(0)}%) − Lucro ({lucroAlvo}%)
                   </span>
                 </div>
                 {cmvInviavel && (
