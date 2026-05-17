@@ -575,8 +575,15 @@ router.post('/:transactionId/reconcile', async (req, res) => {
 // === Desconciliar ===
 router.post('/:transactionId/unreconcile', async (req, res) => {
   try {
+    // BankTransaction não tem clientId direto — valida o tenant pela cadeia
+    // bankAccount.clientId (mesmo padrão de /reconcile e /suggest).
+    const tx = await prisma.bankTransaction.findFirst({
+      where: { id: req.params.transactionId, bankAccount: { clientId: req.bpoClient.id } },
+    });
+    if (!tx) return res.status(404).json({ error: 'Registro não encontrado' });
+
     const updated = await prisma.bankTransaction.update({
-      where: { id: req.params.transactionId },
+      where: { id: tx.id },
       data: { reconciledType: null, reconciledId: null, reconciledAt: null },
     });
     res.json(updated);
@@ -621,7 +628,17 @@ router.post('/rules', async (req, res) => {
 
 router.delete('/rules/:id', async (req, res) => {
   try {
-    await prisma.reconciliationRule.delete({ where: { id: req.params.id } });
+    // Valida o tenant antes (IDOR) e usa soft delete: ReconciliationRule
+    // marca inatividade por `active = false`, delete físico é proibido.
+    const rule = await prisma.reconciliationRule.findFirst({
+      where: { id: req.params.id, clientId: req.bpoClient.id },
+    });
+    if (!rule) return res.status(404).json({ error: 'Registro não encontrado' });
+
+    await prisma.reconciliationRule.update({
+      where: { id: rule.id },
+      data: { active: false },
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

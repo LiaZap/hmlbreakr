@@ -5,6 +5,13 @@
  * importar de src/utils porque server e client têm contextos isolados (CJS vs ESM,
  * caminhos diferentes em prod).
  *
+ * SINCRONIZADO com o frontend (idêntico em semântica, só difere na sintaxe de
+ * módulo CJS vs ESM):
+ *   - Catálogo: PERMISSIONS, PERMISSION_CATEGORIES, ROLE_TEMPLATES, VALID_ROLES
+ *   - Funções: hasPermission, getEffectivePermissions, sanitizePermissions
+ * Itens exclusivos de UI no frontend (ROLE_LABELS, ROLE_COLORS,
+ * getPermissionsByCategory) NÃO existem aqui de propósito.
+ *
  * Usado em routes/admin/users.js pra validar payloads de POST/PUT.
  */
 
@@ -46,6 +53,17 @@ const PERMISSIONS = {
   'admin_users.view': { label: 'Ver funcionários Breakr', category: 'Sistema' },
   'admin_users.manage': { label: 'Gerenciar funcionários Breakr', category: 'Sistema' },
 };
+
+// Lista ordenada de categorias — dado de catálogo, espelhado no frontend
+const PERMISSION_CATEGORIES = [
+  'Dashboard',
+  'Clientes',
+  'Fichas',
+  'Comercial',
+  'Comunicados',
+  'Financeiro',
+  'Sistema',
+];
 
 // Templates predefinidos por role
 const ROLE_TEMPLATES = {
@@ -127,6 +145,7 @@ const getEffectivePermissions = (user) => {
 
 module.exports = {
   PERMISSIONS,
+  PERMISSION_CATEGORIES,
   ROLE_TEMPLATES,
   VALID_ROLES,
   hasPermission,

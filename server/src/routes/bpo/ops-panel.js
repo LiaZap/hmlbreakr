@@ -97,8 +97,24 @@ router.get('/tasks', async (req, res) => {
   }
 });
 
+/**
+ * Valida que a BpoTask pertence ao cliente informado antes de mutá-la.
+ * O painel é multi-cliente (o :hash serve só pra auth), então o clientId
+ * do tenant alvo precisa vir no body/query — sem isso seria IDOR.
+ */
+const assertTaskTenant = async (taskId, clientId) => {
+  if (!clientId) return { ok: false, status: 400, error: 'clientId obrigatório' };
+  const found = await prisma.bpoTask.findFirst({ where: { id: taskId, clientId } });
+  if (!found) return { ok: false, status: 404, error: 'Registro não encontrado' };
+  return { ok: true };
+};
+
 router.post('/tasks/:id/resolve', async (req, res) => {
   try {
+    const clientId = req.body.clientId || req.query.clientId;
+    const guard = await assertTaskTenant(req.params.id, clientId);
+    if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+
     const task = await prisma.bpoTask.update({
       where: { id: req.params.id },
       data: { status: 'resolved', resolvedAt: new Date() },
@@ -111,6 +127,10 @@ router.post('/tasks/:id/resolve', async (req, res) => {
 
 router.post('/tasks/:id/dismiss', async (req, res) => {
   try {
+    const clientId = req.body.clientId || req.query.clientId;
+    const guard = await assertTaskTenant(req.params.id, clientId);
+    if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+
     const task = await prisma.bpoTask.update({
       where: { id: req.params.id },
       data: { status: 'dismissed', resolvedAt: new Date() },

@@ -99,25 +99,20 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE (soft delete: marca active=false se houver transactions)
+// DELETE (soft delete: regra do projeto — delete físico é proibido)
 router.delete('/:id', async (req, res) => {
   try {
     const existing = await prisma.bankAccount.findFirst({
       where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: { _count: { select: { payments: true } } },
     });
     if (!existing) return res.status(404).json({ error: 'Conta não encontrada' });
 
-    if (existing._count.payments > 0) {
-      // Soft delete pra preservar histórico
-      await prisma.bankAccount.update({
-        where: { id: req.params.id },
-        data: { active: false },
-      });
-      return res.json({ success: true, softDeleted: true });
-    }
-    await prisma.bankAccount.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    // Soft delete sempre — marca active=false, preserva histórico e FKs
+    await prisma.bankAccount.update({
+      where: { id: req.params.id },
+      data: { active: false },
+    });
+    res.json({ success: true, softDeleted: true });
   } catch (err) {
     console.error('[bpo banks delete]', err);
     res.status(500).json({ error: 'Erro ao excluir conta' });

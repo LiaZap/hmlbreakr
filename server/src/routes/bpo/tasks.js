@@ -67,9 +67,26 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * Resolve o clientId do tenant a partir do body/query e valida que a BpoTask
+ * informada pertence a esse cliente. Previne IDOR — sem isso um operador
+ * poderia alterar tarefa de qualquer cliente passando só o :id.
+ * @returns {Promise<{ok: true} | {ok: false, status: number, error: string}>}
+ */
+const assertTaskTenant = async (taskId, clientId) => {
+  if (!clientId) return { ok: false, status: 400, error: 'clientId obrigatório' };
+  const found = await prisma.bpoTask.findFirst({ where: { id: taskId, clientId } });
+  if (!found) return { ok: false, status: 404, error: 'Registro não encontrado' };
+  return { ok: true };
+};
+
 // UPDATE
 router.put('/:id', async (req, res) => {
   try {
+    const clientId = req.body.clientId;
+    const guard = await assertTaskTenant(req.params.id, clientId);
+    if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+
     const data = {};
     ['severity', 'title', 'description', 'assignedTo', 'status'].forEach((f) => {
       if (req.body[f] !== undefined) data[f] = req.body[f];
@@ -87,6 +104,10 @@ router.put('/:id', async (req, res) => {
 // Quick actions
 router.post('/:id/resolve', async (req, res) => {
   try {
+    const clientId = req.body.clientId || req.query.clientId;
+    const guard = await assertTaskTenant(req.params.id, clientId);
+    if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+
     const item = await prisma.bpoTask.update({
       where: { id: req.params.id },
       data: { status: 'resolved', resolvedAt: new Date() },
@@ -99,6 +120,10 @@ router.post('/:id/resolve', async (req, res) => {
 
 router.post('/:id/dismiss', async (req, res) => {
   try {
+    const clientId = req.body.clientId || req.query.clientId;
+    const guard = await assertTaskTenant(req.params.id, clientId);
+    if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+
     const item = await prisma.bpoTask.update({
       where: { id: req.params.id },
       data: { status: 'dismissed', resolvedAt: new Date() },
@@ -111,6 +136,10 @@ router.post('/:id/dismiss', async (req, res) => {
 
 router.post('/:id/start', async (req, res) => {
   try {
+    const clientId = req.body.clientId || req.query.clientId;
+    const guard = await assertTaskTenant(req.params.id, clientId);
+    if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+
     const item = await prisma.bpoTask.update({
       where: { id: req.params.id },
       data: { status: 'in_progress' },
@@ -123,7 +152,10 @@ router.post('/:id/start', async (req, res) => {
 
 router.post('/:id/assign', async (req, res) => {
   try {
-    const { assignedTo } = req.body;
+    const { assignedTo, clientId } = req.body;
+    const guard = await assertTaskTenant(req.params.id, clientId);
+    if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+
     const item = await prisma.bpoTask.update({
       where: { id: req.params.id },
       data: { assignedTo: assignedTo || null },
@@ -134,9 +166,18 @@ router.post('/:id/assign', async (req, res) => {
   }
 });
 
+// DELETE — soft delete: BpoTask não tem status 'deleted', delete físico é
+// proibido. A rota vira um dismiss lógico (status: 'dismissed').
 router.delete('/:id', async (req, res) => {
   try {
-    await prisma.bpoTask.delete({ where: { id: req.params.id } });
+    const clientId = req.body.clientId || req.query.clientId;
+    const guard = await assertTaskTenant(req.params.id, clientId);
+    if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
+
+    await prisma.bpoTask.update({
+      where: { id: req.params.id },
+      data: { status: 'dismissed', resolvedAt: new Date() },
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

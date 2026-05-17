@@ -260,18 +260,24 @@ router.post('/:id/receive', async (req, res) => {
   }
 });
 
+// DELETE (soft delete: regra do projeto — delete físico é proibido. Marca status=cancelled)
 router.delete('/:id', async (req, res) => {
   try {
     const receivable = await prisma.receivable.findFirst({
       where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: { _count: { select: { payments: true } } },
     });
     if (!receivable) return res.status(404).json({ error: 'Conta a receber não encontrada' });
-    if (receivable._count.payments > 0) {
-      return res.status(409).json({ error: 'Não é possível excluir: já existem recebimentos. Cancele em vez de excluir.' });
+    if (receivable.status === 'received') {
+      return res.status(409).json({ error: 'Não é possível cancelar: conta já foi recebida.' });
     }
-    await prisma.receivable.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    if (receivable.status === 'cancelled') {
+      return res.json({ success: true, alreadyCancelled: true });
+    }
+    await prisma.receivable.update({
+      where: { id: req.params.id },
+      data: { status: 'cancelled' },
+    });
+    res.json({ success: true, cancelled: true });
   } catch (err) {
     console.error('[bpo receivables delete]', err);
     res.status(500).json({ error: 'Erro ao excluir' });

@@ -11,6 +11,13 @@
  * Para usar no código:
  *   import { hasPermission } from '@/utils/permissions';
  *   if (hasPermission(currentUser, 'clients.delete')) { ... }
+ *
+ * SINCRONIZADO com server/src/utils/permissions.js (idêntico em semântica,
+ * só difere na sintaxe de módulo ESM vs CJS):
+ *   - Catálogo: PERMISSIONS, PERMISSION_CATEGORIES, ROLE_TEMPLATES, VALID_ROLES
+ *   - Funções: hasPermission, getEffectivePermissions, sanitizePermissions
+ * Itens exclusivos de UI (ROLE_LABELS, ROLE_COLORS, getPermissionsByCategory)
+ * ficam só aqui — não fazem sentido no backend.
  */
 
 // Catálogo de permissões disponíveis no sistema
@@ -111,6 +118,9 @@ export const ROLE_TEMPLATES = {
   custom: [],
 };
 
+// Roles válidos (derivado dos templates) — espelhado no server
+export const VALID_ROLES = Object.keys(ROLE_TEMPLATES);
+
 export const ROLE_LABELS = {
   super_admin: 'Super Admin',
   admin: 'Admin',
@@ -164,7 +174,7 @@ export const getEffectivePermissions = (user) => {
 export const sanitizePermissions = (perms) => {
   if (!Array.isArray(perms)) return [];
   const valid = new Set(Object.keys(PERMISSIONS));
-  return [...new Set(perms.filter((p) => valid.has(p)))];
+  return [...new Set(perms.filter((p) => typeof p === 'string' && valid.has(p)))];
 };
 
 /**

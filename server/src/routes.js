@@ -152,7 +152,9 @@ router.post('/admin/clients', async (req, res) => {
 // o `data` cru completo), não pode ser público.
 router.get('/admin/clients', requireAdmin, async (req, res) => {
   try {
+    // Por padrão só clientes ativos (soft delete). `?showInactive=1` traz também os excluídos.
     const clients = await prisma.client.findMany({
+      where: req.query.showInactive === '1' ? {} : { active: true },
       // stripeCustomerId/stripeSubscriptionId: usados pelo funil comercial (BAH-091)
       // pra excluir clientes que ja pagaram do pipeline de leads.
       select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true, stripeCustomerId: true, stripeSubscriptionId: true }
@@ -731,8 +733,10 @@ router.delete('/admin/clients/:id', async (req, res) => {
     if (role !== 'super_admin') {
       return res.status(403).json({ error: 'Apenas o Super Admin pode excluir clientes.' });
     }
-    await prisma.client.delete({
-      where: { id }
+    // Soft delete: DELETE físico é PROIBIDO (regra do projeto). Marca active=false.
+    await prisma.client.update({
+      where: { id },
+      data: { active: false }
     });
     res.json({ success: true });
   } catch (error) {
@@ -929,6 +933,11 @@ router.post('/client/login', async (req, res) => {
       return res.status(401).json({ error: 'Email ou senha incorretos' });
     }
 
+    // Soft delete: cliente/membro inativo não pode logar.
+    if (user.active === false) {
+      return res.status(401).json({ error: 'Email ou senha incorretos' });
+    }
+
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
       return res.status(401).json({ error: 'Email ou senha incorretos' });
@@ -1050,13 +1059,17 @@ router.get('/client/:hash', async (req, res) => {
         where: { hash },
         include: { client: true }
       });
-      if (teamMember) {
+      // Soft delete: membro inativo não acessa o dashboard.
+      if (teamMember && teamMember.active !== false) {
         client = teamMember.client;
         isOwner = false;
       }
     }
 
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+    // Soft delete: cliente inativo não acessa o dashboard.
+    if (client.active === false) return res.status(404).json({ error: 'Cliente não encontrado' });
 
     let dashboardData = JSON.parse(client.data);
 
@@ -1397,11 +1410,12 @@ router.put('/client/:hash/profile', async (req, res) => {
 router.get('/client/:hash/team', async (req, res) => {
   try {
     const { hash } = req.params;
-    const client = await prisma.client.findUnique({ 
+    const client = await prisma.client.findUnique({
       where: { hash },
-      include: { teamMembers: true }
+      // Soft delete: só membros ativos aparecem na listagem da equipe.
+      include: { teamMembers: { where: { active: true } } }
     });
-    
+
     // Only the owner can list team members
     if (!client) return res.status(403).json({ error: 'Acesso negado' });
 
@@ -1428,11 +1442,12 @@ router.post('/client/:hash/team', async (req, res) => {
       return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
     }
 
-    const client = await prisma.client.findUnique({ 
+    const client = await prisma.client.findUnique({
       where: { hash },
-      include: { teamMembers: true }
+      // Conta só membros ativos pro limite (soft delete não ocupa slot).
+      include: { teamMembers: { where: { active: true } } }
     });
-    
+
     // Only owner can create
     if (!client) return res.status(403).json({ error: 'Acesso negado' });
 
@@ -1542,8 +1557,11 @@ router.delete('/client/:hash/team/:memberId', async (req, res) => {
       }
     }
 
-    await prisma.teamMember.delete({
-      where: { id: memberId }
+    // Soft delete: DELETE físico é PROIBIDO (regra do projeto).
+    // Campo `active` adicionado ao model TeamMember via migration (contrato com agente de schema).
+    await prisma.teamMember.update({
+      where: { id: memberId },
+      data: { active: false }
     });
 
     res.json({ success: true, message: 'Membro removido' });
@@ -1870,7 +1888,7 @@ router.get('/clerk/me', async (req, res) => {
         }
       }
 
-      if (teamMember?.client) {
+      if (teamMember?.client && teamMember.active !== false) {
         // TeamMember logged in — return the OWNER's client hash + their team member info
         return res.json({
           hash: teamMember.client.hash,
@@ -2016,7 +2034,8 @@ router.put('/admin/broadcasts/:id', async (req, res) => {
 router.delete('/admin/broadcasts/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.broadcast.delete({ where: { id } });
+    // Soft delete: DELETE físico é PROIBIDO (regra do projeto). Marca active=false.
+    await prisma.broadcast.update({ where: { id }, data: { active: false } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao deletar comunicado' });

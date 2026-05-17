@@ -56,8 +56,13 @@ const BpoTasksList = () => {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  const action = async (id, what) => {
-    await fetch(`/api/bpo/tasks/${id}/${what}`, { method: 'POST' });
+  // Backend exige clientId no body pra validar o tenant da task (anti-IDOR).
+  const action = async (task, what) => {
+    await fetch(`/api/bpo/tasks/${task.id}/${what}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: task.clientId }),
+    });
     fetchItems();
   };
 
@@ -131,13 +136,13 @@ const BpoTasksList = () => {
                 <Td align="right">
                   {t.status === 'open' && (
                     <div className="flex gap-1 justify-end">
-                      <Button variant="link" size="sm" onClick={() => action(t.id, 'start')}>Iniciar</Button>
-                      <Button variant="link" size="sm" onClick={() => action(t.id, 'resolve')}>Resolver</Button>
-                      <button onClick={() => action(t.id, 'dismiss')} className="text-xs text-text-muted hover:text-danger">Dispensar</button>
+                      <Button variant="link" size="sm" onClick={() => action(t, 'start')}>Iniciar</Button>
+                      <Button variant="link" size="sm" onClick={() => action(t, 'resolve')}>Resolver</Button>
+                      <button onClick={() => action(t, 'dismiss')} className="text-xs text-text-muted hover:text-danger">Dispensar</button>
                     </div>
                   )}
                   {t.status === 'in_progress' && (
-                    <Button variant="link" size="sm" onClick={() => action(t.id, 'resolve')}>Resolver</Button>
+                    <Button variant="link" size="sm" onClick={() => action(t, 'resolve')}>Resolver</Button>
                   )}
                 </Td>
               </Tr>

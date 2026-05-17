@@ -98,21 +98,15 @@ router.delete('/:id', async (req, res) => {
   try {
     const existing = await prisma.financialCategory.findFirst({
       where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: { _count: { select: { payables: true, receivables: true, children: true } } },
     });
     if (!existing) return res.status(404).json({ error: 'Categoria não encontrada' });
 
-    const inUse = existing._count.payables + existing._count.receivables + existing._count.children;
-    if (inUse > 0) {
-      // Soft delete
-      await prisma.financialCategory.update({
-        where: { id: req.params.id },
-        data: { active: false },
-      });
-      return res.json({ success: true, softDeleted: true });
-    }
-    await prisma.financialCategory.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    // Soft delete sempre — regra do projeto: delete físico é proibido
+    await prisma.financialCategory.update({
+      where: { id: req.params.id },
+      data: { active: false },
+    });
+    res.json({ success: true, softDeleted: true });
   } catch (err) {
     console.error('[bpo categories delete]', err);
     res.status(500).json({ error: 'Erro ao excluir categoria' });

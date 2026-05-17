@@ -22,6 +22,8 @@ model Agency {
   clients              Client[]  @relation("AgencyClients")
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+
+  @@index([active])
 }
 
 model Client {
@@ -63,6 +65,9 @@ model Client {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([agencyId])
+  @@index([active])
 }
 
 // Snapshots históricos do Client.data (JSON blob ~330KB) pra evitar perda
@@ -86,20 +91,20 @@ model ClientDataSnapshot {
 // Antes ADMIN_ACCOUNTS era hardcoded em routes.js, agora pode ser gerenciado
 // via UI por super_admin. Login via email+senha (bcrypt) ou Clerk SSO.
 model AdminUser {
-  id           String    @id @default(uuid())
-  name         String
-  email        String    @unique
-  password     String? // bcrypt hash, opcional se usa Clerk
-  clerkUserId  String?   @unique
-  role         String // super_admin | admin | gestor | commercial | financial | custom
-  permissions  String[]  @default([]) // granular — ex: ['dashboard.view','clients.edit']. Vazio = usa template do role.
-  photo        String?   @db.Text
-  active       Boolean   @default(true)
-  invitedBy    String? // id do super_admin que convidou
-  invitedAt    DateTime?
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  name        String
+  email       String    @unique
+  password    String? // bcrypt hash, opcional se usa Clerk
+  clerkUserId String?   @unique
+  role        String // super_admin | admin | gestor | commercial | financial | custom
+  permissions String[]  @default([]) // granular — ex: ['dashboard.view','clients.edit']. Vazio = usa template do role.
+  photo       String?   @db.Text
+  active      Boolean   @default(true)
+  invitedBy   String? // id do super_admin que convidou
+  invitedAt   DateTime?
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([email])
   @@index([role])
@@ -116,7 +121,11 @@ model TeamMember {
   role        String   @default("Gerente")
   clientId    String
   client      Client   @relation("ClientTeam", fields: [clientId], references: [id], onDelete: Cascade)
+  active      Boolean  @default(true)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId])
 }
 
 model Broadcast {
@@ -128,7 +137,11 @@ model Broadcast {
   active         Boolean   @default(true)
   targetCategory String? // null = all, or "Pizzaria", "Hamburgueria", etc.
   createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
   expiresAt      DateTime?
+
+  @@index([active])
+  @@index([targetCategory])
 }
 
 // =====================================================================
@@ -263,18 +276,18 @@ model BpoPartner {
 }
 
 model PaymentMethod {
-  id             String       @id @default(uuid())
+  id             String              @id @default(uuid())
   clientId       String
-  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client         Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name           String // iFood, Aiqfome, Crédito, Débito, PIX, Dinheiro
   type           String // marketplace | card_credit | card_debit | pix | cash | transfer
-  feePercent     Decimal      @default(0) @db.Decimal(5, 2)
-  settlementDays Int          @default(0)
-  active         Boolean      @default(true)
+  feePercent     Decimal             @default(0) @db.Decimal(5, 2)
+  settlementDays Int                 @default(0)
+  active         Boolean             @default(true)
   receivables    Receivable[]
   advances       ReceivableAdvance[]
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@index([clientId])
 }
@@ -283,28 +296,28 @@ model PaymentMethod {
 // Cliente registra contratos com bancos pra ter parcela mensal e saldo
 // devedor refletidos na DRE/fluxo de caixa.
 model Loan {
-  id                  String    @id @default(uuid())
+  id                  String   @id @default(uuid())
   clientId            String
-  client              Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client              Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   bankName            String
   contractNumber      String?
   description         String? // ex: "Capital de giro - reforma"
   // Inputs
-  principal           Decimal   @db.Decimal(18, 2) // valor financiado
-  interestRateMonthly Decimal   @db.Decimal(7, 4) // taxa a.m. (% ao mês)
+  principal           Decimal  @db.Decimal(18, 2) // valor financiado
+  interestRateMonthly Decimal  @db.Decimal(7, 4) // taxa a.m. (% ao mês)
   totalInstallments   Int // qtd total de parcelas
-  paidInstallments    Int       @default(0) // qtd ja pagas
+  paidInstallments    Int      @default(0) // qtd ja pagas
   startDate           DateTime
   // Calculados (denormalizados pra performance)
-  installmentValue    Decimal   @db.Decimal(18, 2) // valor da parcela (Price)
-  totalToPay          Decimal   @db.Decimal(18, 2) // installmentValue * totalInstallments
-  totalInterest       Decimal   @db.Decimal(18, 2) // totalToPay - principal
-  currentBalance      Decimal   @db.Decimal(18, 2) // saldo devedor amortizado
-  status              String    @default("active") // active | paid | cancelled
+  installmentValue    Decimal  @db.Decimal(18, 2) // valor da parcela (Price)
+  totalToPay          Decimal  @db.Decimal(18, 2) // installmentValue * totalInstallments
+  totalInterest       Decimal  @db.Decimal(18, 2) // totalToPay - principal
+  currentBalance      Decimal  @db.Decimal(18, 2) // saldo devedor amortizado
+  status              String   @default("active") // active | paid | cancelled
   notes               String?
-  active              Boolean   @default(true)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([clientId])
   @@index([status])
@@ -427,6 +440,9 @@ model Recurrence {
   payables         Payable[]
   receivables      Receivable[]
   createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([startDate])
 }
 
 model PaymentTransaction {

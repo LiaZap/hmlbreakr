@@ -77,16 +77,12 @@ router.delete('/:id', async (req, res) => {
   try {
     const existing = await prisma.paymentMethod.findFirst({
       where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: { _count: { select: { receivables: true } } },
     });
     if (!existing) return res.status(404).json({ error: 'Meio de pagamento não encontrado' });
 
-    if (existing._count.receivables > 0) {
-      await prisma.paymentMethod.update({ where: { id: req.params.id }, data: { active: false } });
-      return res.json({ success: true, softDeleted: true });
-    }
-    await prisma.paymentMethod.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    // Soft delete sempre — regra do projeto: delete físico é proibido
+    await prisma.paymentMethod.update({ where: { id: req.params.id }, data: { active: false } });
+    res.json({ success: true, softDeleted: true });
   } catch (err) {
     console.error('[bpo payment-methods delete]', err);
     res.status(500).json({ error: 'Erro ao excluir meio de pagamento' });

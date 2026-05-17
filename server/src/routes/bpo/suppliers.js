@@ -30,9 +30,11 @@ const isValidCnpj = (cnpj) => cleanCnpj(cnpj).length === 14;
 // LIST
 router.get('/', async (req, res) => {
   try {
-    const { search, page = 1, pageSize = 50 } = req.query;
+    const { search, page = 1, pageSize = 50, includeInactive } = req.query;
     const where = {
       clientId: req.bpoClient.id,
+      // Soft delete: oculta inativos por padrão (sobrepor com ?includeInactive=true)
+      ...(includeInactive === 'true' ? {} : { active: true }),
       ...(search ? {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -162,24 +164,20 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE
+// DELETE (soft delete: regra do projeto — delete físico é proibido)
 router.delete('/:id', async (req, res) => {
   try {
     const existing = await prisma.supplier.findFirst({
       where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: { _count: { select: { payables: true } } },
     });
     if (!existing) return res.status(404).json({ error: 'Fornecedor não encontrado' });
 
-    // Bloqueia se houver payables vinculados (proteção)
-    if (existing._count.payables > 0) {
-      return res.status(409).json({
-        error: `Não é possível excluir: fornecedor tem ${existing._count.payables} conta(s) a pagar vinculada(s)`,
-      });
-    }
-
-    await prisma.supplier.delete({ where: { id: req.params.id } });
-    res.json({ success: true });
+    // Soft delete sempre — marca active=false, preserva histórico e FKs com payables
+    await prisma.supplier.update({
+      where: { id: req.params.id },
+      data: { active: false },
+    });
+    res.json({ success: true, softDeleted: true });
   } catch (err) {
     console.error('[bpo suppliers delete]', err);
     res.status(500).json({ error: 'Erro ao excluir fornecedor' });

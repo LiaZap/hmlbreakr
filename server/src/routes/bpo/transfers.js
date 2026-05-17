@@ -87,6 +87,25 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * DELETE — desfaz uma transferência.
+ *
+ * DECISÃO DE ENGENHARIA: BankTransfer é IMUTÁVEL no schema (não tem campo
+ * `active` nem `status`). A regra do projeto proíbe delete físico
+ * (`prisma.X.delete`) e mudar o schema está fora do escopo desta correção.
+ *
+ * Solução: em vez de apagar o registro original, registramos um ESTORNO —
+ * uma transferência de compensação no sentido inverso. Isso:
+ *   - corrige os saldos das contas (efeito líquido zero);
+ *   - preserva o histórico completo (original + estorno), respeitando a
+ *     imutabilidade do BankTransfer;
+ *   - não usa delete físico, cumprindo a regra anti-delete do projeto.
+ *
+ * O estorno é idempotente: se já existir um estorno para esta transferência
+ * (description marcada com o prefixo abaixo), a operação é rejeitada.
+ */
+const REVERSAL_PREFIX = '[ESTORNO]';
+
 router.delete('/:id', async (req, res) => {
   try {
     const transfer = await prisma.bankTransfer.findFirst({
@@ -94,8 +113,39 @@ router.delete('/:id', async (req, res) => {
     });
     if (!transfer) return res.status(404).json({ error: 'Transferência não encontrada' });
 
-    // Reverte os saldos
-    await prisma.$transaction(async (tx) => {
+    if (transfer.description && transfer.description.startsWith(REVERSAL_PREFIX)) {
+      return res.status(409).json({ error: 'Não é possível estornar um lançamento que já é um estorno' });
+    }
+
+    // Verifica se já existe estorno para esta transferência (idempotência)
+    const existingReversal = await prisma.bankTransfer.findFirst({
+      where: {
+        clientId: req.bpoClient.id,
+        fromAccountId: transfer.toAccountId,
+        toAccountId: transfer.fromAccountId,
+        description: { startsWith: `${REVERSAL_PREFIX} ref:${transfer.id}` },
+      },
+    });
+    if (existingReversal) {
+      return res.status(409).json({ error: 'Esta transferência já foi estornada', reversalId: existingReversal.id });
+    }
+
+    // Estorno atômico: cria transferência inversa + reverte os saldos.
+    // amount inverso = amount original; fee = 0 (o estorno não cobra nova taxa).
+    const reversal = await prisma.$transaction(async (tx) => {
+      const rev = await tx.bankTransfer.create({
+        data: {
+          clientId: req.bpoClient.id,
+          fromAccountId: transfer.toAccountId,
+          toAccountId: transfer.fromAccountId,
+          amount: Number(transfer.amount),
+          fee: 0,
+          date: new Date(),
+          description: `${REVERSAL_PREFIX} ref:${transfer.id} — ${transfer.description || 'Transferência'}`,
+        },
+      });
+
+      // Reverte os saldos: devolve amount+fee à origem original, debita amount do destino original
       await tx.bankAccount.update({
         where: { id: transfer.fromAccountId },
         data: { currentBalance: { increment: Number(transfer.amount) + Number(transfer.fee) } },
@@ -104,11 +154,13 @@ router.delete('/:id', async (req, res) => {
         where: { id: transfer.toAccountId },
         data: { currentBalance: { decrement: Number(transfer.amount) } },
       });
-      await tx.bankTransfer.delete({ where: { id: req.params.id } });
+
+      return rev;
     });
 
-    res.json({ success: true });
+    res.json({ success: true, reversed: true, reversalId: reversal.id });
   } catch (err) {
+    console.error('[bpo transfers delete]', err);
     res.status(500).json({ error: err.message });
   }
 });
