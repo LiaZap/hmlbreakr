@@ -69,6 +69,35 @@ body {
   display: none;
 }
 
+/* === SCROLLBAR custom — combina com o tema dark do sistema ===
+   Substitui a barra padrão do navegador (fundo branco/cinza) por uma
+   discreta, fina e arredondada, alinhada ao dark theme. */
+* {
+  scrollbar-width: thin;                       /* Firefox */
+  scrollbar-color: #34343a transparent;        /* thumb / track — Firefox */
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2e2e33;
+  border-radius: 8px;
+  /* borda transparente + clip dá um "respiro" — thumb não cola nas bordas */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #45454c;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* ── Clerk layout: keep form inside parent container ── */
 .cl-rootBox,
 .cl-signIn-root,
