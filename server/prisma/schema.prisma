@@ -167,6 +167,7 @@ model Supplier {
   defaultBankAccountId String?
   defaultBankAccount   BankAccount?       @relation("SupplierDefaultBankAccount", fields: [defaultBankAccountId], references: [id], onDelete: SetNull)
   notes                String?
+  active               Boolean            @default(true)
   payables             Payable[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
