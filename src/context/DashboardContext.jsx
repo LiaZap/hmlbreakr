@@ -56,6 +56,37 @@ const createSyncScheduler = () => {
   };
 };
 
+/**
+ * getSaoPauloNow — retorna { year, month (1-12), day } para o "agora" no fuso
+ * America/Sao_Paulo, independente do fuso do navegador do usuário.
+ *
+ * BAH-090: o registro de faturamento diário grava datas como "YYYY-MM-DD"
+ * (date string sem fuso). Para decidir qual é o "mês corrente" e "hoje" de
+ * forma consistente com o resto do sistema (DailyBriefing já usa Sao_Paulo),
+ * resolvemos o calendário sempre no fuso do Brasil. Assim um usuário acessando
+ * de outro fuso (ou perto da virada de dia) não vê o mês corrente errado.
+ */
+const getSaoPauloNow = () => {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    const parts = fmt.formatToParts(new Date());
+    const get = (t) => parseInt(parts.find(p => p.type === t)?.value, 10);
+    const year = get('year');
+    const month = get('month');
+    const day = get('day');
+    if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+      return { year, month, day };
+    }
+  } catch {
+    // Intl com timeZone pode falhar em runtimes muito antigos — cai no fallback.
+  }
+  const d = new Date();
+  return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+};
+
 export const DashboardProvider = ({ children }) => {
   // Initial Mock Data (Fallback)
   const initialData = {
@@ -216,7 +247,9 @@ export const DashboardProvider = ({ children }) => {
     
     // Revenue (Smart Search: Closest to Current Month, then Annual History)
     const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-    const currentMonthIndex = new Date().getMonth(); // 0 = Jan, 11 = Dec
+    // BAH-090: mês corrente resolvido no fuso America/Sao_Paulo para consistência
+    // entre barras de faturamento, ponto de equilíbrio e custos dinâmicos.
+    const currentMonthIndex = getSaoPauloNow().month - 1; // 0 = Jan, 11 = Dec
     
     let currentRevenue = 0;
     let currentMonthStr = "";
@@ -249,20 +282,36 @@ export const DashboardProvider = ({ children }) => {
     }
     
     // Overlay daily revenue entries onto revenue bars
-    // Any month with daily entries uses the daily total (current month = partial, past months = final)
+    // BAH-090: o faturamento diário (modal "Faturamento Diário" / futuras integrações
+    // iFood, Suitable, AiqFome) é gravado em formData.daily_revenue como
+    // { "YYYY-MM-DD": valor }. Ele precisa ser agregado por mês para alimentar
+    // as barras de faturamento, o ponto de equilíbrio e os custos dinâmicos.
     const dailyRevenueData = formData.daily_revenue || {};
-    const nowForRevenue = new Date();
-    const currentMonthIdx = nowForRevenue.getMonth();
+    const spNow = getSaoPauloNow(); // mês/dia corrente no fuso do Brasil
+    const currentMonthIdx = spNow.month - 1; // 0-based
+    const currentYear = spNow.year;
+    const currentMonthKey = `${String(spNow.month).padStart(2, '0')}/${spNow.year}`;
+
+    // dailyByMonth: total diário agregado por índice de mês (0-11), apenas do ANO corrente.
+    // dailyByMonthKey: total agregado por chave "MM/YYYY", preservando o ano —
+    // necessário para casar com as entradas de revenue_history e para o mês corrente.
     const dailyByMonth = {};
+    const dailyByMonthKey = {};
     Object.entries(dailyRevenueData).forEach(([dateStr, v]) => {
         const parts = dateStr.split('-');
         if (parts.length < 2) return;
-        const monthIdx = parseInt(parts[1], 10) - 1;
-        if (monthIdx < 0 || monthIdx > 11) return;
+        const yyyy = parseInt(parts[0], 10);
+        const monthNum = parseInt(parts[1], 10);
+        if (isNaN(yyyy) || isNaN(monthNum) || monthNum < 1 || monthNum > 12) return;
         const amount = typeof v === 'number' ? v : parseCurrency(v);
-        dailyByMonth[monthIdx] = (dailyByMonth[monthIdx] || 0) + amount;
+        const key = `${String(monthNum).padStart(2, '0')}/${yyyy}`;
+        dailyByMonthKey[key] = (dailyByMonthKey[key] || 0) + amount;
+        if (yyyy === currentYear) {
+            const monthIdx = monthNum - 1;
+            dailyByMonth[monthIdx] = (dailyByMonth[monthIdx] || 0) + amount;
+        }
     });
-    // Apply daily totals to revenueHistory bars
+    // Apply daily totals to revenueHistory bars (array indexado por mês, ano corrente)
     Object.entries(dailyByMonth).forEach(([idx, total]) => {
         if (total > 0) revenueHistory[parseInt(idx)] = total;
     });
@@ -270,8 +319,17 @@ export const DashboardProvider = ({ children }) => {
     const totalAnnualRevenue = revenueHistory.reduce((acc, val) => acc + val, 0);
 
     // Build chronological timeline for chart display (preserves year info)
+    // BAH-090: as barras de faturamento consomem `revenueTimeline`. Antes, ele era
+    // derivado APENAS de revenue_history (dados mensais do onboarding). Como o
+    // faturamento diário do mês corrente normalmente NÃO tem entrada em
+    // revenue_history, a barra do mês corrente nunca aparecia — mesmo o valor já
+    // sendo contado no Ponto de Equilíbrio (que lê daily_revenue direto).
+    // Correção: 1) o overlay diário casa por chave "MM/YYYY" (ano-aware);
+    //           2) se o mês corrente não existe em revenue_history mas tem
+    //              lançamentos diários, injetamos uma barra sintética para ele.
     const monthNamesShortPT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     let revenueTimeline = [];
+    const timelineKeys = new Set();
     if (formData.revenue_history && Array.isArray(formData.revenue_history)) {
         const parsed = formData.revenue_history
             .filter(e => e.month && e.amount)
@@ -282,11 +340,11 @@ export const DashboardProvider = ({ children }) => {
                 const yyyy = parseInt(parts[1], 10);
                 if (isNaN(mm) || isNaN(yyyy) || mm < 1 || mm > 12) return null;
                 const val = parseCurrency(e.amount);
-                // Apply daily overlay for this month (current year only)
-                const isCurrentYearMonth = yyyy === nowForRevenue.getFullYear() && mm - 1 === currentMonthIdx;
-                const finalVal = isCurrentYearMonth && dailyByMonth[mm - 1] > 0
-                    ? dailyByMonth[mm - 1]
-                    : val;
+                // Overlay diário: se há lançamentos diários para este mês/ano,
+                // eles substituem o valor mensal (fonte mais granular e atual).
+                const monthKey = `${String(mm).padStart(2, '0')}/${yyyy}`;
+                const dailyTotal = dailyByMonthKey[monthKey] || 0;
+                const finalVal = dailyTotal > 0 ? dailyTotal : val;
                 return {
                     key: e.month,
                     label: `${monthNamesShortPT[mm-1]}/${String(yyyy).slice(-2)}`,
@@ -299,8 +357,30 @@ export const DashboardProvider = ({ children }) => {
         // Sort oldest → newest
         parsed.sort((a, b) => a.year !== b.year ? a.year - b.year : a.monthIdx - b.monthIdx);
         // Deduplicate by key
-        const seen = new Set();
-        revenueTimeline = parsed.filter(e => { if (seen.has(e.key)) return false; seen.add(e.key); return true; });
+        revenueTimeline = parsed.filter(e => {
+            if (timelineKeys.has(e.key)) return false;
+            timelineKeys.add(e.key);
+            return true;
+        });
+    }
+
+    // BAH-090: garante a barra do MÊS CORRENTE.
+    // Se o mês corrente (fuso Brasil) tem faturamento diário mas ainda não está
+    // representado na timeline, injeta uma barra sintética com o total diário.
+    // Assim "Faturamento Diário" reflete imediatamente nas barras, e o sistema
+    // fica pronto para receber lançamentos das integrações (iFood/Suitable/AiqFome).
+    if (revenueTimeline.length > 0 && !timelineKeys.has(currentMonthKey)
+        && (dailyByMonthKey[currentMonthKey] || 0) > 0) {
+        revenueTimeline.push({
+            key: currentMonthKey,
+            label: `${monthNamesShortPT[currentMonthIdx]}/${String(currentYear).slice(-2)}`,
+            value: dailyByMonthKey[currentMonthKey],
+            monthIdx: currentMonthIdx,
+            year: currentYear,
+        });
+        timelineKeys.add(currentMonthKey);
+        // Reordena cronologicamente após a injeção
+        revenueTimeline.sort((a, b) => a.year !== b.year ? a.year - b.year : a.monthIdx - b.monthIdx);
     }
 
     // For financial calcs: past months with daily data use the daily total (complete month).
@@ -316,7 +396,7 @@ export const DashboardProvider = ({ children }) => {
     }
 
     // 2. Find "Current" Revenue (Prioritize current month -> past months -> wrap around to end of year)
-    const currentYear = new Date().getFullYear();
+    // currentYear já foi resolvido acima a partir do fuso America/Sao_Paulo (BAH-090).
     const searchOrder = [
         ...Array.from({ length: currentMonthIndex + 1 }, (_, i) => currentMonthIndex - i), // Current down to 0
         ...Array.from({ length: 11 - currentMonthIndex }, (_, i) => 11 - i) // 11 down to Current+1
@@ -870,10 +950,14 @@ export const DashboardProvider = ({ children }) => {
             ]
         },
         breakEven: (() => {
-            const now = new Date();
-            const activeMonthIdx = selectedMonthIndex !== null ? selectedMonthIndex : now.getMonth();
-            const isCurrentMonth = activeMonthIdx === now.getMonth() && selectedMonthIndex === null;
-            const daysInMonth = new Date(now.getFullYear(), activeMonthIdx + 1, 0).getDate();
+            // BAH-090: usa o fuso America/Sao_Paulo para "agora", garantindo que o
+            // ponto de equilíbrio e as barras de faturamento concordem sobre qual
+            // é o mês corrente e o dia de hoje.
+            const bepNow = getSaoPauloNow(); // { year, month (1-12), day }
+            const nowMonthIdx = bepNow.month - 1;
+            const activeMonthIdx = selectedMonthIndex !== null ? selectedMonthIndex : nowMonthIdx;
+            const isCurrentMonth = activeMonthIdx === nowMonthIdx && selectedMonthIndex === null;
+            const daysInMonth = new Date(bepNow.year, activeMonthIdx + 1, 0).getDate();
 
             let revenueForCalc, dailyAvg;
             let hasDailyData = false;
@@ -881,13 +965,13 @@ export const DashboardProvider = ({ children }) => {
             if (isCurrentMonth) {
                 // Current month: use daily entries if available, else prorate
                 const dailyRevenue = formData.daily_revenue || {};
-                const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                const currentMonthPrefix = `${bepNow.year}-${String(bepNow.month).padStart(2, '0')}`;
                 const currentMonthEntries = Object.entries(dailyRevenue)
                     .filter(([dateStr]) => dateStr.startsWith(currentMonthPrefix))
                     .map(([, amount]) => (typeof amount === 'number' ? amount : parseCurrency(amount)));
                 hasDailyData = currentMonthEntries.length > 0;
 
-                const today = now.getDate();
+                const today = bepNow.day;
                 if (hasDailyData) {
                     revenueForCalc = currentMonthEntries.reduce((sum, v) => sum + v, 0);
                     dailyAvg = revenueForCalc / currentMonthEntries.length;

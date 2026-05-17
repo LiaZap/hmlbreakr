@@ -140,6 +140,167 @@ async function syncPaymentMethods(prisma, clientId, formData) {
   }
 }
 
+// ====================================================================
+// CUSTOS FIXOS — espelha despesas recorrentes do onboarding pro BPO.
+//
+// O painel financeiro de Contas a Pagar é a fonte de verdade: cada custo
+// fixo preenchido no onboarding vira um Payable recorrente (mensal).
+//
+// Idempotência:
+//   - Cada custo tem uma CHAVE DETERMINÍSTICA (syncKey) — ex: "rent".
+//   - O Payable é identificado por uma tag invisível no campo `description`
+//     ("[onb:<syncKey>]"). Match por essa tag → update; senão → create.
+//   - Não duplica a cada save. Não apaga Payables criados/editados à mão.
+//   - Custos zerados/removidos no onboarding têm o Payable do mês corrente
+//     cancelado (status 'cancelled'), nunca deletado.
+// ====================================================================
+
+// Marcador determinístico embutido na descrição do Payable.
+const ONB_TAG = (key) => `[onb:${key}]`;
+const hasOnbTag = (desc, key) => typeof desc === 'string' && desc.includes(ONB_TAG(key));
+
+// Dia de vencimento padrão pros custos fixos sincronizados (dia 10 do mês).
+const SYNC_DUE_DAY = 10;
+
+// Vencimento do mês corrente. Se o dia 10 já passou, usa o próximo mês —
+// assim a conta fica sempre visível na janela de 30 dias do dashboard.
+function currentRecurringDueDate() {
+  const now = new Date();
+  let due = new Date(now.getFullYear(), now.getMonth(), SYNC_DUE_DAY, 12, 0, 0);
+  if (due < now) {
+    due = new Date(now.getFullYear(), now.getMonth() + 1, SYNC_DUE_DAY, 12, 0, 0);
+  }
+  return due;
+}
+
+// Catálogo de custos fixos do onboarding → categoria DRE do BPO.
+// value: função que extrai o valor mensal (R$) do formData.
+// Custos anuais são convertidos pra mensal (÷12) quando o ticket pede recorrência.
+function collectFixedCosts(formData) {
+  const lc = formData.location_costs || {};
+  const ut = formData.utilities || {};
+  const rs = formData.recurring_services || {};
+  const of = formData.operational_fixed || {};
+  const as = formData.admin_systems || {};
+  const ms = formData.marketing_structure || {};
+
+  const items = [
+    { key: 'rent',          label: 'Aluguel',                       dreGroup: 'despesa_op', amount: parseCurrency(lc.rent) },
+    // IPTU é anual no onboarding → rateio mensal pra recorrência mensal.
+    { key: 'iptu',          label: 'IPTU',                          dreGroup: 'imposto',    amount: parseCurrency(lc.iptu_annual) / 12 },
+    { key: 'internet',      label: 'Internet',                      dreGroup: 'despesa_op', amount: parseCurrency(ut.internet) },
+    { key: 'alarm',         label: 'Alarme',                        dreGroup: 'despesa_op', amount: parseCurrency(ut.security) },
+    { key: 'security',      label: 'Segurança / Ronda / Vigia',     dreGroup: 'despesa_op', amount: parseCurrency(ut.security_guard) },
+    { key: 'kitchen_gas',   label: 'Gás de Cozinha',                dreGroup: 'despesa_op', amount: parseCurrency(of.kitchen_gas) },
+    { key: 'kitchen_oil',   label: 'Óleo / Gordura',                dreGroup: 'despesa_op', amount: parseCurrency(of.kitchen_oil) },
+    { key: 'systems',       label: 'Sistemas',                      dreGroup: 'despesa_op', amount: parseCurrency(as.software_pdv) },
+    { key: 'accountant',    label: 'Contabilidade',                 dreGroup: 'despesa_op', amount: parseCurrency(as.accountant) },
+    { key: 'card_machine',  label: 'Aluguel de Maquininha',         dreGroup: 'taxa_venda', amount: parseCurrency(as.card_machine_rent) },
+    { key: 'mkt_agency',    label: 'Agência de Marketing',          dreGroup: 'despesa_op', amount: parseCurrency(ms.agency) },
+    { key: 'mkt_ads',       label: 'Investimento em Tráfego Pago',  dreGroup: 'despesa_op', amount: parseCurrency(ms.ads_budget) },
+  ];
+
+  return items;
+}
+
+// Garante que existe uma FinancialCategory de despesa pro custo fixo.
+// Idempotente: match por nome (case-insensitive) + type 'despesa'.
+async function ensureCategory(prisma, clientId, categoryCache, label, dreGroup) {
+  const cacheKey = norm(label);
+  if (categoryCache.has(cacheKey)) return categoryCache.get(cacheKey);
+
+  let cat = await prisma.financialCategory.findFirst({
+    where: { clientId, type: 'despesa', name: { equals: label, mode: 'insensitive' } },
+  });
+  if (!cat) {
+    cat = await prisma.financialCategory.create({
+      data: { clientId, name: label, type: 'despesa', dreGroup: dreGroup || 'despesa_op' },
+    });
+  }
+  categoryCache.set(cacheKey, cat);
+  return cat;
+}
+
+async function syncFixedCosts(prisma, clientId, formData) {
+  const costs = collectFixedCosts(formData);
+
+  // Payables já sincronizados pelo onboarding (têm a tag [onb:*]).
+  const existing = await prisma.payable.findMany({
+    where: { clientId, description: { contains: '[onb:' } },
+    include: { recurrence: { select: { id: true } } },
+  });
+  const byKey = new Map();
+  for (const p of existing) {
+    const c = costs.find((x) => hasOnbTag(p.description, x.key));
+    if (c) byKey.set(c.key, p);
+  }
+
+  const categoryCache = new Map();
+  const dueDate = currentRecurringDueDate();
+  let synced = 0;
+  let cancelled = 0;
+
+  for (const cost of costs) {
+    const match = byKey.get(cost.key);
+    const amount = Math.round((cost.amount || 0) * 100) / 100;
+    const description = `${cost.label} ${ONB_TAG(cost.key)}`;
+
+    // Custo zerado/ausente: não cria. Se já existe um Payable pendente
+    // desse custo, cancela (cliente apagou o valor no onboarding).
+    if (amount <= 0) {
+      if (match && match.status === 'pending') {
+        await prisma.payable.update({
+          where: { id: match.id },
+          data: { status: 'cancelled' },
+        });
+        cancelled++;
+      }
+      continue;
+    }
+
+    const category = await ensureCategory(prisma, clientId, categoryCache, cost.label, cost.dreGroup);
+
+    if (match) {
+      // Atualiza valor/categoria. Só mexe em dueDate/status se ainda
+      // estiver pendente — não sobrescreve uma conta já paga/agendada à mão.
+      const data = {
+        amount,
+        description,
+        categoryId: category.id,
+      };
+      if (match.status === 'pending' || match.status === 'cancelled') {
+        data.remainingAmount = amount;
+        data.dueDate = dueDate;
+        data.paymentForecast = dueDate;
+        data.status = 'pending';
+      }
+      await prisma.payable.update({ where: { id: match.id }, data });
+      synced++;
+    } else {
+      // Cria o Payable recorrente mensal (recorrência indefinida).
+      const recurrence = await prisma.recurrence.create({
+        data: { frequency: 'monthly', intervalCount: 1, startDate: dueDate },
+      });
+      await prisma.payable.create({
+        data: {
+          clientId,
+          amount,
+          remainingAmount: amount,
+          dueDate,
+          paymentForecast: dueDate,
+          description,
+          categoryId: category.id,
+          status: 'pending',
+          recurrenceId: recurrence.id,
+        },
+      });
+      synced++;
+    }
+  }
+
+  return { synced, cancelled };
+}
+
 async function syncOnboardingToBpo(prisma, clientId, formData) {
   if (!formData || typeof formData !== 'object') return;
 
@@ -154,7 +315,8 @@ async function syncOnboardingToBpo(prisma, clientId, formData) {
     await syncPartners(prisma, clientId, formData.partners);
     await syncEmployees(prisma, clientId, formData.employees);
     await syncPaymentMethods(prisma, clientId, formData);
-    console.log(`[onboardingSync] OK client=${clientId} partners=${stats.partners} employees=${stats.employees} marketplaces=${stats.marketplaces} cards=${stats.cards}`);
+    const fixed = await syncFixedCosts(prisma, clientId, formData);
+    console.log(`[onboardingSync] OK client=${clientId} partners=${stats.partners} employees=${stats.employees} marketplaces=${stats.marketplaces} cards=${stats.cards} fixedCosts=${fixed.synced} cancelled=${fixed.cancelled}`);
   } catch (err) {
     // Sync é best-effort — não quebra o save do cliente se falhar
     console.error(`[onboardingSync] FAIL client=${clientId}`, err);
@@ -167,11 +329,15 @@ async function syncOnboardingToBpo(prisma, clientId, formData) {
  */
 async function diffOnboardingVsBpo(prisma, clientId, formData) {
   formData = formData || {};
-  const [bpoPartners, bpoEmployees, bpoPaymentMethods] = await Promise.all([
+  const [bpoPartners, bpoEmployees, bpoPaymentMethods, bpoFixedPayables] = await Promise.all([
     prisma.bpoPartner.findMany({ where: { clientId } }),
     prisma.bpoEmployee.findMany({ where: { clientId } }),
     prisma.paymentMethod.findMany({ where: { clientId } }),
+    prisma.payable.findMany({ where: { clientId, description: { contains: '[onb:' } } }),
   ]);
+
+  const fixedCosts = collectFixedCosts(formData).filter((c) => (c.amount || 0) > 0);
+  const syncedFixed = bpoFixedPayables.filter((p) => p.status !== 'cancelled');
 
   const onboarding = {
     partners: (formData.partners || []).filter(p => p?.name).map(p => p.name),
@@ -202,12 +368,14 @@ async function diffOnboardingVsBpo(prisma, clientId, formData) {
         employees: onboarding.employees.length,
         marketplaces: onboarding.marketplaces.length,
         cards: onboarding.cards.length,
+        fixedCosts: fixedCosts.length,
       },
       bpo: {
         partners: bpo.partners.length,
         employees: bpo.employees.length,
         marketplaces: bpo.marketplaces.length,
         cards: bpo.cards.length,
+        fixedCosts: syncedFixed.length,
       },
     },
     missing: {

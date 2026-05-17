@@ -35,13 +35,16 @@ const BpoDashboard = () => {
       }
     };
     try {
-      const [banks, payables, receivables, cashflow, dre, transactions] = await Promise.all([
+      const [banks, payables, receivables, cashflow, dre, transactions, employees, partners, paymentMethods] = await Promise.all([
         safeFetch('/bank-accounts'),
         safeFetch(`/reports/payables?from=${todayISO()}&to=${datePlusDays(30)}`),
         safeFetch(`/reports/receivables?from=${todayISO()}&to=${datePlusDays(30)}`),
         safeFetch(`/reports/cashflow?from=${todayISO()}&to=${datePlusDays(30)}&groupBy=week`),
         safeFetch(`/reports/dre?from=${dateMinusDays(30)}&to=${todayISO()}`),
         safeFetch(`/reports/transactions?from=${dateMinusDays(7)}&to=${todayISO()}`),
+        safeFetch('/employees'),
+        safeFetch('/partners'),
+        safeFetch('/payment-methods'),
       ]);
       setData({
         banks: banks?.items || [],
@@ -50,6 +53,9 @@ const BpoDashboard = () => {
         cashflow: cashflow || { series: [], summary: {} },
         dre: dre || { lines: [], counts: { received: 0, paid: 0 } },
         transactions: transactions || { items: [] },
+        employees: employees?.items || [],
+        partners: partners?.items || [],
+        paymentMethods: paymentMethods?.items || [],
       });
     } finally {
       setLoading(false);
@@ -83,6 +89,13 @@ const BpoDashboard = () => {
   const overdueReceivables = data.receivables?.items?.filter((r) => new Date(r.dueDate) < new Date() && r.status !== 'received').length || 0;
   const lucroLiquido = data.dre?.raw?.lucroLiquido || 0;
   const projectedFinal = data.cashflow?.summary?.finalBalance || 0;
+
+  // Estrutura do negócio — indexada do onboarding do cliente
+  const employees = data.employees || [];
+  const partners = data.partners || [];
+  const paymentMethods = data.paymentMethods || [];
+  const folhaTotal = employees.reduce((s, e) => s + Number(e.baseSalary || 0), 0);
+  const prolaboreTotal = partners.reduce((s, p) => s + Number(p.prolaboreAmount || 0), 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -133,6 +146,87 @@ const BpoDashboard = () => {
                     <div className="text-[10px] text-text-subtle font-mono">{b.account}</div>
                   </div>
                   <div className="text-xs font-semibold tabular-nums">{fmtBRL(b.currentBalance)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Estrutura do negócio — indexada do onboarding */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-text-strong">Funcionários</h3>
+            <Badge variant="default">{employees.length}</Badge>
+          </div>
+          {employees.length === 0 ? (
+            <div className="text-center py-6 text-xs text-text-muted">Nenhum funcionário cadastrado.</div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                {employees.map((e) => (
+                  <div key={e.id} className="flex items-center gap-2 p-2 rounded-md bg-bg-elevated">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-text-strong truncate">{e.name}</div>
+                      <div className="text-[10px] text-text-muted">{e.role}{e.isFreelancer ? ' · Freelancer' : ''}</div>
+                    </div>
+                    <div className="text-xs font-semibold tabular-nums text-text">{fmtBRL(e.baseSalary)}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between mt-2 pt-2 border-t border-border-subtle">
+                <span className="text-[10px] uppercase tracking-wider text-text-muted">Folha base</span>
+                <span className="text-xs font-bold tabular-nums text-text-strong">{fmtBRL(folhaTotal)}</span>
+              </div>
+            </>
+          )}
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-text-strong">Sócios</h3>
+            <Badge variant="default">{partners.length}</Badge>
+          </div>
+          {partners.length === 0 ? (
+            <div className="text-center py-6 text-xs text-text-muted">Nenhum sócio cadastrado.</div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                {partners.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 p-2 rounded-md bg-bg-elevated">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-text-strong truncate">{p.name}</div>
+                      <div className="text-[10px] text-text-muted">Pró-labore</div>
+                    </div>
+                    <div className="text-xs font-semibold tabular-nums text-text">{fmtBRL(p.prolaboreAmount)}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between mt-2 pt-2 border-t border-border-subtle">
+                <span className="text-[10px] uppercase tracking-wider text-text-muted">Pró-labore total</span>
+                <span className="text-xs font-bold tabular-nums text-text-strong">{fmtBRL(prolaboreTotal)}</span>
+              </div>
+            </>
+          )}
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-text-strong">Meios de Pagamento</h3>
+            <Badge variant="default">{paymentMethods.length}</Badge>
+          </div>
+          {paymentMethods.length === 0 ? (
+            <div className="text-center py-6 text-xs text-text-muted">Nenhum meio de pagamento cadastrado.</div>
+          ) : (
+            <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
+              {paymentMethods.map((m) => (
+                <div key={m.id} className="flex items-center gap-2 p-2 rounded-md bg-bg-elevated">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-text-strong truncate">{m.name}</div>
+                    <div className="text-[10px] text-text-muted">{m.type}</div>
+                  </div>
+                  <div className="text-xs font-semibold tabular-nums text-text">{Number(m.feePercent || 0)}%</div>
                 </div>
               ))}
             </div>

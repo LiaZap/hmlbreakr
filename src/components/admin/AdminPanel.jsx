@@ -17,6 +17,7 @@ import MarginHunter from './MarginHunter';
 import CommandPalette from './CommandPalette';
 import EmployeesAdmin from './EmployeesAdmin';
 import ReportsPage from './ReportsPage';
+import CommercialFunnel from './CommercialFunnel';
 import { computeClientHealth } from '../../utils/clientHealth';
 import { adminFetch } from '../../utils/adminAuth';
 // BPO removido do AdminPanel — agora é feature do produto, acessível direto pelo dono no Dashboard
@@ -1685,138 +1686,16 @@ const AdminPanel = () => {
         </motion.div>
 
         ) : activeTab === 'commercial' ? (
-        /* ===== COMMERCIAL TAB (Gabriela) ===== */
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-semibold text-[#A78BFA] uppercase tracking-widest bg-[#A78BFA]/10 px-2.5 py-1 rounded-full border border-[#A78BFA]/20">Pipeline</span>
-            </div>
-            <h2 className="text-[28px] font-bold text-white tracking-tight">Comercial</h2>
-            <p className="text-[13px] text-[#868686] mt-1">Acompanhe leads, trials e conversões em tempo real.</p>
-          </div>
-          {/* Pipeline Summary Cards */}
-          {(() => {
-            const pipeline = { lead: [], trial: [], active: [], churn: [] };
-            clients.forEach(c => {
-              const progress = getOnboardingProgress(c);
-              const fin = getFinancial(c);
-              if (progress === 0) {
-                pipeline.lead.push(c);
-              } else if (progress < 100) {
-                pipeline.trial.push(c);
-              } else if (fin && fin.revenue > 0) {
-                pipeline.active.push(c);
-              } else {
-                // Complete but no revenue — potential churn risk
-                pipeline.churn.push(c);
-              }
-            });
-
-            const stages = [
-              { key: 'lead', label: 'Leads', color: '#868686', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="#868686" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8.5" cy="7" r="4" stroke="#868686" strokeWidth="1.5"/><path d="M20 8v6M23 11h-6" stroke="#868686" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-              { key: 'trial', label: 'Em Trial', color: '#F5A623', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#F5A623" strokeWidth="1.5"/><path d="M12 6v6l4 2" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-              { key: 'active', label: 'Ativos', color: '#00B37E', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" stroke="#00B37E" strokeWidth="1.5" strokeLinecap="round"/><path d="M22 4L12 14.01l-3-3" stroke="#00B37E" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-              { key: 'churn', label: 'Risco Churn', color: '#FF4560', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke="#FF4560" strokeWidth="1.5" strokeLinecap="round"/></svg> },
-            ];
-
-            const conversionRate = clients.length > 0 ? Math.round((pipeline.active.length / clients.length) * 100) : 0;
-
-            return (
-              <>
-                {/* Funnel metrics */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                  {stages.map(s => (
-                    <div key={s.key} className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[14px] p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-8 h-8 rounded-[8px] flex items-center justify-center" style={{ backgroundColor: s.color + '15' }}>{s.icon}</div>
-                        <span className="text-[10px] text-[#868686] uppercase tracking-wider font-medium">{s.label}</span>
-                      </div>
-                      <span className="text-[24px] font-bold text-white">{pipeline[s.key].length}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Conversion bar */}
-                <div className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[14px] p-4 mb-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[12px] text-[#868686] font-medium">Funil de Conversão</span>
-                    <span className="text-[12px] font-bold" style={{ color: conversionRate >= 50 ? '#00B37E' : conversionRate >= 25 ? '#F5A623' : '#FF4560' }}>{conversionRate}% conversão</span>
-                  </div>
-                  <div className="flex h-[8px] rounded-full overflow-hidden bg-[#252527]">
-                    {stages.map(s => {
-                      const pct = clients.length > 0 ? (pipeline[s.key].length / clients.length) * 100 : 0;
-                      return pct > 0 ? <div key={s.key} style={{ width: `${pct}%`, backgroundColor: s.color }} className="transition-all duration-500" title={`${s.label}: ${pipeline[s.key].length}`} /> : null;
-                    })}
-                  </div>
-                  <div className="flex items-center gap-4 mt-2">
-                    {stages.map(s => (
-                      <div key={s.key} className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                        <span className="text-[10px] text-[#666]">{s.label} ({pipeline[s.key].length})</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Pipeline Kanban-style columns */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {stages.map(s => (
-                    <div key={s.key}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                        <span className="text-[13px] font-semibold text-white">{s.label}</span>
-                        <span className="text-[11px] text-[#555] ml-auto">{pipeline[s.key].length}</span>
-                      </div>
-                      <div className="space-y-2">
-                        {pipeline[s.key].length === 0 ? (
-                          <div className="text-center py-6 text-[11px] text-[#444] bg-[#1B1B1D] rounded-[12px] border border-dashed border-[#2A2A2C]">Nenhum</div>
-                        ) : (
-                          pipeline[s.key].map(client => {
-                            const raw = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
-                            const GENERIC = ['Seu Restaurante', 'Acesso Cliente', 'Usuário', ''];
-                            const restaurantFromData = raw.formData?.identity?.restaurant_name || raw.restaurant?.name;
-                            const displayName = (restaurantFromData && !GENERIC.includes(restaurantFromData)) ? restaurantFromData : client.name;
-                            const fin = getFinancial(client);
-                            const daysSince = Math.floor((Date.now() - new Date(client.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-                            const progress = getOnboardingProgress(client);
-                            const color = getColor(client.name);
-                            return (
-                              <div key={client.id} className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[12px] p-3 hover:border-[#3A3A3C] transition-all cursor-pointer" onClick={() => openClientAsAdmin(client.hash)}>
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[10px] font-bold shrink-0" style={{ backgroundColor: color + '20', color: color }}>
-                                    {getInitials(displayName)}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="text-[12px] font-semibold text-white truncate">{displayName}</div>
-                                    <div className="text-[9px] text-[#666]">{daysSince}d atrás</div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {progress > 0 && progress < 100 && (
-                                    <span className="px-1.5 py-0.5 rounded bg-[#F5A623]/15 text-[#F5A623] text-[9px] font-medium">{progress}%</span>
-                                  )}
-                                  {fin && fin.revenue > 0 && (
-                                    <span className="px-1.5 py-0.5 rounded bg-[#252527] text-[#868686] text-[9px]">R$ {(fin.revenue / 1000).toFixed(0)}k</span>
-                                  )}
-                                  {daysSince <= 7 && (
-                                    <span className="px-1.5 py-0.5 rounded bg-[#A78BFA]/15 text-[#A78BFA] text-[9px] font-medium">Novo</span>
-                                  )}
-                                  {client.email && (
-                                    <span className="px-1.5 py-0.5 rounded bg-[#252527] text-[#555] text-[9px] truncate max-w-[100px]">{client.email}</span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            );
-          })()}
-        </motion.div>
+        /* ===== COMMERCIAL TAB (Gabriela) — BAH-091: funil de teste 7 dias ===== */
+        <CommercialFunnel
+          clients={clients}
+          getOnboardingProgress={getOnboardingProgress}
+          getFinancial={getFinancial}
+          getClientDisplay={getClientDisplay}
+          getInitials={getInitials}
+          getColor={getColor}
+          openClientAsAdmin={openClientAsAdmin}
+        />
 
         ) : activeTab === 'reports' ? (
         /* ===== REPORTS TAB (BAH-016) ===== */

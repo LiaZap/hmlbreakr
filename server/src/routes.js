@@ -148,7 +148,9 @@ router.post('/admin/clients', async (req, res) => {
 router.get('/admin/clients', requireAdmin, async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
-      select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true }
+      // stripeCustomerId/stripeSubscriptionId: usados pelo funil comercial (BAH-091)
+      // pra excluir clientes que ja pagaram do pipeline de leads.
+      select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true, stripeCustomerId: true, stripeSubscriptionId: true }
     });
 
     // Modo FULL: devolve os clientes com `data` cru (JSON string completo do banco).

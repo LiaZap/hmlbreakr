@@ -1,14 +1,30 @@
 import React, { useState, useMemo } from 'react';
 
-const DailyRevenueModal = ({ isOpen, onClose, onSave, existingEntries = {} }) => {
-  // Default to yesterday
-  const getYesterday = () => {
+// BAH-090: as datas de faturamento diário são chaves de calendário (YYYY-MM-DD)
+// no fuso do Brasil. Resolvemos "hoje" em America/Sao_Paulo para que o valor
+// padrão (ontem) e o limite máximo do input não fiquem errados perto da virada
+// do dia ou para usuários acessando de outro fuso.
+const getSaoPauloDateStr = (offsetDays = 0) => {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    // 'en-CA' formata como YYYY-MM-DD
+    const todayStr = fmt.format(new Date());
+    if (offsetDays === 0) return todayStr;
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const shifted = new Date(Date.UTC(y, m - 1, d + offsetDays));
+    return shifted.toISOString().split('T')[0];
+  } catch {
     const d = new Date();
-    d.setDate(d.getDate() - 1);
+    d.setDate(d.getDate() + offsetDays);
     return d.toISOString().split('T')[0];
-  };
+  }
+};
 
-  const [date, setDate] = useState(getYesterday());
+const DailyRevenueModal = ({ isOpen, onClose, onSave, existingEntries = {} }) => {
+  const [date, setDate] = useState(getSaoPauloDateStr(-1));
   const [rawValue, setRawValue] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -54,7 +70,7 @@ const DailyRevenueModal = ({ isOpen, onClose, onSave, existingEntries = {} }) =>
   };
 
   const formatDateLabel = (dateStr) => {
-    const [y, m, d] = dateStr.split('-');
+    const [, m, d] = dateStr.split('-');
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     return `${parseInt(d)} ${months[parseInt(m) - 1]}`;
   };
@@ -87,7 +103,7 @@ const DailyRevenueModal = ({ isOpen, onClose, onSave, existingEntries = {} }) =>
           <input
             type="date"
             value={date}
-            max={new Date().toISOString().split('T')[0]}
+            max={getSaoPauloDateStr(0)}
             onChange={(e) => setDate(e.target.value)}
             className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[12px] px-4 py-3 text-[14px] text-white outline-none focus:border-[#FF9406] transition-all [color-scheme:dark]"
           />
