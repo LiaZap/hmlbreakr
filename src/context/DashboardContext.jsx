@@ -644,7 +644,12 @@ export const DashboardProvider = ({ children }) => {
     if (dashboardData.menuEngineering && dashboardData.menuEngineering.length > 0) {
         let totalSalesRevenue = 0;
         let totalSalesCost = 0;
+        // BAH-083: itens com categoria de insumo (ex.: "Insumo Pronto Preparado")
+        // não são pratos vendáveis — auto-criam ficha mas não devem entrar no
+        // CMV teórico do cardápio. Mesmo critério usado em MatrizPreco/EngenhariaMenu.
+        const isInsumoCat = (c) => String(c || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() === 'insumo pronto preparado';
         dashboardData.menuEngineering.forEach(item => {
+            if (isInsumoCat(item.category) || isInsumoCat(item.type)) return;
             const sales = parseFloat(String(item.sales).replace(',', '.')) || 0;
             const price = parseCurrency(item.price);
             const cost = parseCurrency(item.cost);
