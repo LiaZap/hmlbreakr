@@ -68,29 +68,61 @@ const PendingApprovalsList = () => {
           description="Quando o BPO programar pagamentos novos, eles aparecem aqui pra você confirmar."
         /></Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Vencimento</Th><Th>Fornecedor</Th><Th>Descrição</Th><Th>Categoria</Th>
-            <Th align="right">Valor</Th><Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Vencimento</Th><Th>Fornecedor</Th><Th>Descrição</Th><Th>Categoria</Th>
+                <Th align="right">Valor</Th><Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((p) => (
+                  <Tr key={p.id}>
+                    <Td>{fmtDate(p.scheduledAt || p.dueDate)}</Td>
+                    <Td className="font-medium">{p.supplier?.name || '—'}</Td>
+                    <Td className="text-xs text-text-muted">{p.description || p.invoiceNumber || '—'}</Td>
+                    <Td>{p.category ? <Badge variant="default">{p.category.name}</Badge> : '—'}</Td>
+                    <Td align="right" className="font-semibold tabular-nums">{fmtBRL(p.amount)}</Td>
+                    <Td align="right">
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="primary" size="sm" onClick={() => handleApprove(p.id)}>✓ Aprovar</Button>
+                        <Button variant="ghost" size="sm" onClick={() => setRejecting(p)}>Rejeitar</Button>
+                      </div>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((p) => (
-              <Tr key={p.id}>
-                <Td>{fmtDate(p.scheduledAt || p.dueDate)}</Td>
-                <Td className="font-medium">{p.supplier?.name || '—'}</Td>
-                <Td className="text-xs text-text-muted">{p.description || p.invoiceNumber || '—'}</Td>
-                <Td>{p.category ? <Badge variant="default">{p.category.name}</Badge> : '—'}</Td>
-                <Td align="right" className="font-semibold tabular-nums">{fmtBRL(p.amount)}</Td>
-                <Td align="right">
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="primary" size="sm" onClick={() => handleApprove(p.id)}>✓ Aprovar</Button>
-                    <Button variant="ghost" size="sm" onClick={() => setRejecting(p)}>Rejeitar</Button>
+              <Card key={p.id} padded={false} className="p-3 flex flex-col gap-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm text-text-strong truncate">{p.supplier?.name || 'Sem fornecedor'}</div>
+                    <div className="text-xs text-text-muted truncate">{p.description || p.invoiceNumber || '—'}</div>
                   </div>
-                </Td>
-              </Tr>
+                  <div className="text-right shrink-0">
+                    <div className="font-bold text-base tabular-nums text-text-strong">{fmtBRL(p.amount)}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-text-muted">Agendado p/ {fmtDate(p.scheduledAt || p.dueDate)}</span>
+                  {p.category && <Badge variant="default">{p.category.name}</Badge>}
+                </div>
+
+                <div className="flex gap-2 pt-1 border-t border-border-subtle">
+                  <Button variant="primary" size="sm" className="flex-1" onClick={() => handleApprove(p.id)}>✓ Aprovar</Button>
+                  <Button variant="ghost" size="sm" className="flex-1" onClick={() => setRejecting(p)}>Rejeitar</Button>
+                </div>
+              </Card>
             ))}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {rejecting && <RejectModal item={rejecting} onClose={() => setRejecting(null)} onSaved={() => { setRejecting(null); fetchItems(); }} />}

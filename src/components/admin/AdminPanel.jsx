@@ -1400,8 +1400,8 @@ const AdminPanel = () => {
             </div>
           </div>
 
-          {/* Table — scrollable on mobile (min-w to preserve columns) */}
-          <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[18px] overflow-x-auto">
+          {/* Table — DESKTOP ONLY (>= md). No mobile: vira cards (ver abaixo). */}
+          <div className="hidden md:block bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[18px] overflow-x-auto">
             <div className="min-w-[780px]">
             {/* Table Header — sortable.
                 Coluna "Ações" tem largura FIXA (não `auto`): cada linha é seu
@@ -1598,6 +1598,152 @@ const AdminPanel = () => {
               })
             )}
             </div>
+          </div>
+
+          {/* ===== MOBILE — cards empilhados (< md). Mesmos dados/handlers da tabela. ===== */}
+          <div className="md:hidden flex flex-col gap-2.5">
+            {filteredClients.length === 0 ? (
+              <div className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[18px] text-center py-16">
+                <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-white/[0.03] flex items-center justify-center">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="text-[#444]"><path d="M21 21l-4.35-4.35M19 11a8 8 0 11-16 0 8 8 0 0116 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </div>
+                <p className="text-[#666] text-[13px] font-medium">{search ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado ainda'}</p>
+                {search && <p className="text-[#444] text-[11px] mt-1">Tente outra busca ou limpe os filtros</p>}
+              </div>
+            ) : (
+              pagedClients.map((client, idx) => {
+                const color = getColor(client.name);
+                const progress = getOnboardingProgress(client);
+                const photo = getClientPhoto(client);
+                const { displayName, ownerName } = getClientDisplay(client);
+                const fin = getFinancial(client);
+                const rawClientData = typeof client.data === 'string' ? JSON.parse(client.data || '{}') : (client.data || {});
+                const isManuallyComplete = !!(rawClientData.formData?.onboarding_completed);
+                let health = null;
+                try { health = computeClientHealth(rawClientData); } catch { health = null; }
+                return (
+                  <motion.div key={client.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}
+                    className="bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.06] rounded-[16px] p-4">
+                    {/* Linha 1 — identidade */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="relative shrink-0">
+                        {photo ? (
+                          <img src={photo} alt={displayName} className="w-[42px] h-[42px] rounded-[11px] object-cover ring-1 ring-white/[0.08]" />
+                        ) : (
+                          <div className="w-[42px] h-[42px] rounded-[11px] flex items-center justify-center text-[13px] font-bold ring-1 ring-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]" style={{ backgroundColor: color + '25', color }}>
+                            {getInitials(displayName)}
+                          </div>
+                        )}
+                        <span className="absolute -bottom-0.5 -right-0.5 w-[12px] h-[12px] rounded-full ring-2 ring-[#0F0F11]" style={{ backgroundColor: progress >= 100 ? '#00B37E' : progress > 0 ? '#F5A623' : '#555' }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14px] font-semibold text-white truncate">{displayName}</div>
+                        {client.email && <div className="text-[11px] text-[#555] truncate">{client.email}</div>}
+                      </div>
+                    </div>
+
+                    {/* Linha 2 — meta (status, cadastro, responsável) */}
+                    <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-white/[0.05]">
+                      <button
+                        onClick={() => canManage && handleMarkComplete(client.id, isManuallyComplete)}
+                        disabled={!canManage}
+                        className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${canManage ? 'cursor-pointer' : ''} ${
+                          progress >= 100 ? 'text-[#00B37E]' : progress > 0 ? 'text-[#F5A623]' : 'text-[#666]'
+                        }`}
+                        title={canManage ? (isManuallyComplete ? 'Clique para desmarcar como concluído' : 'Clique para marcar como concluído') : ''}
+                      >
+                        <span className="w-[6px] h-[6px] rounded-full" style={{ backgroundColor: progress >= 100 ? '#00B37E' : progress > 0 ? '#F5A623' : '#444' }} />
+                        {progress >= 100 ? 'Ativo' : progress > 0 ? `${progress}%` : 'Inativo'}
+                      </button>
+                      <span className="text-[11px] text-[#999]">{new Date(client.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                      <span className="text-[11px] text-[#666] truncate">{ownerName || '—'}</span>
+                    </div>
+
+                    {/* Linha 3 — indicadores financeiros */}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
+                      {health ? <HealthScoreBadge health={health} size="sm" /> : null}
+                      {fin && fin.revenue > 0 ? (
+                        <>
+                          {typeof fin.cfPct === 'number' && Number.isFinite(fin.cfPct) && (
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${fin.cfPct > 33 ? 'bg-red-500/15 text-red-400' : 'bg-[#00B37E]/15 text-[#00B37E]'}`}>CF {fin.cfPct.toFixed(0)}%</span>
+                          )}
+                          <span className="px-1.5 py-0.5 rounded bg-[#1E1E1E] text-[9px] text-[#868686]">R${(fin.revenue/1000).toFixed(0)}k</span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-[#444]">Sem faturamento</span>
+                      )}
+                    </div>
+
+                    {/* Linha 4 — ações */}
+                    <div className="flex items-center flex-wrap gap-2 mt-3 pt-3 border-t border-white/[0.05]">
+                      <button
+                        onClick={() => openClientAsAdmin(client.hash)}
+                        className="flex items-center gap-1.5 text-[12px] font-medium text-black bg-gradient-to-b from-[#F5B638] to-[#E5961E] px-3 py-2 rounded-[9px]"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M15 3h6v6M21 3l-8 8M10 5H5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Dashboard
+                      </button>
+                      {fin?.dre && (
+                        <button
+                          onClick={() => setDreModal({ client: { ...client, name: getClientDisplay(client).displayName }, dre: fin.dre })}
+                          className="p-2 rounded-[9px] text-[#868686] bg-white/[0.02] border border-white/[0.06]"
+                          title="Ver DRE Aberto"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => copyLink(client.hash, client.id)}
+                        className={`p-2 rounded-[9px] border transition-colors ${copiedId === client.id ? 'text-[#00B37E] bg-[#00B37E]/10 border-[#00B37E]/20' : 'text-[#868686] bg-white/[0.02] border-white/[0.06]'}`}
+                        title="Copiar link"
+                      >
+                        {copiedId === client.id ? (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        ) : (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        )}
+                      </button>
+                      {isSuperAdmin && (
+                        <>
+                          <button
+                            onClick={() => client.email && handleResendWelcome(client.id)}
+                            disabled={!client.email}
+                            className={`p-2 rounded-[9px] border transition-colors ${
+                              !client.email
+                                ? 'text-[#3A3A3A] border-white/[0.04] cursor-not-allowed'
+                                : resentId === client.id
+                                  ? 'text-[#00B37E] bg-[#00B37E]/10 border-[#00B37E]/20'
+                                  : 'text-[#868686] bg-white/[0.02] border-white/[0.06]'
+                            }`}
+                            title={client.email ? 'Reenviar email de boas-vindas' : 'Cliente sem email — redefina as credenciais primeiro para cadastrar um email'}
+                          >
+                            {resentId === client.id && client.email ? (
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            ) : (
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9L22 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => { setResetModal({ clientId: client.id, clientName: client.name, hash: client.hash, currentEmail: client.email }); setResetEmail(client.email || ''); }}
+                            className="p-2 rounded-[9px] text-[#868686] bg-white/[0.02] border border-white/[0.06]"
+                            title={client.email ? 'Redefinir credenciais (bloquear/liberar acesso)' : 'Cadastrar credenciais de acesso'}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="11" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 10V7a4 4 0 018 0v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClient(client.id, client.name)}
+                            className="p-2 rounded-[9px] text-[#FF4560] bg-[#FF4560]/[0.06] border border-[#FF4560]/[0.12] ml-auto"
+                            title="Excluir"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })
+            )}
           </div>
 
           {/* Pagination */}

@@ -68,59 +68,120 @@ const PayablesList = () => {
           description="Crie uma conta a pagar pra começar a controlar fluxo de caixa."
         /></Card>
       ) : (
-        <Table>
-          <thead><tr>
-            <Th>Vencimento</Th><Th>Fornecedor</Th><Th>Descrição</Th><Th>Categoria</Th>
-            <Th align="right">Valor</Th><Th align="right">Saldo</Th><Th>Status</Th><Th align="right">Ações</Th>
-          </tr></thead>
-          <tbody>
+        <>
+          {/* DESKTOP — tabela */}
+          <div className="hidden md:block">
+            <Table>
+              <thead><tr>
+                <Th>Vencimento</Th><Th>Fornecedor</Th><Th>Descrição</Th><Th>Categoria</Th>
+                <Th align="right">Valor</Th><Th align="right">Saldo</Th><Th>Status</Th><Th align="right">Ações</Th>
+              </tr></thead>
+              <tbody>
+                {items.map((p) => {
+                  const overdue = new Date(p.dueDate) < new Date() && p.status !== 'paid';
+                  return (
+                    <Tr key={p.id} onClick={() => setEditing(p)}>
+                      <Td className={overdue ? 'text-danger font-semibold' : ''}>
+                        <div className="flex items-center gap-1.5">
+                          <span>{fmtDate(p.dueDate)}</span>
+                          {p.installmentNumber && p.recurrence && (
+                            <span className="text-[10px] text-text-subtle bg-bg-input px-1.5 py-0.5 rounded" title={`Recorrência ${p.recurrence.frequency}`}>
+                              ↻ {p.installmentNumber}/{p.recurrence.occurrencesCount || '∞'}
+                            </span>
+                          )}
+                          {p.installmentNumber && !p.recurrence && (
+                            <span className="text-xs text-text-subtle">({p.installmentNumber})</span>
+                          )}
+                        </div>
+                      </Td>
+                      <Td className="font-medium">{p.supplier?.name || '—'}</Td>
+                      <Td className="text-xs text-text-muted">{p.description || p.invoiceNumber || '—'}</Td>
+                      <Td>
+                        {p.category ? (
+                          <Badge variant="default">
+                            {p.category.color && <span className="w-2 h-2 rounded-full mr-1" style={{ background: p.category.color }} />}
+                            {p.category.name}
+                          </Badge>
+                        ) : '—'}
+                      </Td>
+                      <Td align="right" className="font-semibold tabular-nums">{fmtBRL(p.amount)}</Td>
+                      <Td align="right" className={`tabular-nums ${Number(p.remainingAmount) > 0 ? 'text-danger font-semibold' : 'text-text-subtle'}`}>
+                        {fmtBRL(p.remainingAmount)}
+                      </Td>
+                      <Td><Badge variant={STATUS_BADGES[p.status]?.variant || 'default'}>{STATUS_BADGES[p.status]?.label || p.status}</Badge></Td>
+                      <Td align="right">
+                        {p.status !== 'paid' && p.status !== 'cancelled' && (
+                          <div className="flex gap-2 justify-end">
+                            {p.status !== 'scheduled' && (
+                              <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); setScheduling(p); }}>Agendar</Button>
+                            )}
+                            <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); setPaying(p); }}>Baixar</Button>
+                          </div>
+                        )}
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* MOBILE — cards */}
+          <div className="md:hidden flex flex-col gap-2">
             {items.map((p) => {
               const overdue = new Date(p.dueDate) < new Date() && p.status !== 'paid';
+              const showActions = p.status !== 'paid' && p.status !== 'cancelled';
               return (
-                <Tr key={p.id} onClick={() => setEditing(p)}>
-                  <Td className={overdue ? 'text-danger font-semibold' : ''}>
-                    <div className="flex items-center gap-1.5">
-                      <span>{fmtDate(p.dueDate)}</span>
-                      {p.installmentNumber && p.recurrence && (
-                        <span className="text-[10px] text-text-subtle bg-bg-input px-1.5 py-0.5 rounded" title={`Recorrência ${p.recurrence.frequency}`}>
-                          ↻ {p.installmentNumber}/{p.recurrence.occurrencesCount || '∞'}
-                        </span>
-                      )}
-                      {p.installmentNumber && !p.recurrence && (
-                        <span className="text-xs text-text-subtle">({p.installmentNumber})</span>
+                <Card key={p.id} padded={false} hoverable className="p-3 flex flex-col gap-2.5" onClick={() => setEditing(p)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm text-text-strong truncate">{p.supplier?.name || 'Sem fornecedor'}</div>
+                      <div className="text-xs text-text-muted truncate">{p.description || p.invoiceNumber || '—'}</div>
+                    </div>
+                    <Badge variant={STATUS_BADGES[p.status]?.variant || 'default'}>{STATUS_BADGES[p.status]?.label || p.status}</Badge>
+                  </div>
+
+                  <div className="flex items-end justify-between gap-2">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className={`text-xs flex items-center gap-1.5 ${overdue ? 'text-danger font-semibold' : 'text-text-muted'}`}>
+                        Vence {fmtDate(p.dueDate)}
+                        {p.installmentNumber && p.recurrence && (
+                          <span className="text-[10px] text-text-subtle bg-bg-input px-1.5 py-0.5 rounded">
+                            ↻ {p.installmentNumber}/{p.recurrence.occurrencesCount || '∞'}
+                          </span>
+                        )}
+                        {p.installmentNumber && !p.recurrence && (
+                          <span className="text-text-subtle">({p.installmentNumber})</span>
+                        )}
+                      </span>
+                      {p.category && (
+                        <Badge variant="default">
+                          {p.category.color && <span className="w-2 h-2 rounded-full mr-1" style={{ background: p.category.color }} />}
+                          {p.category.name}
+                        </Badge>
                       )}
                     </div>
-                  </Td>
-                  <Td className="font-medium">{p.supplier?.name || '—'}</Td>
-                  <Td className="text-xs text-text-muted">{p.description || p.invoiceNumber || '—'}</Td>
-                  <Td>
-                    {p.category ? (
-                      <Badge variant="default">
-                        {p.category.color && <span className="w-2 h-2 rounded-full mr-1" style={{ background: p.category.color }} />}
-                        {p.category.name}
-                      </Badge>
-                    ) : '—'}
-                  </Td>
-                  <Td align="right" className="font-semibold tabular-nums">{fmtBRL(p.amount)}</Td>
-                  <Td align="right" className={`tabular-nums ${Number(p.remainingAmount) > 0 ? 'text-danger font-semibold' : 'text-text-subtle'}`}>
-                    {fmtBRL(p.remainingAmount)}
-                  </Td>
-                  <Td><Badge variant={STATUS_BADGES[p.status]?.variant || 'default'}>{STATUS_BADGES[p.status]?.label || p.status}</Badge></Td>
-                  <Td align="right">
-                    {p.status !== 'paid' && p.status !== 'cancelled' && (
-                      <div className="flex gap-2 justify-end">
-                        {p.status !== 'scheduled' && (
-                          <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); setScheduling(p); }}>Agendar</Button>
-                        )}
-                        <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); setPaying(p); }}>Baixar</Button>
-                      </div>
-                    )}
-                  </Td>
-                </Tr>
+                    <div className="text-right shrink-0">
+                      <div className="font-bold text-base tabular-nums text-text-strong">{fmtBRL(p.amount)}</div>
+                      {Number(p.remainingAmount) > 0 && (
+                        <div className="text-[11px] tabular-nums text-danger font-semibold">Saldo {fmtBRL(p.remainingAmount)}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {showActions && (
+                    <div className="flex gap-2 pt-1 border-t border-border-subtle">
+                      {p.status !== 'scheduled' && (
+                        <Button variant="secondary" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); setScheduling(p); }}>Agendar</Button>
+                      )}
+                      <Button variant="primary" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); setPaying(p); }}>Baixar</Button>
+                    </div>
+                  )}
+                </Card>
               );
             })}
-          </tbody>
-        </Table>
+          </div>
+        </>
       )}
 
       {editing && <PayableModal item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); fetchItems(); }} />}
@@ -300,8 +361,8 @@ const PayableModal = ({ item, onClose, onSaved }) => {
 
         {/* Banner de recorrência (só em edição, quando o item faz parte de uma recorrência) */}
         {isEdit && fullItem?.recurrenceId && fullItem?.recurrence && (
-          <div className="bg-info-soft border border-info/30 rounded-md p-3 flex items-start gap-3">
-            <div className="text-info text-lg leading-none">↻</div>
+          <div className="bg-info-soft border border-info/30 rounded-md p-3 flex flex-col sm:flex-row items-start gap-3">
+            <div className="text-info text-lg leading-none hidden sm:block">↻</div>
             <div className="flex-1 min-w-0">
               <div className="text-xs font-semibold text-info">
                 Parcela {fullItem.installmentNumber || '?'} de {fullItem.recurrence.occurrencesCount || '∞'} · Recorrência {FREQ_LABEL[fullItem.recurrence.frequency] || fullItem.recurrence.frequency}
@@ -310,13 +371,13 @@ const PayableModal = ({ item, onClose, onSaved }) => {
                 Editar essa parcela afeta só ela. Pra parar todas as próximas (mantendo as já pagas), use "Cancelar parcelas futuras".
               </p>
             </div>
-            <Button variant="danger" size="sm" onClick={handleCancelRecurrence} loading={cancelingRecurrence}>
+            <Button variant="danger" size="sm" className="w-full sm:w-auto shrink-0" onClick={handleCancelRecurrence} loading={cancelingRecurrence}>
               Cancelar parcelas futuras
             </Button>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-text-muted font-medium mb-1.5 block">Fornecedor</label>
             <select value={form.supplierId} onChange={(e) => update('supplierId', e.target.value)}
@@ -328,13 +389,13 @@ const PayableModal = ({ item, onClose, onSaved }) => {
           <Input label="Valor (R$)" type="number" value={form.amount} onChange={(v) => update('amount', v)} placeholder="0,00" required />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Input label="Vencimento" type="date" value={form.dueDate} onChange={(v) => update('dueDate', v)} required />
           <Input label="Previsão pagto" type="date" value={form.paymentForecast} onChange={(v) => update('paymentForecast', v)} />
           <Input label="Emissão" type="date" value={form.emissionDate} onChange={(v) => update('emissionDate', v)} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input label="Nº Nota Fiscal" value={form.invoiceNumber} onChange={(v) => update('invoiceNumber', v)} />
           <div>
             <label className="text-xs text-text-muted font-medium mb-1.5 block">Categoria</label>
@@ -357,7 +418,7 @@ const PayableModal = ({ item, onClose, onSaved }) => {
                 <strong>Recorrência</strong> — gera várias ocorrências futuras
               </label>
               {form.useRecurrence && (
-                <div className="grid grid-cols-2 gap-3 ml-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 ml-6">
                   <div>
                     <label className="text-xs text-text-muted block mb-1">Frequência</label>
                     <select value={form.recurrenceFrequency} onChange={(e) => update('recurrenceFrequency', e.target.value)}
