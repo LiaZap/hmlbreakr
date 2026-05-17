@@ -1073,7 +1073,11 @@ export const DashboardProvider = ({ children }) => {
             const bepNow = getSaoPauloNow(); // { year, month (1-12), day }
             const nowMonthIdx = bepNow.month - 1;
             const activeMonthIdx = selectedMonthIndex !== null ? selectedMonthIndex : nowMonthIdx;
-            const isCurrentMonth = activeMonthIdx === nowMonthIdx && selectedMonthIndex === null;
+            // BAH-099: o mês ativo SER o mês corrente já basta — não exigir
+            // selectedMonthIndex null. Antes, selecionar a barra do mês corrente
+            // tornava isCurrentMonth=false e o contador caía no wrap-around
+            // (mostrava o faturamento do mês ANTERIOR no P/E do mês novo).
+            const isCurrentMonth = activeMonthIdx === nowMonthIdx;
             const daysInMonth = new Date(bepNow.year, activeMonthIdx + 1, 0).getDate();
 
             // BAH-099 — Ponto de Equilíbrio dinâmico (zera no virar do mês):
@@ -1121,9 +1125,14 @@ export const DashboardProvider = ({ children }) => {
                     projectionFromHistory = dailyAvg > 0;
                 }
             } else {
-                // Mês selecionado/passado: usa o faturamento completo do mês (histórico).
-                revenueForCalc = currentRevenue;
-                dailyAvg = currentRevenue > 0 ? currentRevenue / daysInMonth : 0;
+                // Mês passado selecionado: usa o faturamento DAQUELE mês específico.
+                // NÃO usar `currentRevenue` — ele faz wrap-around pro mês mais
+                // recente com dado, o que faria o P/E de um mês sem faturamento
+                // mostrar o saldo de outro mês.
+                const selMonthRev = (revenueHistory[activeMonthIdx] > 0)
+                    ? revenueHistory[activeMonthIdx] : 0;
+                revenueForCalc = selMonthRev;
+                dailyAvg = selMonthRev > 0 ? selMonthRev / daysInMonth : 0;
             }
 
             const rawEstimatedDay = dailyAvg > 0 ? Math.ceil(breakEvenValue / dailyAvg) : 0;
