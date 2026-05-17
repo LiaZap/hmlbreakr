@@ -72,8 +72,12 @@ const MatrizPreco = () => {
     const fichaNames = new Set(allFichas.map(f => f.name?.toLowerCase().trim()));
     const fichaIds = new Set(allFichas.map(f => `ft_${f.id}`));
 
-    return displayItems.map(item => ({
+    return displayItems.map((item, idx) => ({
       ...item,
+      // id estável e ÚNICO por item. menuEngineering pode vir sem `id`;
+      // sem isso `hoveredItem === item.id` vira `undefined === undefined`
+      // = true pra TODOS, e o tooltip de hover aparecia em todos de uma vez.
+      id: (item.id != null && item.id !== '') ? item.id : `me-${idx}-${item.name || 'item'}`,
       category: item.category || 'Geral',
       sales: parseSales(item.sales),
       price: parseCurrency(item.price),
