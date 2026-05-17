@@ -73,8 +73,10 @@ const BpoLayout = ({ activeSection, onNavigate, children, clientMode = false }) 
     setMobileSidebarOpen(false);
   };
 
+  // clientMode: embedado no dashboard do cliente — usa h-full do container
+  // pai (não h-screen) pra não estourar o layout do dashboard.
   return (
-    <div className="flex flex-col w-full h-screen bg-background text-text font-jakarta overflow-hidden">
+    <div className={`flex flex-col w-full ${clientMode ? 'h-full' : 'h-screen'} bg-background text-text font-jakarta overflow-hidden`}>
       {/* Topbar — em clientMode, sem seletor de cliente (e título diferente) */}
       <header className="h-14 border-b border-border bg-bg-card flex items-center justify-between px-3 md:px-4 shrink-0">
         <div className="flex items-center gap-3">
@@ -95,15 +97,21 @@ const BpoLayout = ({ activeSection, onNavigate, children, clientMode = false }) 
       </header>
 
       <div className="flex flex-1 min-h-0 relative">
-        {/* Backdrop mobile */}
+        {/* Backdrop mobile — clientMode: absolute (ancora no container relative
+            acima), senão fixed à viewport. */}
         {mobileSidebarOpen && (
-          <div className="md:hidden fixed inset-0 top-14 bg-black/60 z-40" onClick={() => setMobileSidebarOpen(false)} />
+          <div
+            className={`md:hidden ${clientMode ? 'absolute inset-0' : 'fixed inset-0 top-14'} bg-black/60 z-40`}
+            onClick={() => setMobileSidebarOpen(false)}
+          />
         )}
 
-        {/* Sidebar — drawer no mobile, fixa no desktop */}
+        {/* Sidebar — drawer no mobile, fixa no desktop.
+            clientMode: drawer ancorado no container do BpoLayout (absolute),
+            não na viewport (fixed) — senão sobrepõe o sidebar do dashboard. */}
         <aside className={`
           ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          fixed md:static top-14 md:top-auto bottom-0 left-0 z-50
+          ${clientMode ? 'absolute top-0' : 'fixed top-14'} md:static md:top-auto bottom-0 left-0 z-50
           w-64 md:w-56 border-r border-border bg-bg-card overflow-y-auto py-3
           transition-transform duration-200 ease-out shrink-0
         `}>
