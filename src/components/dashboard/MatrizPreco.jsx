@@ -375,8 +375,12 @@ const MatrizPreco = () => {
                         strokeWidth="2"
                         className="transition-all duration-300"
                      />
-                     {/* Label on Hover - flip tooltip below when near top */}
-                     {(() => {
+                     {/* Label — renderizado SÓ pro item sob o mouse. Antes todos
+                         os cards ficavam no DOM com opacity-0; dentro de
+                         <foreignObject> o opacity nem sempre oculta de forma
+                         confiável, então todos apareciam e se sobrepunham.
+                         Renderização condicional = só existe o card do hover. */}
+                     {isHovered && (() => {
                         const yPct = getY(item.margin);
                         const isNearTop = yPct < 25;
                         return (
@@ -388,7 +392,7 @@ const MatrizPreco = () => {
                            style={{ overflow: 'visible', pointerEvents: 'none' }}
                         >
                         <div
-                           className={`bg-[#252527] border border-[#333] px-3 py-2 rounded-[8px] shadow-xl text-center z-50 transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}
+                           className="bg-[#252527] border border-[#333] px-3 py-2 rounded-[8px] shadow-xl text-center z-50"
                            style={{ minWidth: '120px', position: 'absolute', left: '-60px', ...(isNearTop ? { top: '10px' } : { bottom: '10px' }) }}
                         >
                            <p className="text-[11px] font-bold text-white mb-0.5">{item.name}</p>
@@ -396,7 +400,7 @@ const MatrizPreco = () => {
                               <span>V: {item.sales}</span>
                               <span>M: R${item.margin.toFixed(0)}</span>
                            </div>
-                           <div 
+                           <div
                               className="text-[9px] font-bold mt-1 uppercase tracking-wider"
                               style={{ color: CATEGORIES[item.type].color }}
                            >
