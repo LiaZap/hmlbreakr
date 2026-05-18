@@ -44,10 +44,11 @@ const styleFor = (action) => ACTION_STYLES[action] || FALLBACK_STYLE;
 // ─── Filtros de período (presets) ───────────────────────────────
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_FILTERS = {
-  all:   { label: 'Tudo',     days: null },
-  today: { label: 'Hoje',     days: 1 },
-  week:  { label: '7 dias',   days: 7 },
-  month: { label: '30 dias',  days: 30 },
+  all:    { label: 'Tudo',          days: null },
+  today:  { label: 'Hoje',          days: 1 },
+  week:   { label: '7 dias',        days: 7 },
+  month:  { label: '30 dias',       days: 30 },
+  custom: { label: 'Personalizado', days: null },
 };
 
 // fromDate ISO pro preset selecionado (null = sem corte)
@@ -238,6 +239,8 @@ const AuditLog = () => {
   const [error, setError] = useState(null);
 
   const [period, setPeriod] = useState('week');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
@@ -252,8 +255,19 @@ const AuditLog = () => {
         params.set('limit', String(PAGE_SIZE));
         params.set('offset', String(pageOffset));
         if (actionFilter) params.set('action', actionFilter);
-        const from = periodFromDate(period);
+
+        // Período: presets usam janela relativa; "Personalizado" usa as
+        // datas DE/ATÉ escolhidas (início e fim do dia, horário local).
+        let from = null;
+        let to = null;
+        if (period === 'custom') {
+          if (customFrom) from = new Date(`${customFrom}T00:00:00`).toISOString();
+          if (customTo) to = new Date(`${customTo}T23:59:59.999`).toISOString();
+        } else {
+          from = periodFromDate(period);
+        }
         if (from) params.set('fromDate', from);
+        if (to) params.set('toDate', to);
 
         const res = await adminFetch(`/api/admin/audit?${params.toString()}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -271,7 +285,7 @@ const AuditLog = () => {
         append ? setLoadingMore(false) : setLoading(false);
       }
     },
-    [actionFilter, period],
+    [actionFilter, period, customFrom, customTo],
   );
 
   // Refaz a busca quando período/ação mudam (reset da paginação).
@@ -381,6 +395,45 @@ const AuditLog = () => {
               </button>
             ))}
           </div>
+
+          {/* Datas DE/ATÉ — só no modo Personalizado */}
+          {period === 'custom' && (
+            <div className="flex gap-2 flex-wrap items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold uppercase tracking-wide text-[#666]">
+                  De
+                </label>
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo || undefined}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="bg-white/[0.04] border border-white/[0.06] rounded-[10px] px-3 py-1.5 text-[12px] text-white focus:outline-none focus:border-[#F5A623]/40 transition-colors [color-scheme:dark]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold uppercase tracking-wide text-[#666]">
+                  Até
+                </label>
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom || undefined}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="bg-white/[0.04] border border-white/[0.06] rounded-[10px] px-3 py-1.5 text-[12px] text-white focus:outline-none focus:border-[#F5A623]/40 transition-colors [color-scheme:dark]"
+                />
+              </div>
+              {(customFrom || customTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setCustomFrom(''); setCustomTo(''); }}
+                  className="text-[11px] font-semibold px-3 py-1.5 rounded-full bg-white/[0.04] text-[#868686] hover:bg-white/[0.08] transition-colors"
+                >
+                  Limpar datas
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Filtro por tipo de ação */}
           {actionTypes.length > 0 && (
