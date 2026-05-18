@@ -109,6 +109,12 @@ const FichaTecnicaCard = ({ item, onClick, onDuplicate, onDelete, basePercent, t
           </div>
           <div className="text-[10px] text-[#868686]">
             {item.isModular ? `${item.modules?.length || 0} módulos` : item.type}
+            {item.createdAt && (
+              <span className="text-[#5A5A5A]">
+                {' · criada '}
+                {new Date(item.createdAt).toLocaleDateString('pt-BR')}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1176,6 +1182,9 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
     const fichaData = {
       ...editingFicha, // Preserve isImported and other flags
       id: editingFicha ? editingFicha.id : Date.now().toString(),
+      // createdAt: setado SÓ na criação. Em edição preserva o valor existente
+      // (null se for ficha legada, criada antes deste campo existir).
+      createdAt: editingFicha ? (editingFicha.createdAt || null) : Date.now(),
       name: nome,
       type: categoria,
       progress: editingFicha ? editingFicha.progress : 0, 
@@ -2146,6 +2155,7 @@ const FichaTecnica = () => {
     if (updatedInsumo.category === 'Insumo Pronto Preparado' && !exists) {
       const autoFicha = {
         id: `auto_${updatedInsumo.id}`,
+        createdAt: Date.now(),
         name: updatedInsumo.name,
         type: 'Insumo Pronto Preparado',
         progress: 0,
@@ -2522,6 +2532,7 @@ const FichaTecnica = () => {
 
                 newItems.push({
                     id: `imp_ft_${Date.now()}_${i}`,
+                    createdAt: Date.now(),
                     name: name,
                     type: resolveCat(cat),
                     progress: 0,

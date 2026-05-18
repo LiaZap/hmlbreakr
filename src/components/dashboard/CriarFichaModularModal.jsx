@@ -213,7 +213,9 @@ const CriarFichaModularModal = ({ onClose, editingFicha = null, onSave, onDelete
       custoMax: custos.custoMax.toFixed(2).replace('.', ','),
       precoVenda: precoVenda || '',
       lastUpdated: Date.now(),
-      ...(isEditing ? {} : { createdAt: Date.now() }),
+      // createdAt: só na criação; na edição preserva o valor existente
+      // (null se for ficha legada criada antes deste campo).
+      createdAt: isEditing ? (editingFicha?.createdAt ?? null) : Date.now(),
     };
     onSave(ficha, isEditing);
     onClose();
