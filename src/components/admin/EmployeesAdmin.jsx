@@ -556,6 +556,7 @@ const EditUserModal = ({ user, onClose, onSaved }) => {
     role: user.role,
     active: user.active,
     permissions: [...initialPerms],
+    password: '', // em branco = mantém a senha atual
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -576,11 +577,24 @@ const EditUserModal = ({ user, onClose, onSaved }) => {
       setError('Email inválido');
       return;
     }
+    if (form.password && form.password.length < 8) {
+      setError('A nova senha precisa ter ao menos 8 caracteres');
+      return;
+    }
     setSaving(true);
     try {
+      const payload = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        role: form.role,
+        active: form.active,
+        permissions: form.permissions,
+      };
+      // Só envia senha se o admin digitou uma nova (em branco = mantém).
+      if (form.password) payload.password = form.password;
       const res = await adminFetch(`/api/admin/users/${user.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ ...form, email: form.email.trim() }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Falha');
       onSaved();
@@ -614,6 +628,18 @@ const EditUserModal = ({ user, onClose, onSaved }) => {
               className="w-full bg-[#0F0F11] border border-white/[0.06] rounded-[8px] px-3 py-2 text-[13px] text-white outline-none focus:border-[#F5A623]/50"
             />
             <p className="text-[10px] text-[#666] mt-1">É com este email que o funcionário faz login.</p>
+          </div>
+          <div>
+            <label className="text-[11px] text-[#868686] block mb-1">Nova senha</label>
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              placeholder="Deixe em branco para não alterar"
+              autoComplete="new-password"
+              className="w-full bg-[#0F0F11] border border-white/[0.06] rounded-[8px] px-3 py-2 text-[13px] text-white outline-none focus:border-[#F5A623]/50"
+            />
+            <p className="text-[10px] text-[#666] mt-1">Mínimo 8 caracteres. Preencha só se quiser trocar a senha do funcionário.</p>
           </div>
           <div>
             <label className="text-[11px] text-[#868686] block mb-1">Cargo</label>

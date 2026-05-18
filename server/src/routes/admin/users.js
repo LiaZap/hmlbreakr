@@ -193,10 +193,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-// UPDATE — edita name/email/role/active/photo/permissions (senha só via reset-password)
+// UPDATE — edita name/email/role/active/photo/permissions/senha
 router.put('/:id', async (req, res) => {
   try {
-    const { name, email, role, active, photo, permissions } = req.body;
+    const { name, email, role, active, photo, permissions, password } = req.body;
     const existing = await prisma.adminUser.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
     if (role && !VALID_ROLES.includes(role)) {
@@ -217,11 +217,21 @@ router.put('/:id', async (req, res) => {
       }
     }
 
+    // Senha: troca só se enviada. Mínimo 8 caracteres; guardada como hash bcrypt.
+    let passwordUpdate = {};
+    if (password != null && String(password) !== '') {
+      if (String(password).length < 8) {
+        return res.status(400).json({ error: 'senha precisa ter ao menos 8 caracteres' });
+      }
+      passwordUpdate = { password: await bcrypt.hash(String(password), 10) };
+    }
+
     const item = await prisma.adminUser.update({
       where: { id: req.params.id },
       data: {
         ...(name != null ? { name: String(name).trim() } : {}),
         ...emailUpdate,
+        ...passwordUpdate,
         ...(role ? { role } : {}),
         ...(active != null ? { active: !!active } : {}),
         ...(photo !== undefined ? { photo: photo || null } : {}),
