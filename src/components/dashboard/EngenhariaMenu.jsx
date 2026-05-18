@@ -89,6 +89,7 @@ const EngenhariaMenu = () => {
 
             newFichas.push({
               id: `imp_eng_${Date.now()}_${i}`,
+              createdAt: Date.now(),
               name: item.name,
               type: item.category || item.categoria || 'Prato Principal',
               progress: 0,
