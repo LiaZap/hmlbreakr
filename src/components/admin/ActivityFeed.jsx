@@ -48,6 +48,10 @@ const formatRelativeTime = (ts) => {
 
 // ─── Helpers ────────────────────────────────────────────────────
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+// Janela de derivação de eventos. Mantida ampla (90 dias) para que o
+// filtro de período "Personalizado" (seleção de dia) tenha dados —
+// os presets Hoje/Semana continuam recortando dentro dessa janela.
+const DERIVE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
 const parseDailyDateKey = (key) => {
   if (!key) return null;
@@ -148,7 +152,7 @@ const deriveClientEvents = (client) => {
     || null;
   const clientName = client.name || data?.restaurant?.name || 'Restaurante';
   const now = Date.now();
-  const cutoff = now - SEVEN_DAYS_MS;
+  const cutoff = now - DERIVE_WINDOW_MS;
 
   const baseEvent = (extra) => ({
     clientId: client.id,
@@ -430,6 +434,9 @@ const EventCard = ({ event, onClick }) => {
 // ─── Componente principal ───────────────────────────────────────
 const ActivityFeed = ({ clients, maxItems = 30, onClientClick }) => {
   const [filter, setFilter] = useState('week');
+  // Intervalo do filtro "Personalizado" (datas DE/ATÉ — formato YYYY-MM-DD).
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
 
   // BAH-093 #3 — tipos de evento que o admin escolheu monitorar.
   // Inicializa do localStorage (lazy) e persiste a cada mudança.
@@ -474,9 +481,21 @@ const ActivityFeed = ({ clients, maxItems = 30, onClientClick }) => {
   );
 
   const filtered = useMemo(() => {
+    // Modo "Personalizado": recorta por intervalo de datas DE/ATÉ.
+    if (filter === 'custom') {
+      const from = customFrom ? new Date(`${customFrom}T00:00:00`).getTime() : 0;
+      // Sem "Até" definido → sem limite superior (eventos nunca são futuros).
+      const to = customTo ? new Date(`${customTo}T23:59:59.999`).getTime() : Number.MAX_SAFE_INTEGER;
+      return typeFilteredEvents
+        .filter((e) => {
+          const ts = e.timestamp || 0;
+          return ts >= from && ts <= to;
+        })
+        .slice(0, maxItems);
+    }
     const cutoff = (TIME_FILTERS[filter] || TIME_FILTERS.all).cutoff();
     return typeFilteredEvents.filter((e) => (e.timestamp || 0) >= cutoff).slice(0, maxItems);
-  }, [typeFilteredEvents, filter, maxItems]);
+  }, [typeFilteredEvents, filter, maxItems, customFrom, customTo]);
 
   const counts = useMemo(() => {
     return {
@@ -534,7 +553,56 @@ const ActivityFeed = ({ clients, maxItems = 30, onClientClick }) => {
               {cfg.label} ({counts[key]})
             </button>
           ))}
+          <button
+            onClick={() => setFilter('custom')}
+            className={`text-[11px] font-semibold px-3 py-1.5 rounded-full transition-colors ${
+              filter === 'custom'
+                ? 'bg-white/10 text-white'
+                : 'bg-white/[0.04] text-[#868686] hover:bg-white/[0.08]'
+            }`}
+          >
+            Personalizado
+          </button>
         </div>
+
+        {/* Datas DE/ATÉ — só no modo Personalizado */}
+        {filter === 'custom' && (
+          <div className="flex gap-2 flex-wrap items-end mt-2.5">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold uppercase tracking-wide text-[#666]">
+                De
+              </label>
+              <input
+                type="date"
+                value={customFrom}
+                max={customTo || undefined}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="bg-white/[0.04] border border-white/[0.06] rounded-[10px] px-3 py-1.5 text-[12px] text-white focus:outline-none focus:border-[#F5A623]/40 transition-colors [color-scheme:dark]"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold uppercase tracking-wide text-[#666]">
+                Até
+              </label>
+              <input
+                type="date"
+                value={customTo}
+                min={customFrom || undefined}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="bg-white/[0.04] border border-white/[0.06] rounded-[10px] px-3 py-1.5 text-[12px] text-white focus:outline-none focus:border-[#F5A623]/40 transition-colors [color-scheme:dark]"
+              />
+            </div>
+            {(customFrom || customTo) && (
+              <button
+                type="button"
+                onClick={() => { setCustomFrom(''); setCustomTo(''); }}
+                className="text-[11px] font-semibold px-3 py-1.5 rounded-full bg-white/[0.04] text-[#868686] hover:bg-white/[0.08] transition-colors"
+              >
+                Limpar datas
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Filtro de tipos de evento (BAH-093 #3) — escolha persistida em localStorage */}
         <div className="mt-3 pt-3 border-t border-white/[0.04]">
@@ -621,6 +689,7 @@ const EmptyState = ({ filter, hasAny, noTypesSelected }) => {
       : 'Quando os restaurantes começarem a usar o sistema, a atividade vai aparecer aqui.',
     today: 'Nenhuma atividade hoje.',
     week: 'Nenhuma atividade essa semana.',
+    custom: 'Nenhuma atividade no período selecionado.',
   };
   // Caso o admin tenha desmarcado todos os tipos no filtro "Monitorar".
   const text = noTypesSelected
