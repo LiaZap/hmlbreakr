@@ -79,6 +79,7 @@ router.post('/admin/login', async (req, res) => {
         }).catch(e => console.error('lastLoginAt update', e));
         logAudit(prisma, {
           action: 'admin.login',
+          category: 'security',
           entityType: 'admin_user',
           entityId: user.id,
           actorType: 'admin',
@@ -106,6 +107,7 @@ router.post('/admin/login', async (req, res) => {
   if (admin) {
     logAudit(prisma, {
       action: 'admin.login',
+      category: 'security',
       entityType: 'admin_user',
       entityId: null,
       actorType: 'admin',
@@ -116,6 +118,18 @@ router.post('/admin/login', async (req, res) => {
     });
     return res.json({ success: true, token: 'mock-admin-token', name: admin.name, role: admin.role });
   }
+  // Login FALHOU — evento de segurança (tentativa de acesso indevido).
+  logAudit(prisma, {
+    action: 'admin.login.failed',
+    category: 'security',
+    entityType: 'admin_user',
+    entityId: null,
+    actorType: 'admin',
+    actorId: null,
+    actorLabel: email || null,
+    summary: 'Tentativa de login no painel falhou',
+    metadata: { email: email || null, reason: 'credenciais_incorretas' },
+  });
   return res.status(401).json({ error: 'Credenciais incorretas' });
 });
 
@@ -153,6 +167,7 @@ router.post('/admin/clients', async (req, res) => {
 
     logAudit(prisma, {
       action: 'client.create',
+      category: 'admin',
       entityType: 'client',
       entityId: client.id,
       actorType: 'admin',
@@ -775,6 +790,7 @@ router.delete('/admin/clients/:id', async (req, res) => {
     });
     logAudit(prisma, {
       action: 'client.delete',
+      category: 'security',
       entityType: 'client',
       entityId: id,
       actorType: 'admin',
@@ -1281,6 +1297,7 @@ router.post('/client/:hash/sync', async (req, res) => {
     // Auditoria — registra o save do Client.data (best-effort, não bloqueia)
     logAudit(prisma, {
       action: 'client.data_sync',
+      category: 'data',
       entityType: 'client',
       entityId: clientIdToUpdate,
       actorType: savingTeamMember ? 'team_member' : 'client',
@@ -1385,6 +1402,7 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
     const partialSizeAfter = Buffer.byteLength(mergedStr, 'utf8');
     logAudit(prisma, {
       action: 'client.data_sync_partial',
+      category: 'data',
       entityType: 'client',
       entityId: clientIdToUpdate,
       actorType: savingTeamMember ? 'team_member' : 'client',

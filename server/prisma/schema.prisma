@@ -152,6 +152,7 @@ model Broadcast {
 model AuditLog {
   id         String   @id @default(uuid())
   action     String // ex: 'client.data_sync', 'client.create', 'client.delete', 'admin.login', 'admin_user.create', 'snapshot.restore'
+  category   String? // 'security' | 'data' | 'bpo' | 'admin' | 'system' — destaca eventos de segurança
   entityType String // 'client' | 'admin_user' | 'broadcast' | 'team_member' | 'system'
   entityId   String? // id da entidade afetada
   actorType  String // 'client' | 'team_member' | 'admin' | 'system'
@@ -163,6 +164,7 @@ model AuditLog {
 
   @@index([entityType, entityId, createdAt])
   @@index([action, createdAt])
+  @@index([category, createdAt])
   @@index([createdAt])
 }
 

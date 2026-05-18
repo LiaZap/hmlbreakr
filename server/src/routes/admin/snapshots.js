@@ -125,6 +125,7 @@ router.post(
 
       logAudit(prisma, {
         action: 'snapshot.restore',
+        category: 'security',
         entityType: 'client',
         entityId: clientId,
         actorType: 'admin',

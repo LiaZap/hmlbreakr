@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
 const bpoRoutes = require('./routes/bpo');
 const { startBackupScheduler } = require('./services/backupScheduler');
+const { createAuditMiddleware } = require('./middleware/auditMiddleware');
 
 dotenv.config();
 
@@ -44,6 +45,10 @@ app.use('/api', limiter);
 // CORS
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Auditoria — captura automática de toda mutação (POST/PUT/PATCH/DELETE)
+// em /api e /api/bpo. Registra na trilha AuditLog; best-effort, não bloqueia.
+app.use('/api', createAuditMiddleware());
 
 // Routes
 app.use('/api', routes);

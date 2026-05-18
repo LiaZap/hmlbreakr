@@ -165,6 +165,7 @@ router.post('/', async (req, res) => {
 
     logAudit(prisma, {
       action: 'admin_user.create',
+      category: 'security',
       entityType: 'admin_user',
       entityId: item.id,
       actorType: 'admin',
@@ -202,6 +203,7 @@ router.put('/:id', async (req, res) => {
     });
     logAudit(prisma, {
       action: 'admin_user.update',
+      category: 'security',
       entityType: 'admin_user',
       entityId: item.id,
       actorType: 'admin',
@@ -264,6 +266,7 @@ router.delete('/:id', async (req, res) => {
     });
     logAudit(prisma, {
       action: 'admin_user.delete',
+      category: 'security',
       entityType: 'admin_user',
       entityId: existing.id,
       actorType: 'admin',

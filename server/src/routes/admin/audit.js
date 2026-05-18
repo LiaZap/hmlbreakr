@@ -13,6 +13,7 @@
  *       entityType  filtra pelo tipo de entidade (ex: 'client')
  *       entityId    filtra por uma entidade específica
  *       action      filtra pela ação (ex: 'client.data_sync')
+ *       category    filtra pela categoria (ex: 'security', 'data', 'bpo')
  *       actorType   filtra pelo tipo de ator (ex: 'admin', 'system')
  *       fromDate    ISO date — limite inferior do período
  *       toDate      ISO date — limite superior do período
@@ -41,6 +42,7 @@ router.get('/', async (req, res) => {
       entityType,
       entityId,
       action,
+      category,
       actorType,
       fromDate,
       toDate,
@@ -57,6 +59,7 @@ router.get('/', async (req, res) => {
       entityType: entityType || undefined,
       entityId: entityId || undefined,
       action: action || undefined,
+      category: category || undefined,
       actorType: actorType || undefined,
       fromDate: fromDate || undefined,
       toDate: toDate || undefined,

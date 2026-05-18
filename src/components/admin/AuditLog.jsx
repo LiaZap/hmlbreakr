@@ -39,7 +39,42 @@ const ACTION_STYLES = {
 };
 const FALLBACK_STYLE = { icon: '📋', color: '#868686', label: 'Evento' };
 
-const styleFor = (action) => ACTION_STYLES[action] || FALLBACK_STYLE;
+const styleFor = (action) => {
+  if (ACTION_STYLES[action]) return ACTION_STYLES[action];
+  // Ações de falha (ex: 'payable.create.failed') herdam do estilo base.
+  if (action && action.endsWith('.failed')) {
+    return { ...FALLBACK_STYLE, color: '#E5484D', icon: '⚠️', label: 'Falha' };
+  }
+  return FALLBACK_STYLE;
+};
+
+// ─── Categorias (classificação / segurança) ─────────────────────
+const CATEGORY_META = {
+  security: { label: 'Segurança',      color: '#E5484D', icon: '🛡️' },
+  data:     { label: 'Dados',          color: '#06B6D4', icon: '💾' },
+  bpo:      { label: 'BPO/Financeiro', color: '#00B37E', icon: '💰' },
+  admin:    { label: 'Admin',          color: '#F5A623', icon: '⚙️' },
+  system:   { label: 'Sistema',        color: '#868686', icon: '🖥️' },
+};
+
+// Categoria derivada da action — fallback para eventos legados (sem
+// `category` gravada, anteriores à migration 20260518010000).
+const deriveCategory = (action) => {
+  if (!action) return 'system';
+  if (
+    action.startsWith('admin.login') ||
+    action.startsWith('admin_user') ||
+    action.startsWith('snapshot') ||
+    action.includes('.delete')
+  ) return 'security';
+  if (action.startsWith('client.data_sync') || action.startsWith('client.')) return 'data';
+  if (action.startsWith('bpo')) return 'bpo';
+  return 'admin';
+};
+
+// Categoria efetiva de um evento: usa a gravada, senão deriva da action.
+const categoryOf = (event) =>
+  (event && event.category) || deriveCategory(event && event.action);
 
 // ─── Filtros de período (presets) ───────────────────────────────
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -144,6 +179,9 @@ const describeMetadata = (action, metadata) => {
 // ─── Card de evento ─────────────────────────────────────────────
 const AuditCard = ({ event }) => {
   const style = styleFor(event.action);
+  const category = categoryOf(event);
+  const catMeta = CATEGORY_META[category] || CATEGORY_META.system;
+  const isSecurity = category === 'security';
   const metadata = useMemo(() => parseMetadata(event.metadata), [event.metadata]);
   const { detail, shrink } = useMemo(
     () => describeMetadata(event.action, metadata),
@@ -157,7 +195,9 @@ const AuditCard = ({ event }) => {
       className={`flex items-start gap-3 p-3 sm:p-4 rounded-[12px] border transition-colors ${
         shrink
           ? 'border-[#E5484D]/45 bg-[#E5484D]/[0.08]'
-          : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+          : isSecurity
+            ? 'border-[#E5484D]/20 bg-[#E5484D]/[0.03] hover:bg-[#E5484D]/[0.06]'
+            : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
       }`}
     >
       {/* Ícone da ação */}
@@ -178,6 +218,18 @@ const AuditCard = ({ event }) => {
               style={{ backgroundColor: `${style.color}1F`, color: style.color }}
             >
               {style.label}
+            </span>
+            <span
+              className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border"
+              style={{
+                backgroundColor: `${catMeta.color}1A`,
+                color: catMeta.color,
+                borderColor: `${catMeta.color}3D`,
+              }}
+              title={`Categoria: ${catMeta.label}`}
+            >
+              <span aria-hidden="true" className="text-[9px] leading-none">{catMeta.icon}</span>
+              {catMeta.label}
             </span>
             {shrink && (
               <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#E5484D]/20 text-[#FF6B6B] border border-[#E5484D]/40">
@@ -241,6 +293,7 @@ const AuditLog = () => {
   const [period, setPeriod] = useState('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
@@ -255,6 +308,7 @@ const AuditLog = () => {
         params.set('limit', String(PAGE_SIZE));
         params.set('offset', String(pageOffset));
         if (actionFilter) params.set('action', actionFilter);
+        if (categoryFilter) params.set('category', categoryFilter);
 
         // Período: presets usam janela relativa; "Personalizado" usa as
         // datas DE/ATÉ escolhidas (início e fim do dia, horário local).
@@ -285,7 +339,7 @@ const AuditLog = () => {
         append ? setLoadingMore(false) : setLoading(false);
       }
     },
-    [actionFilter, period, customFrom, customTo],
+    [actionFilter, categoryFilter, period, customFrom, customTo],
   );
 
   // Refaz a busca quando período/ação mudam (reset da paginação).
@@ -320,6 +374,12 @@ const AuditLog = () => {
     [filteredEvents],
   );
 
+  // Conta eventos de segurança visíveis (badge no cabeçalho).
+  const securityCount = useMemo(
+    () => filteredEvents.filter((e) => categoryOf(e) === 'security').length,
+    [filteredEvents],
+  );
+
   const hasMore = events.length < total;
 
   return (
@@ -337,6 +397,14 @@ const AuditLog = () => {
           <span className="text-[11px] text-[#555]">
             {total} evento{total !== 1 ? 's' : ''} registrado{total !== 1 ? 's' : ''}
           </span>
+          {securityCount > 0 && (
+            <span
+              className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-[#E5484D]/35 bg-[#E5484D]/15 text-[#FF8A8A]"
+              title="Eventos de segurança no período carregado"
+            >
+              🛡️ {securityCount} de segurança
+            </span>
+          )}
         </div>
         <h2 className="text-[22px] sm:text-[28px] font-bold text-white tracking-tight">
           Auditoria
@@ -435,6 +503,46 @@ const AuditLog = () => {
             </div>
           )}
 
+          {/* Filtro por categoria — Segurança em destaque */}
+          <div className="pt-2 border-t border-white/[0.04]">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-[#666] mb-2">
+              Categoria
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('')}
+                className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                  categoryFilter === ''
+                    ? 'border-[#F5A623]/55 bg-[#F5A623]/20 text-white'
+                    : 'border-white/[0.06] bg-white/[0.02] text-[#666] hover:bg-white/[0.05]'
+                }`}
+              >
+                Todas
+              </button>
+              {Object.entries(CATEGORY_META).map(([key, meta]) => {
+                const active = categoryFilter === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setCategoryFilter(active ? '' : key)}
+                    className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                      active ? 'text-white' : 'border-white/[0.06] bg-white/[0.02] text-[#666] hover:bg-white/[0.05]'
+                    }`}
+                    style={active ? {
+                      borderColor: `${meta.color}66`,
+                      backgroundColor: `${meta.color}22`,
+                    } : undefined}
+                  >
+                    <span aria-hidden="true" className="text-[10px] leading-none">{meta.icon}</span>
+                    {meta.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Filtro por tipo de ação */}
           {actionTypes.length > 0 && (
             <div className="pt-2 border-t border-white/[0.04]">
@@ -488,7 +596,7 @@ const AuditLog = () => {
           ) : error ? (
             <ErrorState message={error} onRetry={() => fetchPage(0, false)} />
           ) : filteredEvents.length === 0 ? (
-            <EmptyState hasFilters={!!search || !!actionFilter || period !== 'all'} />
+            <EmptyState hasFilters={!!search || !!actionFilter || !!categoryFilter || period !== 'all'} />
           ) : (
             <>
               <div className="space-y-2">

@@ -37,6 +37,7 @@
  * @param {import('@prisma/client').PrismaClient} prisma - client Prisma
  * @param {Object} entry
  * @param {string} entry.action - ex: 'client.data_sync', 'admin.login'
+ * @param {string} [entry.category] - 'security' | 'data' | 'bpo' | 'admin' | 'system'
  * @param {string} entry.entityType - 'client' | 'admin_user' | 'broadcast' | 'team_member' | 'system'
  * @param {string} [entry.entityId] - id da entidade afetada
  * @param {string} entry.actorType - 'client' | 'team_member' | 'admin' | 'system'
@@ -50,6 +51,7 @@ async function logAudit(prisma, entry = {}) {
   try {
     const {
       action,
+      category,
       entityType,
       entityId,
       actorType,
@@ -78,6 +80,7 @@ async function logAudit(prisma, entry = {}) {
     const record = await prisma.auditLog.create({
       data: {
         action: String(action),
+        category: category != null ? String(category) : null,
         entityType: String(entityType),
         entityId: entityId != null ? String(entityId) : null,
         actorType: String(actorType),
@@ -105,6 +108,7 @@ async function logAudit(prisma, entry = {}) {
  * @param {string} [filters.entityType] - filtra por tipo de entidade
  * @param {string} [filters.entityId] - filtra por id da entidade
  * @param {string} [filters.action] - filtra por ação
+ * @param {string} [filters.category] - filtra por categoria (ex: 'security')
  * @param {string} [filters.actorType] - filtra por tipo de ator
  * @param {string|Date} [filters.fromDate] - createdAt >= fromDate
  * @param {string|Date} [filters.toDate] - createdAt <= toDate
@@ -117,6 +121,7 @@ async function listAudit(prisma, filters = {}) {
     entityType,
     entityId,
     action,
+    category,
     actorType,
     fromDate,
     toDate,
@@ -129,6 +134,7 @@ async function listAudit(prisma, filters = {}) {
   if (entityType) where.entityType = entityType;
   if (entityId) where.entityId = entityId;
   if (action) where.action = action;
+  if (category) where.category = category;
   if (actorType) where.actorType = actorType;
 
   if (fromDate || toDate) {
