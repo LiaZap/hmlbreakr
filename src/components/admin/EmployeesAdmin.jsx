@@ -552,6 +552,7 @@ const EditUserModal = ({ user, onClose, onSaved }) => {
     : (ROLE_TEMPLATES[user.role] || []);
   const [form, setForm] = useState({
     name: user.name,
+    email: user.email || '',
     role: user.role,
     active: user.active,
     permissions: [...initialPerms],
@@ -570,11 +571,16 @@ const EditUserModal = ({ user, onClose, onSaved }) => {
 
   const handleSubmit = async () => {
     setError(null);
+    if (!form.name.trim()) { setError('Nome obrigatório'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setError('Email inválido');
+      return;
+    }
     setSaving(true);
     try {
       const res = await adminFetch(`/api/admin/users/${user.id}`, {
         method: 'PUT',
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, email: form.email.trim() }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Falha');
       onSaved();
@@ -599,6 +605,15 @@ const EditUserModal = ({ user, onClose, onSaved }) => {
               type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="w-full bg-[#0F0F11] border border-white/[0.06] rounded-[8px] px-3 py-2 text-[13px] text-white outline-none focus:border-[#F5A623]/50"
             />
+          </div>
+          <div>
+            <label className="text-[11px] text-[#868686] block mb-1">Email</label>
+            <input
+              type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder="email@breakr.com.br"
+              className="w-full bg-[#0F0F11] border border-white/[0.06] rounded-[8px] px-3 py-2 text-[13px] text-white outline-none focus:border-[#F5A623]/50"
+            />
+            <p className="text-[10px] text-[#666] mt-1">É com este email que o funcionário faz login.</p>
           </div>
           <div>
             <label className="text-[11px] text-[#868686] block mb-1">Cargo</label>

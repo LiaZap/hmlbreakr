@@ -35,26 +35,37 @@ const safeAdmin = (a) => {
 const LEGACY_MARKER = 'system-legacy';
 
 /**
- * BAH-085 — Seed idempotente dos admins legados na tabela AdminUser.
+ * BAH-085 — Seed BOOTSTRAP dos admins legados na tabela AdminUser.
  *
  * Contexto: os admins históricos (gustavo/contato/gabriela/jeff) viviam APENAS
  * no array hardcoded ADMIN_ACCOUNTS de routes.js — nunca foram para a tabela.
  * A tela "Funcionários Breakr" lê só a tabela, então eles "ficavam pra trás".
  *
- * Esta função garante que cada conta de ADMIN_ACCOUNTS exista como AdminUser:
- *  - match por email (lowercase); se já existe → NÃO toca (não duplica, não
- *    sobrescreve senha de quem já trocou, não rebaixa role/permissões).
- *  - se não existe → cria com name/email/role do legado + hash bcrypt da senha
- *    legada, pra que o login DB-first passe a funcionar pelo caminho do banco.
+ * Esta função materializa as contas de ADMIN_ACCOUNTS APENAS quando a tabela
+ * AdminUser está VAZIA (bootstrap de ambiente novo). Se já existe qualquer
+ * admin, o sistema já foi configurado — não toca em nada.
  *
- * Idempotência: rodar N vezes converge para o mesmo estado. Best-effort —
- * qualquer erro é logado e engolido pra nunca derrubar o endpoint de listagem.
+ * IMPORTANTE: antes esta função rodava a CADA listagem e materializava por
+ * email. Isso "reinventava" contas: se um super_admin corrigia um email
+ * placeholder (ex: jeff@breakr.com.br), a próxima listagem recriava a conta
+ * antiga. Agora roda só em banco vazio — edições de email são definitivas.
+ *
+ * Best-effort — qualquer erro é logado e engolido, nunca derruba a listagem.
  *
  * O `require` de routes.js é lazy (dentro da função) de propósito: routes.js
  * faz `require` deste arquivo no topo, então um require circular no topo
  * devolveria exports vazio. Em runtime o módulo já está totalmente carregado.
  */
 async function seedLegacyAdmins() {
+  // Bootstrap-only: se já existe QUALQUER admin, não materializa nada.
+  try {
+    const count = await prisma.adminUser.count();
+    if (count > 0) return;
+  } catch (e) {
+    console.error('[seedLegacyAdmins] count falhou — pulando seed', e);
+    return;
+  }
+
   let ADMIN_ACCOUNTS;
   try {
     ({ ADMIN_ACCOUNTS } = require('../../routes'));
@@ -182,19 +193,35 @@ router.post('/', async (req, res) => {
   }
 });
 
-// UPDATE — edita name/role/active/photo/permissions (não muda email/senha aqui)
+// UPDATE — edita name/email/role/active/photo/permissions (senha só via reset-password)
 router.put('/:id', async (req, res) => {
   try {
-    const { name, role, active, photo, permissions } = req.body;
+    const { name, email, role, active, photo, permissions } = req.body;
     const existing = await prisma.adminUser.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
     if (role && !VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: `role inválido — use ${VALID_ROLES.join(' | ')}` });
     }
+
+    // Email: valida formato e unicidade só se for realmente trocar.
+    let emailUpdate = {};
+    if (email != null && String(email).trim() !== '') {
+      const normalized = String(email).toLowerCase().trim();
+      if (!isValidEmail(normalized)) {
+        return res.status(400).json({ error: 'email inválido' });
+      }
+      if (normalized !== existing.email) {
+        const dup = await prisma.adminUser.findUnique({ where: { email: normalized } });
+        if (dup) return res.status(409).json({ error: 'Já existe admin com esse email' });
+        emailUpdate = { email: normalized };
+      }
+    }
+
     const item = await prisma.adminUser.update({
       where: { id: req.params.id },
       data: {
         ...(name != null ? { name: String(name).trim() } : {}),
+        ...emailUpdate,
         ...(role ? { role } : {}),
         ...(active != null ? { active: !!active } : {}),
         ...(photo !== undefined ? { photo: photo || null } : {}),
