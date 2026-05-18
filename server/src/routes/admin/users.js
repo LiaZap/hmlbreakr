@@ -16,6 +16,7 @@ const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { VALID_ROLES, sanitizePermissions, ROLE_TEMPLATES } = require('../../utils/permissions');
+const { logAudit } = require('../../services/auditService');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -162,6 +163,17 @@ router.post('/', async (req, res) => {
     // TODO: enviar email de boas-vindas com tempPassword via emailService
     // Por ora retorna a temp password no response pra super_admin copiar manualmente
 
+    logAudit(prisma, {
+      action: 'admin_user.create',
+      entityType: 'admin_user',
+      entityId: item.id,
+      actorType: 'admin',
+      actorId: req.adminUser ? req.adminUser.id : null,
+      actorLabel: req.adminUser ? req.adminUser.email : (invitedBy || null),
+      summary: `Criou o funcionário Breakr "${item.name}"`,
+      metadata: { email: item.email, role: item.role, invitedBy: invitedBy || null },
+    });
+
     res.status(201).json({ ...safeAdmin(item), ...(tempPassword ? { tempPassword } : {}) });
   } catch (err) {
     console.error('[admin users create]', err);
@@ -186,6 +198,22 @@ router.put('/:id', async (req, res) => {
         ...(active != null ? { active: !!active } : {}),
         ...(photo !== undefined ? { photo: photo || null } : {}),
         ...(Array.isArray(permissions) ? { permissions: sanitizePermissions(permissions) } : {}),
+      },
+    });
+    logAudit(prisma, {
+      action: 'admin_user.update',
+      entityType: 'admin_user',
+      entityId: item.id,
+      actorType: 'admin',
+      actorId: req.adminUser ? req.adminUser.id : null,
+      actorLabel: req.adminUser ? req.adminUser.email : null,
+      summary: `Atualizou o funcionário Breakr "${item.name}"`,
+      metadata: {
+        email: item.email,
+        changedFields: Object.keys(req.body || {}),
+        roleBefore: existing.role,
+        roleAfter: item.role,
+        activeAfter: item.active,
       },
     });
     res.json(safeAdmin(item));
@@ -233,6 +261,16 @@ router.delete('/:id', async (req, res) => {
     await prisma.adminUser.update({
       where: { id: req.params.id },
       data: { active: false },
+    });
+    logAudit(prisma, {
+      action: 'admin_user.delete',
+      entityType: 'admin_user',
+      entityId: existing.id,
+      actorType: 'admin',
+      actorId: req.adminUser ? req.adminUser.id : null,
+      actorLabel: req.adminUser ? req.adminUser.email : null,
+      summary: `Excluiu (soft delete) o funcionário Breakr "${existing.name}"`,
+      metadata: { email: existing.email, role: existing.role, softDelete: true },
     });
     res.json({ success: true });
   } catch (err) {

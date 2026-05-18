@@ -144,6 +144,28 @@ model Broadcast {
   @@index([targetCategory])
 }
 
+// Trilha de auditoria append-only — registra ações administrativas e de
+// sistema (sync de dados, criação/exclusão de entidades, login de admin,
+// restauração de snapshot, etc). Imutável: nunca recebe UPDATE/DELETE, por
+// isso não tem updatedAt nem FK (entidades podem ser soft-deletadas e o log
+// deve sobreviver a elas). Use via server/src/services/auditService.js.
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String // ex: 'client.data_sync', 'client.create', 'client.delete', 'admin.login', 'admin_user.create', 'snapshot.restore'
+  entityType String // 'client' | 'admin_user' | 'broadcast' | 'team_member' | 'system'
+  entityId   String? // id da entidade afetada
+  actorType  String // 'client' | 'team_member' | 'admin' | 'system'
+  actorId    String? // id do ator
+  actorLabel String? // email/nome legível do ator
+  summary    String? // descrição curta legível
+  metadata   String? // JSON string com detalhes (ex: { sizeBefore, sizeAfter, shrink })
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
+
 // =====================================================================
 // BPO FINANCEIRO — Fase 1 (Cadastros + Lançamentos Manuais)
 // Adicionado em 2026-04-27. Documentação:

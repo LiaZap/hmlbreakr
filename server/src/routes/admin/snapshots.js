@@ -25,6 +25,7 @@ const {
   createSnapshot,
   pruneOldSnapshots,
 } = require('../../services/snapshotService');
+const { logAudit } = require('../../services/auditService');
 
 const router = express.Router({ mergeParams: true });
 const prisma = new PrismaClient();
@@ -121,6 +122,22 @@ router.post(
       console.log(
         `[admin snapshots restore] clientId=${clientId} snapshotId=${snapshotId} by=${adminEmail} preRestoreSnapshotId=${preRestoreSnapshotId}`
       );
+
+      logAudit(prisma, {
+        action: 'snapshot.restore',
+        entityType: 'client',
+        entityId: clientId,
+        actorType: 'admin',
+        actorId: req.adminUser ? req.adminUser.id : null,
+        actorLabel: adminEmail,
+        summary: 'Restaurou snapshot do cliente',
+        metadata: {
+          snapshotId,
+          snapshotReason: snap.reason,
+          snapshotSize: snap.size,
+          preRestoreSnapshotId,
+        },
+      });
 
       return res.json({
         success: true,

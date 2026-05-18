@@ -16,6 +16,7 @@ import OpportunityDetector from './OpportunityDetector';
 import MarginHunter from './MarginHunter';
 import CommandPalette from './CommandPalette';
 import EmployeesAdmin from './EmployeesAdmin';
+import AuditLog from './AuditLog';
 import ReportsPage from './ReportsPage';
 import CommercialFunnel from './CommercialFunnel';
 import { computeClientHealth } from '../../utils/clientHealth';
@@ -704,6 +705,7 @@ const AdminPanel = () => {
     ...(canManage ? [{ id: 'broadcasts', label: 'Comunicados', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, badge: broadcasts.filter(b => b.active).length, group: 'mgmt' }] : []),
     // Grupo Sistema (super_admin only)
     ...(isSuperAdmin ? [{ id: 'employees', label: 'Funcionários Breakr', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.5"/><circle cx="17" cy="11" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M22 21v-1a3 3 0 00-2.5-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>, group: 'system' }] : []),
+    ...(isSuperAdmin ? [{ id: 'audit', label: 'Auditoria', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>, group: 'system' }] : []),
   ];
 
   return (
@@ -844,6 +846,7 @@ const AdminPanel = () => {
                 : activeTab === 'analytics' ? 'Análises'
                 : activeTab === 'activity' ? 'Atividade'
                 : activeTab === 'employees' ? 'Funcionários Breakr'
+                : activeTab === 'audit' ? 'Auditoria'
                 : activeTab === 'clients' ? 'Clientes'
                 : activeTab === 'commercial' ? 'Comercial'
                 : activeTab === 'reports' ? 'Relatórios'
@@ -1350,6 +1353,10 @@ const AdminPanel = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <EmployeesAdmin canManage={isSuperAdmin} />
         </motion.div>
+
+        ) : activeTab === 'audit' ? (
+        /* ===== AUDITORIA TAB (super_admin only) ===== */
+        <AuditLog />
 
         ) : activeTab === 'clients' ? (
         /* ===== CLIENTS TABLE TAB ===== */

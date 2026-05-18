@@ -16,9 +16,13 @@ const adminUsersRoutes = require('./routes/admin/users');
 const adminReportsRoutes = require('./routes/admin/reports');
 const adminSnapshotsRoutes = require('./routes/admin/snapshots');
 const adminBackupsRoutes = require('./routes/admin/backups');
+const adminAuditRoutes = require('./routes/admin/audit');
 
 // Middleware admin (header-based v1, JWT v2)
 const { requireAdmin, requireSuperAdmin } = require('./middleware/adminAuth');
+
+// Auditoria — best-effort, nunca lança (ver services/auditService.js)
+const { logAudit } = require('./services/auditService');
 
 // ========================
 // ADMIN ROUTES
@@ -73,6 +77,16 @@ router.post('/admin/login', async (req, res) => {
           where: { id: user.id },
           data: { lastLoginAt: new Date() },
         }).catch(e => console.error('lastLoginAt update', e));
+        logAudit(prisma, {
+          action: 'admin.login',
+          entityType: 'admin_user',
+          entityId: user.id,
+          actorType: 'admin',
+          actorId: user.id,
+          actorLabel: user.email,
+          summary: 'Login no painel administrativo',
+          metadata: { role: user.role, source: 'db' },
+        });
         return res.json({
           success: true,
           token: 'mock-admin-token',
@@ -90,6 +104,16 @@ router.post('/admin/login', async (req, res) => {
   // 2. Legado: ADMIN_ACCOUNTS hardcoded (compat enquanto migra)
   const admin = ADMIN_ACCOUNTS.find(a => a.email === email && a.password === password);
   if (admin) {
+    logAudit(prisma, {
+      action: 'admin.login',
+      entityType: 'admin_user',
+      entityId: null,
+      actorType: 'admin',
+      actorId: null,
+      actorLabel: admin.email,
+      summary: 'Login no painel administrativo',
+      metadata: { role: admin.role, source: 'legacy' },
+    });
     return res.json({ success: true, token: 'mock-admin-token', name: admin.name, role: admin.role });
   }
   return res.status(401).json({ error: 'Credenciais incorretas' });
@@ -126,6 +150,17 @@ router.post('/admin/clients', async (req, res) => {
         console.error('Welcome email error:', err.message)
       );
     }
+
+    logAudit(prisma, {
+      action: 'client.create',
+      entityType: 'client',
+      entityId: client.id,
+      actorType: 'admin',
+      actorId: null,
+      actorLabel: req.adminUser ? req.adminUser.email : null,
+      summary: `Criou o cliente "${name}"`,
+      metadata: { name, hash, hasEmail: !!clientEmail },
+    });
 
     res.json(client);
   } catch (error) {
@@ -738,6 +773,16 @@ router.delete('/admin/clients/:id', async (req, res) => {
       where: { id },
       data: { active: false }
     });
+    logAudit(prisma, {
+      action: 'client.delete',
+      entityType: 'client',
+      entityId: id,
+      actorType: 'admin',
+      actorId: null,
+      actorLabel: req.adminUser ? req.adminUser.email : null,
+      summary: 'Excluiu (soft delete) o cliente',
+      metadata: { softDelete: true },
+    });
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -1151,14 +1196,16 @@ router.post('/client/:hash/sync', async (req, res) => {
 
     // Resolve who is saving
     let clientIdToUpdate = null;
+    let savingTeamMember = null;
     const client = await prisma.client.findUnique({ where: { hash } });
-    
+
     if (client) {
       clientIdToUpdate = client.id;
     } else {
       const teamMember = await prisma.teamMember.findUnique({ where: { hash } });
       if (teamMember) {
         clientIdToUpdate = teamMember.clientId;
+        savingTeamMember = teamMember;
       }
     }
 
@@ -1231,6 +1278,23 @@ router.post('/client/:hash/sync', async (req, res) => {
         .catch(err => console.error('[onboardingSync] hook failed:', err));
     }
 
+    // Auditoria — registra o save do Client.data (best-effort, não bloqueia)
+    logAudit(prisma, {
+      action: 'client.data_sync',
+      entityType: 'client',
+      entityId: clientIdToUpdate,
+      actorType: savingTeamMember ? 'team_member' : 'client',
+      actorId: savingTeamMember ? savingTeamMember.id : (client ? client.id : null),
+      actorLabel: savingTeamMember ? (savingTeamMember.email || savingTeamMember.name || hash) : hash,
+      summary: 'Salvou dados do cliente',
+      metadata: {
+        sizeBefore: currentSize,
+        sizeAfter: newSize,
+        shrink: newSize < currentSize * 0.8,
+        shrinkDetected,
+      },
+    });
+
     res.json({ success: true, shrinkDetected: shrinkDetected || undefined });
   } catch (error) {
     console.error(error);
@@ -1254,6 +1318,7 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
 
     // Resolve who is saving (Client or TeamMember)
     let clientIdToUpdate = null;
+    let savingTeamMember = null;
     const client = await prisma.client.findUnique({ where: { hash } });
 
     if (client) {
@@ -1262,6 +1327,7 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
       const teamMember = await prisma.teamMember.findUnique({ where: { hash } });
       if (teamMember) {
         clientIdToUpdate = teamMember.clientId;
+        savingTeamMember = teamMember;
       }
     }
 
@@ -1297,10 +1363,11 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
     delete merged._hasCredentials;
     delete merged._profile;
 
+    const mergedStr = JSON.stringify(merged);
     await prisma.client.update({
       where: { id: clientIdToUpdate },
       data: {
-        data: JSON.stringify(merged)
+        data: mergedStr
       }
     });
 
@@ -1309,6 +1376,28 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
       syncOnboardingToBpo(prisma, clientIdToUpdate, merged.formData)
         .catch(err => console.error('[onboardingSync] hook failed:', err));
     }
+
+    // Auditoria — registra o save parcial do Client.data (best-effort)
+    const partialSizeBefore = Buffer.byteLength(
+      (currentSavedClient && currentSavedClient.data) || '',
+      'utf8'
+    );
+    const partialSizeAfter = Buffer.byteLength(mergedStr, 'utf8');
+    logAudit(prisma, {
+      action: 'client.data_sync_partial',
+      entityType: 'client',
+      entityId: clientIdToUpdate,
+      actorType: savingTeamMember ? 'team_member' : 'client',
+      actorId: savingTeamMember ? savingTeamMember.id : (client ? client.id : null),
+      actorLabel: savingTeamMember ? (savingTeamMember.email || savingTeamMember.name || hash) : hash,
+      summary: 'Salvou dados do cliente (parcial)',
+      metadata: {
+        sizeBefore: partialSizeBefore,
+        sizeAfter: partialSizeAfter,
+        shrink: partialSizeAfter < partialSizeBefore * 0.8,
+        patchKeys: Object.keys(patch),
+      },
+    });
 
     res.json({ success: true });
   } catch (error) {
@@ -2049,6 +2138,8 @@ router.delete('/admin/broadcasts/:id', async (req, res) => {
 router.use('/admin', requireAdmin, dailyInsightsRoutes);
 router.use('/admin/users', requireSuperAdmin, adminUsersRoutes);
 router.use('/admin/reports', requireAdmin, adminReportsRoutes);
+// — /admin/audit exige admin (trilha de auditoria — leitura interna)
+router.use('/admin/audit', requireAdmin, adminAuditRoutes);
 // — /admin/clients/:clientId/snapshots* exige super_admin (restore é destrutivo)
 router.use('/admin', requireSuperAdmin, adminSnapshotsRoutes);
 // /admin/backups exige super_admin — backup completo é operação sensível
