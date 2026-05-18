@@ -958,10 +958,21 @@ const AdminPanel = () => {
               } catch { return null; }
             };
 
-            const recentClients = recentHashes
+            // Seletor de cliente: clientes acessados recentemente primeiro,
+            // depois preenche com os últimos ALTERADOS (updatedAt) — assim o
+            // seletor está sempre populado com opções úteis pra clicar.
+            const parseTs = (v) => {
+              const t = v ? Date.parse(v) : NaN;
+              return Number.isNaN(t) ? 0 : t;
+            };
+            const accessedClients = recentHashes
               .map(h => clients.find(c => c.hash === h))
-              .filter(Boolean)
-              .slice(0, 5);
+              .filter(Boolean);
+            const usedIds = new Set(accessedClients.map(c => c.id));
+            const modifiedClients = [...clients]
+              .filter(c => !usedIds.has(c.id))
+              .sort((a, b) => parseTs(b.updatedAt) - parseTs(a.updatedAt));
+            const recentClients = [...accessedClients, ...modifiedClients].slice(0, 8);
 
             // Busca com scoring: nome com prefixo > nome com palavra > nome contém > email contém
             const q = quickSearch.trim().toLowerCase();
@@ -1012,26 +1023,13 @@ const AdminPanel = () => {
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         <h3 className="text-[15px] font-bold text-white">Em qual cliente vai trabalhar?</h3>
                       </div>
-                      <p className="text-[11px] text-[#868686]">Busque pelo nome ou email pra abrir o financeiro/dashboard direto.</p>
+                      <p className="text-[11px] text-[#868686]">
+                        Clique num cliente abaixo, ou use a busca <span className="text-[#F5A623] font-semibold">⌘K</span> no topo pra encontrar qualquer um.
+                      </p>
                     </div>
-                    {recentClients.length > 0 && (
-                      <span className="text-[10px] text-[#666] uppercase tracking-wider font-semibold">{recentClients.length} recentes</span>
-                    )}
                   </div>
 
-                  {/* Search input */}
-                  <div className="relative mb-3">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="absolute left-3 top-1/2 -translate-y-1/2 text-[#868686]"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-                    <input
-                      type="text"
-                      value={quickSearch}
-                      onChange={(e) => setQuickSearch(e.target.value)}
-                      placeholder="Buscar cliente por nome ou email..."
-                      className="w-full bg-[#0F0F11] border border-white/[0.06] rounded-[12px] pl-10 pr-3 py-2.5 text-[13px] text-white placeholder:text-[#555] outline-none focus:border-[#F5A623]/50 transition-colors"
-                    />
-                  </div>
-
-                  {/* Resultados da busca — scroll quando muitos, contagem total no header */}
+                  {/* Resultados da busca — alimentados pela busca do topo (quickSearch) */}
                   {filtered.length > 0 && (
                     <>
                       <div className="text-[10px] text-[#666] mb-2">
@@ -1073,9 +1071,13 @@ const AdminPanel = () => {
                     <div className="text-[11px] text-[#666] py-3 text-center mb-3">Nenhum cliente encontrado pra "{quickSearch}".</div>
                   )}
 
-                  {/* Atalhos: clientes recentes (chips) — só quando não ta buscando */}
+                  {/* Seletor: chips de clientes (recentes + últimos alterados) */}
                   {!quickSearch.trim() && recentClients.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div>
+                      <div className="text-[10px] text-[#666] uppercase tracking-wider font-semibold mb-2">
+                        Acesso rápido
+                      </div>
+                      <div className="flex flex-wrap gap-2">
                       {recentClients.map(c => (
                         <button
                           key={c.id}
@@ -1088,10 +1090,11 @@ const AdminPanel = () => {
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className="text-[#666] group-hover:text-[#F5A623] transition-colors"><path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </button>
                       ))}
+                      </div>
                     </div>
                   )}
                   {!quickSearch.trim() && recentClients.length === 0 && (
-                    <div className="text-[11px] text-[#666] italic">Nenhum cliente acessado ainda. Use a busca acima ou vá pra aba <button onClick={() => setActiveTab('clients')} className="text-[#F5A623] font-semibold hover:underline">Clientes</button>.</div>
+                    <div className="text-[11px] text-[#666] italic">Nenhum cliente ainda — vá pra aba <button onClick={() => setActiveTab('clients')} className="text-[#F5A623] font-semibold hover:underline">Clientes</button>.</div>
                   )}
                 </div>
               </div>
