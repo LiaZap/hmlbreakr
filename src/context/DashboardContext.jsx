@@ -17,7 +17,9 @@ export const useDashboard = () => useContext(DashboardContext);
  * Sync anterior em flight é abortado quando novo dispara.
  */
 const SYNC_DEBOUNCE_MS = 600;
-const createSyncScheduler = () => {
+// onSynced(newVersion): callback chamado quando o servidor confirma o save,
+// com a versão nova do dado (trava otimista contra perda por aba antiga).
+const createSyncScheduler = (onSynced) => {
   let timer = null;
   let abortCtl = null;
   let pendingPayload = null;
@@ -31,12 +33,20 @@ const createSyncScheduler = () => {
     const hash = pendingHash;
     pendingPayload = null;
     try {
-      await fetch(`${API_URL}/api/client/${hash}/sync`, {
+      const res = await fetch(`${API_URL}/api/client/${hash}/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: abortCtl.signal,
       });
+      // Trava otimista: adota a versão devolvida pelo servidor, pra o
+      // próximo sync não parecer "atrasado" e disparar a proteção à toa.
+      if (res && res.ok && typeof onSynced === 'function') {
+        try {
+          const j = await res.json();
+          if (j && typeof j.dataVersion === 'number') onSynced(j.dataVersion);
+        } catch { /* resposta sem JSON — ignora */ }
+      }
     } catch (e) {
       if (e.name !== 'AbortError') console.error('Sync failed', e);
     }
@@ -125,8 +135,13 @@ export const DashboardProvider = ({ children }) => {
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(null);
   const recalcPendingRef = useRef(false);
   // Scheduler singleton — debounce + abort de sync evita race condition
-  // que causou perda de dados (Garapas, 2026-05-11)
-  const syncSchedulerRef = useRef(createSyncScheduler());
+  // que causou perda de dados (Garapas, 2026-05-11). O callback adota a
+  // versão devolvida pelo servidor (trava otimista).
+  const syncSchedulerRef = useRef(createSyncScheduler((newVersion) => {
+    setDashboardData(prev => (
+      prev._dataVersion === newVersion ? prev : { ...prev, _dataVersion: newVersion }
+    ));
+  }));
 
   // Flush pendente antes do unmount/refresh pra não perder último save
   useEffect(() => {
@@ -1366,6 +1381,8 @@ export const DashboardProvider = ({ children }) => {
       newDashboardData._clientEmail = prev._clientEmail;
       newDashboardData._hasCredentials = prev._hasCredentials;
       newDashboardData._profile = prev._profile;
+      // Trava otimista: preserva a versão do dado (Path 2 reconstrói o objeto).
+      newDashboardData._dataVersion = prev._dataVersion;
       // Preserve profile photo/name saved via profile endpoint (not in formData)
       if (!newDashboardData.user.photo && prev.user?.photo) {
         newDashboardData.user.photo = prev.user.photo;

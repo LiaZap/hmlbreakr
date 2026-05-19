@@ -1258,9 +1258,12 @@ router.post('/client/:hash/sync', async (req, res) => {
 
     // Since a TeamMember sends their overridden user info, we SHOULD NOT overwrite the true Owner's profile inside client.data.
     // If we want to be safe, we fetch the current saved data first and preserve the original `user` section.
-    // Listas críticas que um sync "vazio" tentou zerar — preservadas do
-    // dado salvo. Vai pra auditoria pra rastrear o que protegemos.
+    // Listas críticas que um sync "vazio"/desatualizado tentou zerar/encolher
+    // — preservadas do dado salvo. Vai pra auditoria pra rastrear.
     const preservedKeys = [];
+    // Trava otimista: versão do Client.data. O servidor incrementa a cada
+    // save e devolve no response; o frontend manda a versão que carregou.
+    let currentVersion = 0;
 
     const currentSavedClient = await prisma.client.findUnique({ where: { id: clientIdToUpdate } });
     if (currentSavedClient && currentSavedClient.data) {
@@ -1275,33 +1278,41 @@ router.post('/client/:hash/sync', async (req, res) => {
         }
 
         // ── PROTEÇÃO CONTRA PERDA DE DADOS (incidente Garapas / Chef Burguer) ──
-        // Um sync NUNCA pode zerar de uma vez listas críticas já populadas.
-        // Se o payload chega com fichas/insumos/menuEngineering VAZIOS mas o
-        // dado salvo tem conteúdo relevante (> 3 itens), preserva o salvo —
-        // quase sempre é uma aba antiga / estado parcial (ex: onboarding)
-        // sobrescrevendo. Exclusão item-a-item continua funcionando: o último
-        // sync zera com poucos itens salvos; só o "salto pra zero" de um
-        // conjunto grande é bloqueado.
+        // (1) Wipe-guard: um sync com fichas/insumos/menuEngineering VAZIOS
+        //     não zera uma lista que tem > 3 itens salvos.
+        // (2) Trava otimista: se o sync vem de um estado DESATUALIZADO
+        //     (versão menor que a salva — ex: aba antiga salvou no meio) e
+        //     ENCOLHE uma lista crítica, preserva o salvo. Exclusão normal
+        //     (mesma versão) continua livre.
+        currentVersion = Number(parsedData._dataVersion) || 0;
+        const incomingVersion = Number(newData._dataVersion);
+        const isStale = Number.isFinite(incomingVersion) && incomingVersion < currentVersion;
+
         const WIPE_GUARD_MIN = 3;
         const asArr = (v) => (Array.isArray(v) ? v : []);
-        const wipingList = (incoming, saved) =>
-          asArr(incoming).length === 0 && asArr(saved).length > WIPE_GUARD_MIN;
+        const mustPreserve = (incoming, saved) => {
+          const inc = asArr(incoming).length;
+          const sav = asArr(saved).length;
+          if (inc === 0 && sav > WIPE_GUARD_MIN) return true; // wipe total
+          if (isStale && inc < sav) return true;              // shrink de estado antigo
+          return false;
+        };
 
-        if (wipingList(newData.operational?.fichas, parsedData.operational?.fichas)) {
+        if (mustPreserve(newData.operational?.fichas, parsedData.operational?.fichas)) {
           newData.operational = { ...(newData.operational || {}), fichas: parsedData.operational.fichas };
           preservedKeys.push('operational.fichas');
         }
-        if (wipingList(newData.operational?.insumos, parsedData.operational?.insumos)) {
+        if (mustPreserve(newData.operational?.insumos, parsedData.operational?.insumos)) {
           newData.operational = { ...(newData.operational || {}), insumos: parsedData.operational.insumos };
           preservedKeys.push('operational.insumos');
         }
-        if (wipingList(newData.menuEngineering, parsedData.menuEngineering)) {
+        if (mustPreserve(newData.menuEngineering, parsedData.menuEngineering)) {
           newData.menuEngineering = parsedData.menuEngineering;
           preservedKeys.push('menuEngineering');
         }
         if (preservedKeys.length > 0) {
           console.warn(
-            `[sync] WIPE BLOQUEADO clientId=${clientIdToUpdate} — preservado: ${preservedKeys.join(', ')}`
+            `[sync] WIPE/STALE BLOQUEADO clientId=${clientIdToUpdate} stale=${isStale} — preservado: ${preservedKeys.join(', ')}`
           );
         }
       } catch (e) {
@@ -1313,6 +1324,10 @@ router.post('/client/:hash/sync', async (req, res) => {
     delete newData._clientEmail;
     delete newData._hasCredentials;
     delete newData._profile;
+
+    // Trava otimista: grava a versão incrementada (o servidor é a autoridade
+    // da versão — o frontend adota a que vier no response).
+    newData._dataVersion = currentVersion + 1;
 
     // Detecção de save anômalo: se novo data é >50% menor que o atual,
     // marca o snapshot como suspeito pra investigação (mas AINDA salva —
@@ -1379,7 +1394,7 @@ router.post('/client/:hash/sync', async (req, res) => {
       },
     });
 
-    res.json({ success: true, shrinkDetected: shrinkDetected || undefined });
+    res.json({ success: true, dataVersion: currentVersion + 1, shrinkDetected: shrinkDetected || undefined });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erro ao sincronizar dados' });
