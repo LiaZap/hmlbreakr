@@ -8,6 +8,7 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
+const { stripOnbTag } = require('../../services/onboardingSync');
 
 const router = express.Router({ mergeParams: true });
 const prisma = new PrismaClient();
@@ -99,7 +100,7 @@ router.get('/', async (req, res) => {
         remainingAmount: Number(p.remainingAmount),
         dueDate: p.dueDate,
         supplier: p.supplier?.name,
-        description: p.description,
+        description: stripOnbTag(p.description),
         daysOverdue: Math.ceil((now - p.dueDate) / 86400000),
       })),
       topDueSoon: topDueSoon.map((p) => ({
@@ -108,7 +109,7 @@ router.get('/', async (req, res) => {
         remainingAmount: Number(p.remainingAmount),
         dueDate: p.dueDate,
         supplier: p.supplier?.name,
-        description: p.description,
+        description: stripOnbTag(p.description),
         daysUntilDue: Math.ceil((p.dueDate - now) / 86400000),
       })),
     });

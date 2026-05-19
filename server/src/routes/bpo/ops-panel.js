@@ -13,6 +13,7 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { requireBpoOperator } = require('./middleware');
+const { stripOnbTag } = require('../../services/onboardingSync');
 
 const router = express.Router({ mergeParams: true });
 const prisma = new PrismaClient();
@@ -163,7 +164,7 @@ router.post('/scan', async (req, res) => {
           await prisma.bpoTask.create({
             data: {
               clientId: c.id, type: 'overdue_payable', severity: 'high',
-              title: `Conta vencida: ${p.description || p.invoiceNumber || 'sem descrição'}`,
+              title: `Conta vencida: ${stripOnbTag(p.description) || p.invoiceNumber || 'sem descrição'}`,
               description: `R$ ${p.remainingAmount} venceu em ${p.dueDate.toISOString().slice(0, 10)}`,
               relatedType: 'payable', relatedId: p.id, dueAt: p.dueDate,
             },

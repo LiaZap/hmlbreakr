@@ -330,7 +330,7 @@ router.get('/:type/export', async (req, res) => {
         Fornecedor: p.supplier?.name || '',
         CNPJ: p.supplier?.cnpj || '',
         'Nota Fiscal': p.invoiceNumber || '',
-        Descrição: p.description || '',
+        Descrição: stripOnbTag(p.description) || '',
         Categoria: p.category?.name || '',
         Valor: Number(p.amount),
         Saldo: Number(p.remainingAmount),
