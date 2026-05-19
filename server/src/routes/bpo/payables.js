@@ -11,9 +11,13 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
+const { stripOnbTag } = require('../../services/onboardingSync');
 
 const router = express.Router({ mergeParams: true });
 const prisma = new PrismaClient();
+
+// Limpa a tag interna [onb:*] da descrição de um payable para exibição.
+const cleanPayable = (p) => (p ? { ...p, description: stripOnbTag(p.description) } : p);
 
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
@@ -75,7 +79,7 @@ router.get('/', async (req, res) => {
       }),
     ]);
     res.json({
-      items,
+      items: items.map(cleanPayable),
       total,
       page: parseInt(page, 10),
       pageSize: parseInt(pageSize, 10),
@@ -140,7 +144,7 @@ router.get('/pending-approval', async (req, res) => {
         category: { select: { name: true } },
       },
     });
-    res.json({ items, total: items.length });
+    res.json({ items: items.map(cleanPayable), total: items.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -159,7 +163,7 @@ router.get('/:id', async (req, res) => {
       },
     });
     if (!item) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
-    res.json(item);
+    res.json(cleanPayable(item));
   } catch (err) {
     console.error('[bpo payables get]', err);
     res.status(500).json({ error: 'Erro ao buscar conta a pagar' });
@@ -284,6 +288,14 @@ router.put('/:id', async (req, res) => {
     ['supplierId', 'invoiceNumber', 'description', 'categoryId', 'department'].forEach((f) => {
       if (req.body[f] !== undefined) data[f] = req.body[f] || null;
     });
+    // Preserva a tag interna [onb:*]: o usuário vê/edita a descrição LIMPA,
+    // mas o marcador de idempotência do onboarding não pode ser perdido.
+    if (data.description !== undefined) {
+      const tag = (existing.description || '').match(/\[onb:[^\]]*\]/);
+      if (tag && (!data.description || !data.description.includes(tag[0]))) {
+        data.description = `${data.description || ''} ${tag[0]}`.trim();
+      }
+    }
     if (req.body.amount !== undefined) {
       data.amount = parseFloat(req.body.amount);
       // recalcula remainingAmount considerando os pagamentos já feitos
@@ -295,7 +307,7 @@ router.put('/:id', async (req, res) => {
     if (req.body.attachments !== undefined) data.attachments = JSON.stringify(req.body.attachments);
 
     const item = await prisma.payable.update({ where: { id: req.params.id }, data });
-    res.json(item);
+    res.json(cleanPayable(item));
   } catch (err) {
     console.error('[bpo payables update]', err);
     res.status(500).json({ error: 'Erro ao atualizar conta a pagar' });

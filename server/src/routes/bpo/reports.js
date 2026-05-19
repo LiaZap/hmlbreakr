@@ -18,6 +18,7 @@ const express = require('express');
 const XLSX = require('xlsx');
 const { PrismaClient } = require('@prisma/client');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
+const { stripOnbTag } = require('../../services/onboardingSync');
 
 const router = express.Router({ mergeParams: true });
 const prisma = new PrismaClient();
@@ -71,7 +72,8 @@ router.get('/payables', async (req, res) => {
       return acc;
     }, { total: 0, remaining: 0, paid: 0, byStatus: {} });
 
-    res.json({ items, summary, count: items.length, ...parseDateRange(req, 90) });
+    const cleanItems = items.map((p) => ({ ...p, description: stripOnbTag(p.description) }));
+    res.json({ items: cleanItems, summary, count: items.length, ...parseDateRange(req, 90) });
   } catch (err) {
     console.error('[bpo reports payables]', err);
     res.status(500).json({ error: err.message });

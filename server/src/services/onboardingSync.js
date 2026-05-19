@@ -159,6 +159,13 @@ async function syncPaymentMethods(prisma, clientId, formData) {
 const ONB_TAG = (key) => `[onb:${key}]`;
 const hasOnbTag = (desc, key) => typeof desc === 'string' && desc.includes(ONB_TAG(key));
 
+// Remove qualquer tag [onb:<key>] de uma descrição — uso só para EXIBIÇÃO.
+// A tag PERMANECE gravada no banco (o sync depende dela para idempotência);
+// este helper limpa o texto nas respostas de API para o usuário não ver o
+// marcador interno (ex.: "Internet [onb:internet]" → "Internet").
+const stripOnbTag = (desc) =>
+  typeof desc === 'string' ? desc.replace(/\s*\[onb:[^\]]*\]/g, '').trim() : desc;
+
 // Dia de vencimento padrão pros custos fixos sincronizados (dia 10 do mês).
 const SYNC_DUE_DAY = 10;
 
@@ -388,4 +395,4 @@ async function diffOnboardingVsBpo(prisma, clientId, formData) {
   };
 }
 
-module.exports = { syncOnboardingToBpo, diffOnboardingVsBpo };
+module.exports = { syncOnboardingToBpo, diffOnboardingVsBpo, stripOnbTag };
