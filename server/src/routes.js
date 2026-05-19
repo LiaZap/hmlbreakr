@@ -1175,6 +1175,34 @@ router.get('/client/:hash', async (req, res) => {
       bpoLoansOutstanding = loans.reduce((acc, l) => acc + parseFloat(l.currentBalance), 0);
     } catch (e) { /* */ }
 
+    // CMV REALIZADO do mês corrente — soma dos Payables em categorias com
+    // dreGroup 'cmv' (fornecedores Alimento/Insumo). Alimenta a Margem de
+    // Contribuição / Ponto de Equilíbrio com dado REAL do DRE, oscilando mês
+    // a mês conforme as compras. Sem categorias/lançamentos → 0 → o dashboard
+    // cai no CMV teórico das fichas técnicas.
+    let bpoCmvRealizadoMes = 0;
+    try {
+      const cmvCats = await prisma.financialCategory.findMany({
+        where: { clientId: client.id, dreGroup: 'cmv' },
+        select: { id: true },
+      });
+      if (cmvCats.length > 0) {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const agg = await prisma.payable.aggregate({
+          where: {
+            clientId: client.id,
+            categoryId: { in: cmvCats.map((c) => c.id) },
+            status: { not: 'cancelled' },
+            dueDate: { gte: monthStart, lt: monthEnd },
+          },
+          _sum: { amount: true },
+        });
+        bpoCmvRealizadoMes = parseFloat(agg._sum.amount || 0);
+      }
+    } catch (e) { /* tabelas BPO podem não existir antes da migration */ }
+
     dashboardData._bpo = {
       enabled: true,
       clientId: client.id,
@@ -1182,6 +1210,7 @@ router.get('/client/:hash', async (req, res) => {
       advancesTotal: +bpoAdvancesTotal.toFixed(2),
       loansMonthly: +bpoLoansMonthly.toFixed(2),
       loansOutstanding: +bpoLoansOutstanding.toFixed(2),
+      cmvRealizadoMes: +bpoCmvRealizadoMes.toFixed(2),
     };
 
     // SEGURANÇA: se request vem de admin visualizando (header x-admin-viewing),

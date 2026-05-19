@@ -666,26 +666,37 @@ export const DashboardProvider = ({ children }) => {
         }
     }
 
-    // ── CMV efetivo: prioriza as fichas técnicas ───────────────────────────
-    // O CMV tem duas fontes: (A) fichas com custo+preço cadastrados e
-    // (B) menuEngineering com vendas lançadas. O painel de CMV já exibe a
-    // fonte A quando existe. Aqui calculamos o CMV EFETIVO (A primeiro, B
-    // depois) e passamos a usá-lo no custo variável e no Ponto de Equilíbrio.
-    // Antes o P/E só "ligava" pela fonte B — cliente com fichas custeadas
-    // mas sem vendas no menuEngineering via "Preencha suas Fichas" mesmo
-    // tendo fichas. Agora o P/E funciona com qualquer fonte de CMV.
+    // ── CMV efetivo: DRE realizado > fichas > menuEngineering ──────────────
+    // O CMV tem três fontes, em ordem de prioridade:
+    //   (A) DRE REALIZADO — compras reais do mês (Payables categoria CMV).
+    //       É o dado mais fiel; oscila mês a mês conforme as compras.
+    //   (B) Fichas técnicas — CMV teórico (média custo/preço das fichas).
+    //   (C) menuEngineering — itens com vendas lançadas.
+    // O CMV efetivo alimenta o custo variável e o Ponto de Equilíbrio.
+    // Assim o P/E funciona com qualquer fonte e, quando o cliente lança as
+    // contas no DRE, passa a refletir a realidade — não fica engessado.
     const cmvPercentageDisplay = cmvPercentage * 100;
     const allFichasForCmv = dashboardData.operational?.fichas || [];
     const fichasComPreco = allFichasForCmv.filter(f => parseCurrency(f.precoVenda) > 0 && parseCurrency(f.custoTotal) > 0);
     const cmvFromFichas = fichasComPreco.length > 0
       ? (fichasComPreco.reduce((sum, f) => sum + (parseCurrency(f.custoTotal) / parseCurrency(f.precoVenda)), 0) / fichasComPreco.length) * 100
       : 0;
-    // BAH-089: mesmo teto de sanidade — ficha com preço < custo não dispara P/E irreal.
-    const cmvEffectiveRaw = fichasComPreco.length > 0 ? cmvFromFichas : (hasCmvData ? cmvPercentageDisplay : 0);
+    // CMV realizado do DRE (mês corrente). Só vale na visão do mês atual —
+    // o agregado vem do backend só pro mês corrente (_bpo.cmvRealizadoMes).
+    const bpoCmvRealizadoMes = parseFloat(dashboardData?._bpo?.cmvRealizadoMes) || 0;
+    const cmvFromDre = (selectedMonthIndex === null && bpoCmvRealizadoMes > 0 && currentRevenue > 0)
+      ? (bpoCmvRealizadoMes / currentRevenue) * 100
+      : 0;
+    // BAH-089: mesmo teto de sanidade — não deixa um dado incoerente disparar P/E irreal.
+    const cmvEffectiveRaw = cmvFromDre > 0
+      ? cmvFromDre
+      : (fichasComPreco.length > 0 ? cmvFromFichas : (hasCmvData ? cmvPercentageDisplay : 0));
     const cmvEffective = Math.min(cmvEffectiveRaw, CMV_THEORETICAL_CAP * 100);
     const cmvEffectiveFraction = cmvEffective / 100; // fração 0-1 p/ custo variável
-    // P/E "liga" quando QUALQUER fonte de CMV tem dado (fichas OU vendas).
-    const hasCmvDataEffective = hasCmvData || fichasComPreco.length > 0;
+    // CMV vindo do DRE é REALIZADO, não estimativa.
+    if (cmvFromDre > 0) cmvIsEstimate = false;
+    // P/E "liga" quando QUALQUER fonte de CMV tem dado (DRE, fichas OU vendas).
+    const hasCmvDataEffective = hasCmvData || fichasComPreco.length > 0 || cmvFromDre > 0;
 
     // Card machine fees (Débito + Crédito) — variable cost
     // Reference (ideal) market rates in Brazil
