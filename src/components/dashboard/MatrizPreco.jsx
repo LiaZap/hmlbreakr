@@ -23,9 +23,28 @@ const isInsumoItem = (categoryOrType) =>
   NON_MENU_CATEGORIES.has(String(categoryOrType || '').toLowerCase().trim());
 
 const MatrizPreco = () => {
-  const { dashboardData } = useDashboard();
+  const { dashboardData, updateDashboardData } = useDashboard();
   const [activeCategory, setActiveCategory] = useState(null); // Filter by click on chips (classification)
   const [selectedMenuCategory, setSelectedMenuCategory] = useState(null); // null = show all, or a specific category
+
+  // Remove um item da Engenharia de Menu (menuEngineering). Usado pra tirar
+  // insumos que entraram errado na Matriz de Cardápio. NÃO apaga o insumo
+  // nem a ficha técnica — só remove a entrada do menuEngineering.
+  const handleRemoveFromMenu = (item) => {
+    if (!window.confirm(
+      `Remover "${item.name}" da Engenharia de Menu?\n\n` +
+      'O item sai da Matriz de Cardápio. O insumo / ficha técnica cadastrado ' +
+      'NÃO é apagado — apenas deixa de aparecer aqui.'
+    )) return;
+    const menu = dashboardData.menuEngineering || [];
+    const n = (item.name || '').toLowerCase().trim();
+    const c = (item.category || '').toLowerCase().trim();
+    const newMenu = menu.filter(
+      (m) => !((m.name || '').toLowerCase().trim() === n
+        && (m.category || '').toLowerCase().trim() === c),
+    );
+    updateDashboardData({ menuEngineering: newMenu });
+  };
 
 
   // Helper to parse currency safely
@@ -212,9 +231,19 @@ const MatrizPreco = () => {
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 sm:mt-0`} style={{ backgroundColor: config.color }} />
                         <span className={`text-[11px] leading-snug break-words sm:truncate ${item.hasFicha ? 'text-[#E1E1E1]' : 'text-red-500'}`} title={!item.hasFicha ? 'Produto sem ficha técnica' : ''}>{item.name}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-[10px] shrink-0 pl-3.5 sm:pl-0">
+                      <div className="flex items-center gap-3 sm:gap-4 text-[10px] shrink-0 pl-3.5 sm:pl-0">
                         <span className="text-[#868686]">Vendas <span className="text-white font-medium">{item.sales}</span></span>
                         <span className="text-[#868686] sm:w-[60px] text-right">R$ {item.price.toFixed(2)}</span>
+                        <button
+                          onClick={() => handleRemoveFromMenu(item)}
+                          title="Remover da Engenharia de Menu"
+                          aria-label={`Remover ${item.name} do menu`}
+                          className="text-[#555] hover:text-red-500 transition-colors shrink-0"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   ))}
