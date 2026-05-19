@@ -364,14 +364,7 @@ const Dashboard = () => {
       <div className="pl-3 md:pl-[85px] pr-3 md:pr-6 py-2 md:py-4 pb-[80px] md:pb-4 w-full">
         <div className="w-full px-0 md:px-0 2xl:px-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-4">
-            <MoneyOnTable
-              data={dashboardData.cards.moneyOnTable}
-              onAcknowledge={(key, rawValue) => {
-                const formData = dashboardData.formData || {};
-                const motActions = { ...(formData.mot_actions || {}), [key]: { rawValue, date: new Date().toISOString().slice(0, 10) } };
-                updateDashboardData({ ...formData, mot_actions: motActions });
-              }}
-            />
+            <MoneyOnTable data={dashboardData.cards.moneyOnTable} />
             <TechnicalSheets data={dashboardData.cards.technicalSheets} />
             <CostStructure data={dashboardData.cards.costStructure} />
           </div>

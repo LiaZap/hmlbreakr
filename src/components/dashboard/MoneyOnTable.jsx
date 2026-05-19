@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const MoneyOnTable = ({ data, onAcknowledge }) => {
+const MoneyOnTable = ({ data }) => {
   const [activeIdx, setActiveIdx] = useState(null);
 
   const items = data.items || [];
@@ -106,14 +106,6 @@ const MoneyOnTable = ({ data, onAcknowledge }) => {
                 <div className="flex items-center gap-2 shrink-0">
                   {item.recovered > 0 && (
                     <span className="text-[8px] font-semibold text-[#00B37E]">↓ R$ {item.recovered.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  )}
-                  {onAcknowledge && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onAcknowledge(item.key, item.rawValue); }}
-                      className="text-[8px] px-1.5 py-0.5 rounded-full border border-white/10 text-[#777] hover:border-[#FF9406]/40 hover:text-[#FF9406] transition-colors"
-                    >
-                      Tratar
-                    </button>
                   )}
                 </div>
               </div>

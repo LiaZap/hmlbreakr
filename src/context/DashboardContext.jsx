@@ -847,8 +847,6 @@ export const DashboardProvider = ({ children }) => {
         });
     }
     const mpAvgCommission = mpTotalSalesPct > 0 ? (mpWeightedPct / mpTotalSalesPct) : 0;
-    // mot_actions: previously acknowledged excess values { [key]: { rawValue, date } }
-    const motActions = formData.mot_actions || {};
 
     // ─── Dinheiro na Mesa — "recuperado" DINÂMICO (mês a mês) ────────────────
     // Causa-raiz do bug "valor recuperado estático": o `calcRecovered` antigo
@@ -862,8 +860,8 @@ export const DashboardProvider = ({ children }) => {
     // ANTERIOR e o mês corrente. Guardamos um snapshot mensal dos quatro
     // drivers do Dinheiro na Mesa em `formData.metric_snapshots`, indexado por
     // "YYYY-MM" (fuso America/Sao_Paulo). O baseline é o snapshot do mês
-    // anterior; se ele não existir ainda (primeiro mês monitorado), caímos no
-    // `mot_actions` como fallback. Assim:
+    // anterior; no primeiro mês monitorado não há baseline → recuperado 0.
+    // 100% AUTOMÁTICO — não depende de clique do usuário ("Tratar" removido).
     //   - CMV Teórico cai (alteração no histórico de preço da ficha) → recupera
     //   - %CF cai (vs. último mês) → recupera
     //   - taxa de cartão cai (vs. últimos 30 dias / mês anterior) → recupera
@@ -883,15 +881,13 @@ export const DashboardProvider = ({ children }) => {
 
     const calcRecovered = (key, currentExcess) => {
         currentMonthExcess[key] = currentExcess;
-        // 1) Baseline preferencial: snapshot do mês ANTERIOR (comparação dinâmica).
+        // Baseline: snapshot do mês ANTERIOR (comparação dinâmica, automática).
+        // Sem histórico (1º mês monitorado) → 0: não há com o que comparar.
         if (prevSnapshot && typeof prevSnapshot[key] === 'number') {
             const baseline = prevSnapshot[key];
             return baseline > currentExcess ? baseline - currentExcess : 0;
         }
-        // 2) Fallback (sem histórico mensal ainda): acknowledgement manual via "Tratar".
-        const stored = motActions[key];
-        if (!stored || stored.rawValue <= currentExcess) return 0;
-        return stored.rawValue - currentExcess;
+        return 0;
     };
 
     if (mpCommissionTotal > 0) {
@@ -963,7 +959,7 @@ export const DashboardProvider = ({ children }) => {
     // BAH — "recuperado" dinâmico: um driver que estava com excesso no mês
     // ANTERIOR e zerou no mês corrente (não aparece mais em moneyOnTableItems)
     // conta o excesso anterior INTEIRO como recuperado. Baseline = snapshot do
-    // mês anterior; fallback = mot_actions (acknowledgement manual).
+    // mês anterior. 100% automático — sem clique do usuário.
     const resolvedKeys = ['marketplace', 'fixedCosts', 'cmv', 'cardFee', 'advances', 'loans'];
     const activeKeys = new Set(moneyOnTableItems.map(i => i.key));
     let resolvedRecoveredTotal = 0;
@@ -971,15 +967,9 @@ export const DashboardProvider = ({ children }) => {
         if (activeKeys.has(key)) return;
         // Driver resolvido: registra excesso 0 no snapshot do mês corrente.
         currentMonthExcess[key] = 0;
-        // Baseline preferencial: excesso do mês anterior.
+        // Recuperado = excesso INTEIRO do mês anterior (o driver zerou).
         if (prevSnapshot && typeof prevSnapshot[key] === 'number' && prevSnapshot[key] > 0) {
             resolvedRecoveredTotal += prevSnapshot[key];
-            return;
-        }
-        // Fallback: acknowledgement manual.
-        const stored = motActions[key];
-        if (stored && stored.rawValue > 0) {
-            resolvedRecoveredTotal += stored.rawValue;
         }
     });
 
