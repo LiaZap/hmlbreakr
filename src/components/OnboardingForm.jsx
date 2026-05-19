@@ -413,6 +413,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [formData, setFormData] = useState({});
   const [direction, setDirection] = useState(0);
+  const [stepError, setStepError] = useState(''); // erro de campo obrigatório do passo
   const [showRegistration, setShowRegistration] = useState(false);
   const [registrationDone, setRegistrationDone] = useState(false);
   const [regEmail, setRegEmail] = useState('');
@@ -539,7 +540,40 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
     onClose();
   };
 
+  // Valida os campos obrigatórios (required) do passo atual antes de avançar.
+  // Aplica tanto no onboarding novo quanto no "editar onboarding".
+  const validateStep = (question, data) => {
+    if (!question || !Array.isArray(question.fields)) return { valid: true };
+    const requiredFields = question.fields.filter(f => f && f.required);
+    if (requiredFields.length === 0) return { valid: true };
+    const isEmpty = (v) => v === undefined || v === null || String(v).trim() === '';
+
+    if (question.type === 'composite') {
+      const stepData = data[question.id] || {};
+      const missing = requiredFields.filter(f => isEmpty(stepData[f.id]));
+      if (missing.length > 0) {
+        return { valid: false, message: `Preencha para continuar: ${missing.map(f => f.label).join(', ')}.` };
+      }
+      return { valid: true };
+    }
+
+    // Listas dinâmicas: exige ao menos UM item com todos os campos obrigatórios.
+    const arr = Array.isArray(data[question.id]) ? data[question.id] : [];
+    const hasComplete = arr.some(item => item && requiredFields.every(f => !isEmpty(item[f.id])));
+    if (!hasComplete) {
+      return { valid: false, message: `Adicione ao menos um item preenchido (${requiredFields.map(f => f.label).join(', ')}).` };
+    }
+    return { valid: true };
+  };
+
   const handleContinue = () => {
+    // Bloqueia o avanço se os obrigatórios do passo não estiverem preenchidos.
+    const check = validateStep(currentQuestion, formData);
+    if (!check.valid) {
+      setStepError(check.message);
+      return;
+    }
+    setStepError('');
     // Track progress: save which step was just completed + total steps
     const updatedFormData = {
       ...formData,
@@ -606,6 +640,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
 
   const handleBack = () => {
     if (isSubmitting) return;
+    setStepError('');
     if (currentStepIndex > 0) {
       setDirection(-1);
       setCurrentStepIndex(prev => prev - 1);
@@ -1237,6 +1272,16 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
                         }
                     </motion.div>
                 </AnimatePresence>
+
+                {/* Aviso de campo obrigatório não preenchido */}
+                {stepError && (
+                  <div className="mt-6 flex items-start gap-2 bg-[#FF4560]/10 border border-[#FF4560]/40 rounded-[10px] px-4 py-3">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-0.5">
+                      <path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#FF8A9C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="font-['Plus_Jakarta_Sans'] text-[13px] text-[#FF8A9C]">{stepError}</span>
+                  </div>
+                )}
 
                 {/* Navigation Buttons */}
                 <div className="flex flex-wrap items-center gap-4 mt-8 md:mt-12 pb-20 md:pb-4">

@@ -29,10 +29,10 @@ export const onboardingQuestions = [
     description: 'Vamos começar com o básico do seu estabelecimento.',
     type: 'composite',
     fields: [
-      { id: 'restaurant_name', label: 'Nome do Restaurante', type: 'text', placeholder: 'Ex: Meu Restaurante' },
+      { id: 'restaurant_name', label: 'Nome do Restaurante', type: 'text', placeholder: 'Ex: Meu Restaurante', required: true },
       { id: 'cuisine_type', label: 'Tipo de Negócio', type: 'autocomplete', placeholder: 'Ex: Italiana, Japonesa...', options: ['Italiana', 'Japonesa', 'Brasileira', 'Contemporânea', 'Fast Food', 'Pizzaria', 'Hamburgueria', 'Asiática', 'Árabe', 'Mexicana', 'Vegetariana/Vegana', 'Cafeteria', 'Doceria/Confeitaria', 'Padaria', 'Bar/Pub', 'Steakhouse/Churrascaria', 'Frutos do Mar', 'Bistrô', 'Buffet', 'Outros'] },
       { id: 'business_logo', label: 'Logo da Empresa (Opcional)', type: 'file', placeholder: 'Anexar logo' },
-      { id: 'tax_regime', label: 'Regime Tributário', type: 'select', options: ['Simples Nacional', 'Lucro Presumido', 'Lucro Real'] },
+      { id: 'tax_regime', label: 'Regime Tributário', type: 'select', options: ['Simples Nacional', 'Lucro Presumido', 'Lucro Real'], required: true },
       // Logic for MEI will be handled in form if Simples is selected
       { id: 'is_mei', label: 'É MEI?', type: 'select', options: ['Não', 'Sim'], dependsOn: 'tax_regime', dependsValue: 'Simples Nacional' }
     ]
@@ -90,7 +90,7 @@ export const onboardingQuestions = [
     description: 'Custos com o ponto comercial.',
     type: 'composite',
     fields: [
-      { id: 'rent', label: 'Valor do Aluguel (Mensal)', type: 'currency', placeholder: 'R$ 0,00' },
+      { id: 'rent', label: 'Valor do Aluguel (Mensal)', type: 'currency', placeholder: 'R$ 0,00', required: true },
       { id: 'iptu_annual', label: 'Valor IPTU (Anual)', type: 'currency', placeholder: 'R$ 0,00' }
     ]
   },
@@ -259,10 +259,10 @@ export const onboardingQuestions = [
     itemLabel: 'Operadora',
     calcType: 'none',
     fields: [
-        { id: 'provider', label: 'Operadora', type: 'select', options: ['PagSeguro', 'Stone', 'Cielo', 'Rede', 'Getnet', 'Outra'] },
+        { id: 'provider', label: 'Operadora', type: 'select', options: ['PagSeguro', 'Stone', 'Cielo', 'Rede', 'Getnet', 'Outra'], required: true },
         { id: 'custom_provider', label: 'Nome da Operadora', type: 'text', placeholder: 'Ex: Sumup, Mercado Pago...', dependsOn: { field: 'provider', value: 'Outra' } },
-        { id: 'debit_rate', label: 'Taxa Débito (%)', type: 'percentage', placeholder: '1.99%' },
-        { id: 'credit_rate', label: 'Taxa Crédito (%)', type: 'percentage', placeholder: '3.49%' }
+        { id: 'debit_rate', label: 'Taxa Débito (%)', type: 'percentage', placeholder: '1.99%', required: true },
+        { id: 'credit_rate', label: 'Taxa Crédito (%)', type: 'percentage', placeholder: '3.49%', required: true }
     ]
   },
 
@@ -292,8 +292,8 @@ export const onboardingQuestions = [
     minItems: 3,
     infoText: 'Preencha o máximo de histórico de faturamento possível. Recomendamos no mínimo 3 meses.',
     fields: [
-        { id: 'month', label: 'Mês/Ano', type: 'text', placeholder: 'MM/AAAA' },
-        { id: 'amount', label: 'Faturamento', type: 'currency', placeholder: 'R$ 0,00' }
+        { id: 'month', label: 'Mês/Ano', type: 'text', placeholder: 'MM/AAAA', required: true },
+        { id: 'amount', label: 'Faturamento', type: 'currency', placeholder: 'R$ 0,00', required: true }
     ]
   }
 ];
