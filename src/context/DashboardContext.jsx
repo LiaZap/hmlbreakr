@@ -666,6 +666,27 @@ export const DashboardProvider = ({ children }) => {
         }
     }
 
+    // ── CMV efetivo: prioriza as fichas técnicas ───────────────────────────
+    // O CMV tem duas fontes: (A) fichas com custo+preço cadastrados e
+    // (B) menuEngineering com vendas lançadas. O painel de CMV já exibe a
+    // fonte A quando existe. Aqui calculamos o CMV EFETIVO (A primeiro, B
+    // depois) e passamos a usá-lo no custo variável e no Ponto de Equilíbrio.
+    // Antes o P/E só "ligava" pela fonte B — cliente com fichas custeadas
+    // mas sem vendas no menuEngineering via "Preencha suas Fichas" mesmo
+    // tendo fichas. Agora o P/E funciona com qualquer fonte de CMV.
+    const cmvPercentageDisplay = cmvPercentage * 100;
+    const allFichasForCmv = dashboardData.operational?.fichas || [];
+    const fichasComPreco = allFichasForCmv.filter(f => parseCurrency(f.precoVenda) > 0 && parseCurrency(f.custoTotal) > 0);
+    const cmvFromFichas = fichasComPreco.length > 0
+      ? (fichasComPreco.reduce((sum, f) => sum + (parseCurrency(f.custoTotal) / parseCurrency(f.precoVenda)), 0) / fichasComPreco.length) * 100
+      : 0;
+    // BAH-089: mesmo teto de sanidade — ficha com preço < custo não dispara P/E irreal.
+    const cmvEffectiveRaw = fichasComPreco.length > 0 ? cmvFromFichas : (hasCmvData ? cmvPercentageDisplay : 0);
+    const cmvEffective = Math.min(cmvEffectiveRaw, CMV_THEORETICAL_CAP * 100);
+    const cmvEffectiveFraction = cmvEffective / 100; // fração 0-1 p/ custo variável
+    // P/E "liga" quando QUALQUER fonte de CMV tem dado (fichas OU vendas).
+    const hasCmvDataEffective = hasCmvData || fichasComPreco.length > 0;
+
     // Card machine fees (Débito + Crédito) — variable cost
     // Reference (ideal) market rates in Brazil
     const IDEAL_DEBIT_RATE = 1.5;  // %
@@ -711,7 +732,7 @@ export const DashboardProvider = ({ children }) => {
 
     // Variable costs = Card fees + CMV + Marketplace commissions
     const cardFeeCost = currentRevenue * cardFeePercentage;
-    const cmvCost = currentRevenue * cmvPercentage;
+    const cmvCost = currentRevenue * cmvEffectiveFraction;
     const variableCosts = cardFeeCost + cmvCost + marketplaceCommissionCost;
 
     // 2. METRICS CALCULATIONS
@@ -784,22 +805,9 @@ export const DashboardProvider = ({ children }) => {
     // Fixed Cost % over revenue
     const fixedCostPercentage = currentRevenue > 0 ? (totalFixedCosts / currentRevenue) * 100 : 0;
     const fixedCostPercentageCompleto = currentRevenue > 0 ? (totalFixedCostsCompleto / currentRevenue) * 100 : 0;
-    const cmvPercentageDisplay = cmvPercentage * 100;
-
-    // CMV effective: mirrors exactly what cmvTeorico panel shows
-    // 1. If fichas have precoVenda → use fichas avg (same as panel)
-    // 2. Else if menuEngineering has sales data → use cmvPercentageDisplay (same as panel fallback)
-    // 3. Else → 0
-    // BAH-089: mesmo teto de sanidade aplicado ao cmvEffective — uma única
-    // ficha com preço < custo não pode disparar o CMV e gerar P/E irreal.
-    const allFichasForCmv = dashboardData.operational?.fichas || [];
-    const fichasComPreco = allFichasForCmv.filter(f => parseCurrency(f.precoVenda) > 0 && parseCurrency(f.custoTotal) > 0);
-    const cmvFromFichas = fichasComPreco.length > 0
-      ? (fichasComPreco.reduce((sum, f) => sum + (parseCurrency(f.custoTotal) / parseCurrency(f.precoVenda)), 0) / fichasComPreco.length) * 100
-      : 0;
-    // Mirror cmvTeorico: fichas take priority, then menuEngineering, then 0
-    const cmvEffectiveRaw = fichasComPreco.length > 0 ? cmvFromFichas : (hasCmvData ? cmvPercentageDisplay : 0);
-    const cmvEffective = Math.min(cmvEffectiveRaw, CMV_THEORETICAL_CAP * 100);
+    // cmvPercentageDisplay / cmvEffective / cmvEffectiveFraction /
+    // hasCmvDataEffective são calculados mais acima (logo após o bloco de
+    // CMV do menuEngineering) — precisam estar prontos antes do custo variável.
 
     // BASE = %CF + %Impostos + %Cartão/Voucher (+ Royalties if franchise)
     // Marketplace commissions weighted by sales_percentage
@@ -1151,9 +1159,10 @@ export const DashboardProvider = ({ children }) => {
             };
 
             return {
-                hasCmvData: hasCmvData,
-                percentage: !hasCmvData ? 0 : (breakEvenValue === 0 && revenueForCalc > 0 ? 100 : (breakEvenValue > 0 ? Math.min(Math.round((revenueForCalc / breakEvenValue) * 100), 100) : 0)),
-                current: hasCmvData ? formatMoney(breakEvenValue) : "0,00",
+                // Gate do P/E: usa o flag EFETIVO (fichas OU vendas têm CMV).
+                hasCmvData: hasCmvDataEffective,
+                percentage: !hasCmvDataEffective ? 0 : (breakEvenValue === 0 && revenueForCalc > 0 ? 100 : (breakEvenValue > 0 ? Math.min(Math.round((revenueForCalc / breakEvenValue) * 100), 100) : 0)),
+                current: hasCmvDataEffective ? formatMoney(breakEvenValue) : "0,00",
                 revenueAccumulated: formatMoney(revenueForCalc),
                 min: "0",
                 max: formatMoney(maxRaw),
