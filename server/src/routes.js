@@ -1258,6 +1258,10 @@ router.post('/client/:hash/sync', async (req, res) => {
 
     // Since a TeamMember sends their overridden user info, we SHOULD NOT overwrite the true Owner's profile inside client.data.
     // If we want to be safe, we fetch the current saved data first and preserve the original `user` section.
+    // Listas críticas que um sync "vazio" tentou zerar — preservadas do
+    // dado salvo. Vai pra auditoria pra rastrear o que protegemos.
+    const preservedKeys = [];
+
     const currentSavedClient = await prisma.client.findUnique({ where: { id: clientIdToUpdate } });
     if (currentSavedClient && currentSavedClient.data) {
       try {
@@ -1268,6 +1272,37 @@ router.post('/client/:hash/sync', async (req, res) => {
         // Preserve profile data (phone, cpf, birthday) saved via profile endpoint
         if (parsedData.profile && !newData.profile) {
             newData.profile = parsedData.profile;
+        }
+
+        // ── PROTEÇÃO CONTRA PERDA DE DADOS (incidente Garapas / Chef Burguer) ──
+        // Um sync NUNCA pode zerar de uma vez listas críticas já populadas.
+        // Se o payload chega com fichas/insumos/menuEngineering VAZIOS mas o
+        // dado salvo tem conteúdo relevante (> 3 itens), preserva o salvo —
+        // quase sempre é uma aba antiga / estado parcial (ex: onboarding)
+        // sobrescrevendo. Exclusão item-a-item continua funcionando: o último
+        // sync zera com poucos itens salvos; só o "salto pra zero" de um
+        // conjunto grande é bloqueado.
+        const WIPE_GUARD_MIN = 3;
+        const asArr = (v) => (Array.isArray(v) ? v : []);
+        const wipingList = (incoming, saved) =>
+          asArr(incoming).length === 0 && asArr(saved).length > WIPE_GUARD_MIN;
+
+        if (wipingList(newData.operational?.fichas, parsedData.operational?.fichas)) {
+          newData.operational = { ...(newData.operational || {}), fichas: parsedData.operational.fichas };
+          preservedKeys.push('operational.fichas');
+        }
+        if (wipingList(newData.operational?.insumos, parsedData.operational?.insumos)) {
+          newData.operational = { ...(newData.operational || {}), insumos: parsedData.operational.insumos };
+          preservedKeys.push('operational.insumos');
+        }
+        if (wipingList(newData.menuEngineering, parsedData.menuEngineering)) {
+          newData.menuEngineering = parsedData.menuEngineering;
+          preservedKeys.push('menuEngineering');
+        }
+        if (preservedKeys.length > 0) {
+          console.warn(
+            `[sync] WIPE BLOQUEADO clientId=${clientIdToUpdate} — preservado: ${preservedKeys.join(', ')}`
+          );
         }
       } catch (e) {
         console.error("Error parsing existing client data before save:", e);
@@ -1332,12 +1367,15 @@ router.post('/client/:hash/sync', async (req, res) => {
       actorType: savingTeamMember ? 'team_member' : 'client',
       actorId: savingTeamMember ? savingTeamMember.id : (client ? client.id : null),
       actorLabel: savingTeamMember ? (savingTeamMember.email || savingTeamMember.name || hash) : hash,
-      summary: 'Salvou dados do cliente',
+      summary: preservedKeys.length > 0
+        ? `Salvou dados do cliente — wipe bloqueado (${preservedKeys.join(', ')})`
+        : 'Salvou dados do cliente',
       metadata: {
         sizeBefore: currentSize,
         sizeAfter: newSize,
         shrink: newSize < currentSize * 0.8,
         shrinkDetected,
+        preservedKeys: preservedKeys.length > 0 ? preservedKeys : undefined,
       },
     });
 
