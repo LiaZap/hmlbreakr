@@ -344,10 +344,12 @@ const Dashboard = () => {
                   position="bottom-left"
                   content="Indicador de custos fundamentais que precisam ser incluídos em todas suas vendas"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className="cursor-pointer shrink-0">
-                    <circle cx="12" cy="12" r="10" stroke="black" strokeWidth="1.5"/>
-                    <path d="M12 16v-4M12 8h.01" stroke="black" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
+                  <span
+                    className="w-[16px] h-[16px] rounded-full bg-black text-white text-[11px] font-extrabold flex items-center justify-center cursor-pointer shrink-0 leading-none"
+                    aria-label="Ajuda"
+                  >
+                    ?
+                  </span>
                 </InfoTooltip>
               </div>
               <span className="font-bold text-[24px] md:text-[28px] text-black leading-none">{dashboardData.breakEven.base.value}</span>
