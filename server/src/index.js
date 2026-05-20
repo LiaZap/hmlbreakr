@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
 const bpoRoutes = require('./routes/bpo');
+const stripeWebhookRouter = require('./routes/stripeWebhook');
 const { startBackupScheduler } = require('./services/backupScheduler');
 const { createAuditMiddleware } = require('./middleware/auditMiddleware');
 
@@ -34,6 +35,12 @@ app.use(helmet({
     },
   },
 }));
+
+// Stripe Webhook — DEVE vir ANTES de express.json e de qualquer middleware
+// que parseie o body. A verificação de signature do Stripe é feita sobre o
+// body bytes-puros; o próprio router aplica express.raw internamente.
+// Também ficamos fora do rate-limiter pra não bloquear retentativas.
+app.use('/api/stripe/webhook', stripeWebhookRouter);
 
 // Rate Limiting
 const limiter = rateLimit({
