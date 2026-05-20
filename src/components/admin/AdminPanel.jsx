@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import boltIcon from '../../assets/bolt.svg';
 import AdminDREModal from './AdminDREModal';
@@ -144,20 +144,29 @@ const AdminPanel = () => {
         if (Array.isArray(data)) setClients(data);
       })
       .catch(err => console.error("Failed to fetch clients", err));
-    // Lista completa (?full=1) — uma única requisição, reutilizada pelas telas
-    // de análise. Payload maior, por isso é separada e cacheada em fullClients.
-    adminFetch('/api/admin/clients?full=1')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setFullClients(data);
-      })
-      .catch(err => console.error("Failed to fetch full clients", err))
-      .finally(() => setFullClientsLoading(false));
     fetch('/api/admin/broadcasts')
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setBroadcasts(data); })
       .catch(err => console.error("Failed to fetch broadcasts", err));
   }, []);
+
+  // Lazy-load do `?full=1` (~1 MB por cliente) — só busca quando o usuário
+  // abre uma aba que realmente precisa dos dados crus (Análises). Antes era
+  // disparado no mount e travava o painel inteiro (~28 MB pra 28 clientes).
+  // Visão Geral / Gestão de Clientes / Relatórios funcionam com a lista
+  // lightweight (que já traz _financial calculado pelo servidor).
+  const fullClientsRequestedRef = useRef(false);
+  const NEEDS_FULL_CLIENTS = useMemo(() => new Set(['analytics']), []);
+  useEffect(() => {
+    if (!NEEDS_FULL_CLIENTS.has(activeTab)) return;
+    if (fullClientsRequestedRef.current) return;
+    fullClientsRequestedRef.current = true;
+    adminFetch('/api/admin/clients?full=1')
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data)) setFullClients(data); })
+      .catch(err => console.error("Failed to fetch full clients", err))
+      .finally(() => setFullClientsLoading(false));
+  }, [activeTab, NEEDS_FULL_CLIENTS]);
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files?.[0];
