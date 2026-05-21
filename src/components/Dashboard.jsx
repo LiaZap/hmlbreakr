@@ -28,6 +28,13 @@ import MobileNav from './dashboard/MobileNav';
 import OnboardingForm from './OnboardingForm';
 import MobileOnboarding from './mobile/MobileOnboarding';
 import BroadcastPopup from './dashboard/BroadcastPopup';
+import { useSubscriptionGuard } from '../hooks/useSubscriptionGuard';
+import {
+  PaymentFailedBanner,
+  TrialEndingModal,
+  CanceledWarningModal,
+  SubscriptionBlockedScreen,
+} from './dashboard/SubscriptionModals';
 
 const Dashboard = () => {
   /* MOVED TO CONTEXT */
@@ -52,6 +59,10 @@ const Dashboard = () => {
   const isAdminViewing = !!adminSession && !!hash;
   const roleLabel = { super_admin: 'Super Admin', admin: 'Admin', commercial: 'Comercial', financial: 'Financeiro' }[adminRole] || 'Admin';
 
+  // Stripe F3 — banner / modais / bloqueio por assinatura. Admin viewing
+  // nunca é bloqueado (admin precisa ver dados mesmo de cliente bloqueado).
+  const sub = useSubscriptionGuard({ isAdminViewing });
+
   const handleBackToAdmin = () => {
     if (window.opener) window.close();
     else window.location.href = window.location.pathname;
@@ -65,8 +76,18 @@ const Dashboard = () => {
     }
   };
 
+  // Bloqueio total (unpaid / expirado / admin_blocked) — short-circuit
+  // ANTES do dashboard renderizar. Admin viewing está isento (hook trata).
+  if (sub.ready && sub.shouldBlock) {
+    return <SubscriptionBlockedScreen subscription={sub.raw} />;
+  }
+
   return (
     <div className="relative w-full h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-y-auto lg:overflow-hidden">
+      {/* Avisos de assinatura — banner sticky e modais flutuantes */}
+      {sub.ready && sub.showPaymentFailedBanner && <PaymentFailedBanner />}
+      {sub.ready && sub.showTrialEndingModal && <TrialEndingModal daysLeft={sub.daysToTrialEnd} />}
+      {sub.ready && sub.showCanceledWarningModal && <CanceledWarningModal daysLeft={sub.daysToCharge} />}
       {/* Banner de modo admin-viewing */}
       {isAdminViewing && (
         <div className="sticky top-0 z-[60] bg-gradient-to-r from-[#F5A623] to-[#E5961E] text-black shadow-lg">

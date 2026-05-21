@@ -6,6 +6,7 @@ const prisma = new PrismaClient();
 const { sendWelcomeEmail, sendCredentialResetEmail, sendPasswordResetEmail } = require('./services/emailService');
 const { calculateClientFinancials } = require('./services/financialCalc');
 const { syncOnboardingToBpo } = require('./services/onboardingSync');
+const { createPortalSession } = require('./services/stripeService');
 const { createSnapshot, pruneOldSnapshots } = require('./services/snapshotService');
 const { deepMerge } = require('./utils/deepMerge');
 const crypto = require('crypto');
@@ -20,6 +21,7 @@ const adminAuditRoutes = require('./routes/admin/audit');
 
 // Middleware admin (header-based v1, JWT v2)
 const { requireAdmin, requireSuperAdmin } = require('./middleware/adminAuth');
+const { buildSubscriptionInfo, blockIfNotAllowed } = require('./middleware/subscriptionGuard');
 
 // Auditoria — best-effort, nunca lança (ver services/auditService.js)
 const { logAudit } = require('./services/auditService');
@@ -937,6 +939,34 @@ router.post('/client/register', async (req, res) => {
 });
 
 // Client Login (Checks both Client and TeamMember)
+// Stripe F3 — gera URL do Customer Portal pro cliente atualizar pagamento,
+// ver faturas e cancelar. SEM subscription guard aqui (cliente bloqueado
+// PRECISA acessar o portal pra reativar). Bloqueio manual do admin
+// continua sem reativação automática (é independente do Stripe).
+router.post('/client/:hash/billing-portal', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    let client = await prisma.client.findUnique({ where: { hash } });
+    if (!client) {
+      const tm = await prisma.teamMember.findUnique({ where: { hash } });
+      if (tm) client = await prisma.client.findUnique({ where: { id: tm.clientId } });
+    }
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    if (!client.stripeCustomerId) {
+      return res.status(400).json({ error: 'Cliente ainda não tem assinatura ativa no Stripe.' });
+    }
+    const returnUrl = req.body?.returnUrl || process.env.APP_URL || 'https://app.breakr.com.br';
+    const session = await createPortalSession({
+      stripeCustomerId: client.stripeCustomerId,
+      returnUrl,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('[billing-portal]', err);
+    res.status(500).json({ error: 'Erro ao abrir portal de pagamento' });
+  }
+});
+
 router.post('/client/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -1213,6 +1243,10 @@ router.get('/client/:hash', async (req, res) => {
       cmvRealizadoMes: +bpoCmvRealizadoMes.toFixed(2),
     };
 
+    // Info de assinatura (Stripe F3) — usado pelos modais/bloqueio do frontend.
+    // GET nunca bloqueia (precisamos do load mesmo p/ mostrar tela de bloqueio).
+    dashboardData.subscription = buildSubscriptionInfo(client);
+
     // SEGURANÇA: se request vem de admin visualizando (header x-admin-viewing),
     // stripar dados pessoais sensíveis antes de enviar (email, CPF, telefone, aniversário, foto pessoal)
     // Admin pode VER o dashboard mas não as credenciais/dados privados do dono
@@ -1255,6 +1289,13 @@ router.post('/client/:hash/sync', async (req, res) => {
     }
 
     if (!clientIdToUpdate) return res.status(404).json({ error: 'Credenciais inválidas para salvar dados.' });
+
+    // Stripe F3 — bloqueia o save quando assinatura inadimplente/expirada
+    // ou bloqueio manual do admin. Past_due/trial/active/legacy passam normal.
+    {
+      const ownerForGuard = client || (await prisma.client.findUnique({ where: { id: clientIdToUpdate } }));
+      if (blockIfNotAllowed(ownerForGuard, res)) return;
+    }
 
     // Since a TeamMember sends their overridden user info, we SHOULD NOT overwrite the true Owner's profile inside client.data.
     // If we want to be safe, we fetch the current saved data first and preserve the original `user` section.
@@ -1431,6 +1472,12 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
     }
 
     if (!clientIdToUpdate) return res.status(404).json({ error: 'Credenciais inválidas para salvar dados.' });
+
+    // Stripe F3 — mesma guarda do /sync.
+    {
+      const ownerForGuard = client || (await prisma.client.findUnique({ where: { id: clientIdToUpdate } }));
+      if (blockIfNotAllowed(ownerForGuard, res)) return;
+    }
 
     // Load current saved state to merge against
     const currentSavedClient = await prisma.client.findUnique({ where: { id: clientIdToUpdate } });

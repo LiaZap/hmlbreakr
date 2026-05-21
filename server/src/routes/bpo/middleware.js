@@ -7,6 +7,7 @@
  */
 
 const { PrismaClient } = require('@prisma/client');
+const { blockIfNotAllowed } = require('../../middleware/subscriptionGuard');
 const prisma = new PrismaClient();
 
 /**
@@ -24,6 +25,8 @@ const requireBpoClient = async (req, res, next) => {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
     // Removido: bpoEnabled flag (financeiro é feature padrão do produto)
+    // Subscription guard — bloqueio manual / unpaid / canceled-expirado.
+    if (blockIfNotAllowed(client, res)) return;
     req.bpoClient = client;
     next();
   } catch (err) {
