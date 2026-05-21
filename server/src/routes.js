@@ -18,6 +18,7 @@ const adminReportsRoutes = require('./routes/admin/reports');
 const adminSnapshotsRoutes = require('./routes/admin/snapshots');
 const adminBackupsRoutes = require('./routes/admin/backups');
 const adminAuditRoutes = require('./routes/admin/audit');
+const adminSubscriptionsRoutes = require('./routes/admin/subscriptions');
 
 // Middleware admin (header-based v1, JWT v2)
 const { requireAdmin, requireSuperAdmin } = require('./middleware/adminAuth');
@@ -2287,6 +2288,8 @@ router.use('/admin/users', requireSuperAdmin, adminUsersRoutes);
 router.use('/admin/reports', requireAdmin, adminReportsRoutes);
 // — /admin/audit exige admin (trilha de auditoria — leitura interna)
 router.use('/admin/audit', requireAdmin, adminAuditRoutes);
+// — /admin/subscriptions exige super_admin (block/cancel são ações sensíveis)
+router.use('/admin/subscriptions', requireSuperAdmin, adminSubscriptionsRoutes);
 // — /admin/clients/:clientId/snapshots* exige super_admin (restore é destrutivo)
 router.use('/admin', requireSuperAdmin, adminSnapshotsRoutes);
 // /admin/backups exige super_admin — backup completo é operação sensível
