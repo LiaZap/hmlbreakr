@@ -71,9 +71,11 @@ webhookRouter.post('/whatsapp', async (req, res) => {
 
     res.json({ ok: true, messageId: msg.id });
   } catch (err) {
-    console.error('[whatsapp webhook]', err);
+    // pii-auditor #16: webhook PUBLICO (Z-API) — nao vazar err.message
+    // cru (pode trazer meta.target do Prisma com phone/CPF da mensagem).
+    console.error(`[whatsapp webhook] ${err?.message || err} (code=${err?.code || 'unknown'})`);
     // Sempre 200 pra não quebrar webhook do Z-API
-    res.status(200).json({ ok: false, error: err.message });
+    res.status(200).json({ ok: false, error: 'internal' });
   }
 });
 
@@ -93,7 +95,7 @@ inboxGlobalRouter.get('/inbox', async (req, res) => {
     });
     res.json({ items, total: items.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(`[whatsapp] ${err?.message || err}`); res.status(500).json({ error: 'Erro interno' });
   }
 });
 
@@ -107,7 +109,7 @@ inboxGlobalRouter.post('/messages/:id/assign-client', async (req, res) => {
     });
     res.json(msg);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(`[whatsapp] ${err?.message || err}`); res.status(500).json({ error: 'Erro interno' });
   }
 });
 
@@ -127,7 +129,7 @@ inboxRouter.get('/inbox', async (req, res) => {
     });
     res.json({ items, total: items.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(`[whatsapp] ${err?.message || err}`); res.status(500).json({ error: 'Erro interno' });
   }
 });
 
@@ -188,8 +190,8 @@ inboxRouter.post('/messages/:id/validate', async (req, res) => {
 
     res.json({ success: true, type, created });
   } catch (err) {
-    console.error('[whatsapp validate]', err);
-    res.status(500).json({ error: err.message });
+    console.error(`[whatsapp validate] ${err?.message || err}`);
+    res.status(500).json({ error: 'Erro ao validar mensagem' });
   }
 });
 
@@ -205,7 +207,7 @@ inboxRouter.post('/messages/:id/discard', async (req, res) => {
     });
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(`[whatsapp] ${err?.message || err}`); res.status(500).json({ error: 'Erro interno' });
   }
 });
 

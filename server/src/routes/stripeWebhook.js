@@ -263,7 +263,9 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
   } catch (err) {
     // NÃO retorna 5xx — Stripe entraria em loop de retentativa. Marcamos
     // como processado no StripeEvent pra não loopar, e logamos no audit.
-    console.error('[stripe webhook] erro no handler:', err);
+    // PII-safe: somente message + code/type (não o objeto cru com card.last4
+    // ou billing_details.email/phone) — pii-auditor #6.
+    console.error(`[stripe webhook] handler error: ${err?.message || err} (event=${event.type}/${event.id}, type=${err?.type || 'unknown'})`);
   }
 
   // 4) Marca o evento como processado (dedup futuro).

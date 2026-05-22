@@ -325,8 +325,11 @@ async function syncOnboardingToBpo(prisma, clientId, formData) {
     const fixed = await syncFixedCosts(prisma, clientId, formData);
     console.log(`[onboardingSync] OK client=${clientId} partners=${stats.partners} employees=${stats.employees} marketplaces=${stats.marketplaces} cards=${stats.cards} fixedCosts=${fixed.synced} cancelled=${fixed.cancelled}`);
   } catch (err) {
-    // Sync é best-effort — não quebra o save do cliente se falhar
-    console.error(`[onboardingSync] FAIL client=${clientId}`, err);
+    // Sync é best-effort — não quebra o save do cliente se falhar.
+    // PII-safe: este fluxo mexe com partners (CPF) e employees (CPF/salário);
+    // Prisma `meta.target` em conflito pode vazar o valor. Loga só message
+    // + code categórico (pii-auditor #7).
+    console.error(`[onboardingSync] FAIL client=${clientId}: ${err?.message || err} (code=${err?.code || 'unknown'})`);
   }
 }
 

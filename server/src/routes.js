@@ -27,6 +27,9 @@ const { buildSubscriptionInfo, blockIfNotAllowed } = require('./middleware/subsc
 // Auditoria — best-effort, nunca lança (ver services/auditService.js)
 const { logAudit } = require('./services/auditService');
 
+// Log sanitizado — PII-safe (não loga objeto Error cru com meta.target Prisma)
+const { logError } = require('./utils/logError');
+
 // ========================
 // ADMIN ROUTES
 // ========================
@@ -110,7 +113,7 @@ router.post('/admin/login', async (req, res) => {
       }
     }
   } catch (e) {
-    console.error('[admin login db lookup]', e);
+    logError('admin login db lookup', e);
     // Não falha — cai pro legado
   }
 
@@ -191,7 +194,7 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
 
     res.json(client);
   } catch (error) {
-    console.error(error);
+    logError('admin create client', error);
     res.status(500).json({ error: 'Erro ao criar cliente' });
   }
 });
@@ -841,7 +844,7 @@ router.delete('/admin/clients/:id', requireSuperAdmin, async (req, res) => {
     });
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
+    logError('admin delete client', error);
     res.status(500).json({ error: 'Erro ao excluir cliente' });
   }
 });
@@ -863,7 +866,7 @@ router.post('/admin/clients/:id/mark-complete', requireAdmin, async (req, res) =
     await prisma.client.update({ where: { id }, data: { data: JSON.stringify(clientData) } });
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    logError('admin mark-complete', err);
     res.status(500).json({ error: 'Erro ao marcar cliente' });
   }
 });
@@ -902,7 +905,7 @@ router.post('/admin/clients/:id/reset-password', requireSuperAdmin, async (req, 
 
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
+    logError('admin reset-password', error);
     res.status(500).json({ error: 'Erro ao redefinir credenciais' });
   }
 });
@@ -920,7 +923,7 @@ router.post('/admin/clients/:id/resend-welcome', requireSuperAdmin, async (req, 
     await sendWelcomeEmail({ to: client.email, clientName: client.name, hash: client.hash });
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
+    logError('admin resend-welcome', error);
     res.status(500).json({ error: 'Erro ao reenviar email' });
   }
 });
@@ -985,7 +988,7 @@ router.post('/client/register', async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
+    logError('client register', error);
     res.status(500).json({ error: 'Erro ao registrar credenciais' });
   }
 });
@@ -1047,7 +1050,7 @@ router.post('/client/login', async (req, res) => {
         }
       }
     } catch (e) {
-      console.error('[client login admin db lookup]', e);
+      logError('client login admin db lookup', e);
     }
 
     // Legado: ADMIN_ACCOUNTS hardcoded
@@ -1706,7 +1709,7 @@ router.put('/client/:hash/profile', async (req, res) => {
 
     res.json({ success: true, message: 'Perfil atualizado com sucesso' });
   } catch (error) {
-    console.error(error);
+    logError('client profile update', error);
     res.status(500).json({ error: 'Erro ao atualizar o perfil' });
   }
 });
