@@ -56,18 +56,31 @@ const MobileNav = ({ activePage = 'home', onNavigate, isOwner = true }) => {
     },
   ];
 
-  // Add Equipe if owner
+  // Add Equipe + Assinatura if owner
   if (isOwner) {
-    navItems.splice(4, 0, {
-      id: 'equipe',
-      label: 'Equipe',
-      icon: (active) => (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z" stroke={active ? '#F5A623' : '#666'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M6 21V19C6 17.8954 6.89543 17 8 17H16C17.1046 17 18 17.8954 18 19V21" stroke={active ? '#F5A623' : '#666'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      ),
-    });
+    navItems.splice(4, 0,
+      {
+        id: 'equipe',
+        label: 'Equipe',
+        icon: (active) => (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z" stroke={active ? '#F5A623' : '#666'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 21V19C6 17.8954 6.89543 17 8 17H16C17.1046 17 18 17.8954 18 19V21" stroke={active ? '#F5A623' : '#666'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        ),
+      },
+      {
+        id: 'assinatura',
+        label: 'Plano',
+        icon: (active) => (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="6" width="18" height="13" rx="2" stroke={active ? '#F5A623' : '#666'} strokeWidth="1.5"/>
+            <path d="M3 10h18" stroke={active ? '#F5A623' : '#666'} strokeWidth="1.5"/>
+            <path d="M7 15h4" stroke={active ? '#F5A623' : '#666'} strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        ),
+      }
+    );
   }
 
   return (
