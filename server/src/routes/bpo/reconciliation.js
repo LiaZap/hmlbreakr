@@ -492,6 +492,13 @@ router.get('/suggest/:transactionId', async (req, res) => {
 });
 
 // === Conciliar (vincular transação a Payable/Receivable) ===
+//
+// IDOR fix (tenant-auditor #3 — CRÍTICO): o `id` do payable/receivable
+// vinha do body sem nenhum cross-check de tenant. Atacante podia
+// reconciliar transação do Cliente A com payable do Cliente B,
+// corrompendo controle financeiro alheio. Agora exigimos clientId
+// no findFirst de target — se o recurso não é do mesmo tenant da URL,
+// retorna 404 (sem revelar existência).
 router.post('/:transactionId/reconcile', async (req, res) => {
   try {
     const { type, id, createPayment } = req.body;
@@ -505,21 +512,29 @@ router.post('/:transactionId/reconcile', async (req, res) => {
     });
     if (!tx) return res.status(404).json({ error: 'Transação não encontrada' });
 
-    // BUG #7 FIX: valida saldo antes de conciliar (evita saldo negativo)
-    if (createPayment && (type === 'payable' || type === 'receivable')) {
-      const target = type === 'payable'
-        ? await prisma.payable.findUnique({ where: { id } })
-        : await prisma.receivable.findUnique({ where: { id } });
-      if (!target) return res.status(404).json({ error: `${type} não encontrado` });
-      const txAmount = Number(tx.amount);
-      const remaining = Number(target.remainingAmount);
-      const allowOverpay = req.body.allowOverpay === true;
-      if (txAmount > remaining + 0.01 && !allowOverpay) {
-        return res.status(400).json({
-          error: `Valor da transação (R$ ${txAmount.toFixed(2)}) é maior que o saldo (R$ ${remaining.toFixed(2)}).`,
-          txAmount, remaining, diff: txAmount - remaining,
-          hint: 'Confirme com allowOverpay=true se for intencional.',
-        });
+    // Cross-tenant guard: o id do payable/receivable do body TEM que pertencer
+    // ao mesmo cliente da URL. Vale tanto pro caminho com createPayment quanto
+    // sem (linha 530 usa o `id` direto em reconciledId).
+    if (type === 'payable' || type === 'receivable') {
+      const targetClientId = type === 'payable'
+        ? (await prisma.payable.findFirst({ where: { id, clientId: req.bpoClient.id }, select: { clientId: true, remainingAmount: true } }))
+        : (await prisma.receivable.findFirst({ where: { id, clientId: req.bpoClient.id }, select: { clientId: true, remainingAmount: true } }));
+      if (!targetClientId) {
+        return res.status(404).json({ error: `${type} não encontrado` });
+      }
+
+      // BUG #7 FIX: valida saldo antes de conciliar (evita saldo negativo)
+      if (createPayment) {
+        const txAmount = Number(tx.amount);
+        const remaining = Number(targetClientId.remainingAmount);
+        const allowOverpay = req.body.allowOverpay === true;
+        if (txAmount > remaining + 0.01 && !allowOverpay) {
+          return res.status(400).json({
+            error: `Valor da transação (R$ ${txAmount.toFixed(2)}) é maior que o saldo (R$ ${remaining.toFixed(2)}).`,
+            txAmount, remaining, diff: txAmount - remaining,
+            hint: 'Confirme com allowOverpay=true se for intencional.',
+          });
+        }
       }
     }
 

@@ -403,11 +403,21 @@ router.post('/:id/schedule', async (req, res) => {
 });
 
 // === WORKFLOW DE APROVAÇÃO (dono aprova pagamentos agendados pelo BPO operador) ===
+//
+// IDOR fix (tenant-auditor #1): valida que o payable pertence ao cliente da
+// URL antes de mutar. requireBpoClient apenas valida o hash da URL; ele NÃO
+// amarra o :id do recurso ao tenant. Padrão findFirst já usado em /delete
+// e /update neste mesmo arquivo (linhas 281-284, 323-325, 383-386, 447-450).
 router.post('/:id/approve', async (req, res) => {
   try {
     const { approverEmail } = req.body;
+    const existing = await prisma.payable.findFirst({
+      where: { id: req.params.id, clientId: req.bpoClient.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
     const item = await prisma.payable.update({
-      where: { id: req.params.id },
+      where: { id: existing.id },
       data: {
         approvedAt: new Date(),
         approvedBy: approverEmail || 'dono',
@@ -416,15 +426,22 @@ router.post('/:id/approve', async (req, res) => {
     });
     res.json(item);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[bpo payables approve]', err?.message);
+    res.status(500).json({ error: 'Erro ao aprovar pagamento' });
   }
 });
 
+// IDOR fix (tenant-auditor #2): mesmo padrão do /approve acima.
 router.post('/:id/reject', async (req, res) => {
   try {
     const { reason, approverEmail } = req.body;
+    const existing = await prisma.payable.findFirst({
+      where: { id: req.params.id, clientId: req.bpoClient.id },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
     const item = await prisma.payable.update({
-      where: { id: req.params.id },
+      where: { id: existing.id },
       data: {
         rejectedAt: new Date(),
         approvedBy: approverEmail || 'dono',
@@ -437,7 +454,8 @@ router.post('/:id/reject', async (req, res) => {
     });
     res.json(item);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[bpo payables reject]', err?.message);
+    res.status(500).json({ error: 'Erro ao rejeitar pagamento' });
   }
 });
 
