@@ -657,16 +657,31 @@ router.get('/admin/backups', requireSuperAdmin, async (req, res) => {
 
 // Restaurar fichas/insumos de um backup para um cliente específico
 // super_admin only — lê arquivo do servidor + sobrescreve Client.data.
+//
+// sec-auditor #5: backupFile vinha do body sem validação — path.resolve
+// com `..` no input lia arquivo arbitrário (../.env, /etc/passwd).
+// Defesa em camadas:
+//   1. Whitelist regex no nome (só backup-*.json, sem ../ ou separadores).
+//   2. Containment check: o path resolvido tem que começar pelo serverDir.
+const BACKUP_NAME_RE = /^backup-[A-Za-z0-9._-]+\.json$/;
 router.post('/admin/restore-operational', requireSuperAdmin, async (req, res) => {
   try {
     const { backupFile, clientHash, dryRun = true } = req.body;
     if (!backupFile || !clientHash) {
       return res.status(400).json({ error: 'backupFile e clientHash são obrigatórios' });
     }
+    if (typeof backupFile !== 'string' || !BACKUP_NAME_RE.test(backupFile)) {
+      return res.status(400).json({ error: 'backupFile inválido — deve ser um arquivo backup-*.json (sem caminhos relativos).' });
+    }
 
     const fs = require('fs');
     const path = require('path');
-    const filepath = path.resolve(__dirname, '..', '..', backupFile);
+    const serverDir = path.resolve(__dirname, '..', '..');
+    const filepath = path.resolve(serverDir, backupFile);
+    // Containment: o path resolvido tem que estar DENTRO de serverDir.
+    if (!filepath.startsWith(serverDir + path.sep)) {
+      return res.status(400).json({ error: 'backupFile fora da pasta permitida.' });
+    }
     if (!fs.existsSync(filepath)) {
       return res.status(404).json({ error: `Backup não encontrado: ${backupFile}` });
     }
@@ -757,20 +772,32 @@ router.post('/admin/restore-operational', requireSuperAdmin, async (req, res) =>
 
 // Full data export for backup (super_admin only)
 // Each table is fetched independently so a schema mismatch in one doesn't break the whole export.
+//
+// pii-auditor #17: antes este endpoint devolvia Client.password / resetToken /
+// clerkUserId, TeamMember.password, Agency.password / resetToken em texto puro.
+// Combinado com o gap do requireSuperAdmin (corrigido na F3), qualquer um
+// dumpava hashes pra brute-force offline. Strip aplicado abaixo.
+const SENSITIVE_FIELDS = ['password', 'resetToken', 'resetTokenExpiry', 'clerkUserId'];
+const stripSensitive = (rows) => rows.map(row => {
+  const cleaned = { ...row };
+  for (const f of SENSITIVE_FIELDS) delete cleaned[f];
+  return cleaned;
+});
+
 router.get('/admin/export', requireSuperAdmin, async (req, res) => {
-  const result = { _meta: { version: '1.2', exportedAt: new Date().toISOString(), counts: {}, errors: [] }, clients: [], agencies: [], teamMembers: [], broadcasts: [] };
+  const result = { _meta: { version: '1.3', exportedAt: new Date().toISOString(), counts: {}, errors: [], stripped: SENSITIVE_FIELDS }, clients: [], agencies: [], teamMembers: [], broadcasts: [] };
 
   // Use $queryRawUnsafe as a fallback for tables with schema drift
-  const safeFetch = async (label, fetcher, fallbackSql) => {
+  const safeFetch = async (label, fetcher, fallbackSql, sensitive = true) => {
     try {
       const rows = await fetcher();
-      result[label] = rows;
+      result[label] = sensitive ? stripSensitive(rows) : rows;
       result._meta.counts[label] = rows.length;
     } catch (err) {
       console.warn(`[export] ${label} findMany failed: ${err.message}. Trying raw SQL fallback...`);
       try {
         const rows = await prisma.$queryRawUnsafe(fallbackSql);
-        result[label] = rows;
+        result[label] = sensitive ? stripSensitive(rows) : rows;
         result._meta.counts[label] = rows.length;
         result._meta.errors.push(`${label}: used raw SQL fallback due to schema drift`);
       } catch (rawErr) {
@@ -785,7 +812,7 @@ router.get('/admin/export', requireSuperAdmin, async (req, res) => {
     safeFetch('clients', () => prisma.client.findMany(), 'SELECT * FROM "Client"'),
     safeFetch('agencies', () => prisma.agency.findMany(), 'SELECT * FROM "Agency"'),
     safeFetch('teamMembers', () => prisma.teamMember.findMany(), 'SELECT * FROM "TeamMember"'),
-    safeFetch('broadcasts', () => prisma.broadcast.findMany(), 'SELECT * FROM "Broadcast"'),
+    safeFetch('broadcasts', () => prisma.broadcast.findMany(), 'SELECT * FROM "Broadcast"', false),
   ]);
 
   res.json(result);
@@ -903,11 +930,30 @@ router.post('/admin/clients/:id/resend-welcome', requireSuperAdmin, async (req, 
 // ========================
 
 // Register (at start of onboarding)
+//
+// sec-auditor #8: este endpoint era um vetor de account takeover.
+// Permitia REESCREVER email+senha de um cliente já cadastrado se o
+// atacante descobrisse o hash (que circula por email/WhatsApp). Agora
+// só permite registro INICIAL — se o cliente já tem senha, retorna 409.
+// Pra trocar senha use PUT /client/:hash/profile (com oldPassword) ou
+// /auth/forgot-password (fluxo de reset por código).
 router.post('/client/register', async (req, res) => {
   try {
     const { hash, email, password } = req.body;
     if (!hash || !email || !password) {
       return res.status(400).json({ error: 'Hash, email e senha são obrigatórios' });
+    }
+
+    // Anti-takeover: idempotência. Se o cliente já tem senha, recusar.
+    const target = await prisma.client.findUnique({
+      where: { hash },
+      select: { id: true, password: true },
+    });
+    if (!target) return res.status(404).json({ error: 'Hash de cliente inválido' });
+    if (target.password) {
+      return res.status(409).json({
+        error: 'Esta conta já tem credenciais. Use o login ou recuperação de senha.',
+      });
     }
 
     const existing = await prisma.client.findUnique({ where: { email } });
@@ -1560,18 +1606,17 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
 });
 
 // Update Profile
+//
+// sec-auditor #9: a flag _viewerIsAdmin do body NÃO É segurança — é
+// autorização decidida pelo cliente, que o atacante simplesmente omite.
+// Removida. Agora pra trocar SENHA exigimos oldPassword (compara com hash
+// atual antes de aceitar) — fecha o vetor de takeover via hash vazado.
+// (Alteração de demais campos do perfil — nome, foto, etc — segue sem
+// re-auth pra não quebrar UX. Próxima fase: exigir sessão de cliente.)
 router.put('/client/:hash/profile', async (req, res) => {
   try {
     const { hash } = req.params;
-    const { name, password, email, phone, cpf, birthday, photo, _viewerIsAdmin } = req.body;
-
-    // SEGURANÇA: se request vem de admin visualizando o cliente, bloquear alterações
-    // O admin NUNCA deve conseguir alterar dados pessoais do dono (senha, CPF, email, foto, telefone)
-    if (_viewerIsAdmin) {
-      return res.status(403).json({
-        error: 'Admin em modo visualização não pode alterar dados do cliente. Entre em contato com o dono do restaurante.'
-      });
-    }
+    const { name, password, email, phone, cpf, birthday, photo, oldPassword } = req.body;
 
     let userToUpdate = null;
     let isClient = true;
@@ -1591,13 +1636,36 @@ router.put('/client/:hash/profile', async (req, res) => {
 
     let updateData = {};
 
-    // Generate new hash if password is provided
+    // Trocar senha: exige oldPassword conferindo com o hash atual.
+    // Sem isso, qualquer um com o hash do cliente trocava a senha (sec-auditor #9).
     if (password && password.trim() !== '') {
+      if (!oldPassword) {
+        return res.status(400).json({ error: 'Para trocar a senha, envie a senha atual em oldPassword.' });
+      }
+      if (!userToUpdate.password) {
+        return res.status(409).json({ error: 'Conta sem senha definida — use o fluxo de cadastro inicial.' });
+      }
+      const okOld = await bcrypt.compare(oldPassword, userToUpdate.password);
+      if (!okOld) {
+        return res.status(401).json({ error: 'Senha atual incorreta.' });
+      }
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Senha nova precisa ter no mínimo 6 caracteres.' });
+      }
       updateData.password = await bcrypt.hash(password, 10);
     }
 
-    // Update email on the Client record directly
+    // Update email on the Client record directly — requer oldPassword (mesma proteção da senha)
     if (email && email.trim() !== '' && isClient) {
+      if (!oldPassword) {
+        return res.status(400).json({ error: 'Para trocar o email, envie a senha atual em oldPassword.' });
+      }
+      if (userToUpdate.password) {
+        const okOld = await bcrypt.compare(oldPassword, userToUpdate.password);
+        if (!okOld) {
+          return res.status(401).json({ error: 'Senha atual incorreta.' });
+        }
+      }
       updateData.email = email;
     }
 

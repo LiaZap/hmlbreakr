@@ -88,6 +88,7 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
   const [cropSrc, setCropSrc] = useState(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [oldPassword, setOldPassword] = useState(''); // sec-fix: backend exige p/ trocar email/senha
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -102,7 +103,7 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
       setBirthday(toDisplayDate(clientBirthday || ''));
       setPhoto(clientPhoto || '');
       setCropSrc(null);
-      setPassword(''); setConfirmPassword('');
+      setPassword(''); setConfirmPassword(''); setOldPassword('');
       setError(''); setSuccess('');
     }
   }, [isOpen, currentName, clientEmail, clientPhone, clientCpf, clientBirthday, clientPhoto]);
@@ -208,6 +209,17 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
       if (birthday !== toDisplayDate(clientBirthday || '')) payload.birthday = birthday;
       if (photo !== (clientPhoto || '')) payload.photo = photo;
       if (password) payload.password = password;
+
+      // Backend exige senha atual quando vai trocar senha ou email (anti-takeover via hash vazado)
+      const needsOldPassword = !!password || (payload.email && payload.email !== clientEmail);
+      if (needsOldPassword) {
+        if (!oldPassword) {
+          setError('Para alterar senha ou email, informe sua senha atual.');
+          setLoading(false);
+          return;
+        }
+        payload.oldPassword = oldPassword;
+      }
 
       if (Object.keys(payload).length === 0) { setLoading(false); onClose(); return; }
 
@@ -341,6 +353,16 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
                   placeholder="Repita a senha" />
               </div>
             </div>
+
+            {/* Senha atual — só exibida quando vai trocar senha ou email (backend exige) */}
+            {(password || (email && email !== (clientEmail || ''))) && (
+              <div>
+                <label className="block text-[11px] font-semibold text-[#F5A623] mb-1.5 uppercase tracking-wider">Senha Atual <span className="text-[#666] normal-case font-normal">(necessária pra confirmar)</span></label>
+                <input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)}
+                  className="w-full bg-[#1A1A1A] border border-[#F5A623]/40 rounded-[12px] px-4 py-3 text-[14px] text-white outline-none focus:border-[#F5A623] transition-all"
+                  placeholder="Digite sua senha atual" autoComplete="current-password" />
+              </div>
+            )}
 
             {error && <div className="text-red-500 text-[12px] font-medium">{error}</div>}
             {success && <div className="text-[#E2FD89] text-[12px] font-medium">{success}</div>}
