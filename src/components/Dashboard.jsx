@@ -18,6 +18,7 @@ import RankingGeralIcon from './dashboard/RankingGeralIcon';
 import MatrizPreco from './dashboard/MatrizPreco';
 import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
+import MinhaAssinatura from './dashboard/MinhaAssinatura';
 import BpoClientAlerts from './dashboard/BpoClientAlerts';
 // Code-splitting: BPO carrega só quando usuário entra na seção
 const BpoClientApp = lazy(() => import('./bpo/BpoClientApp'));
@@ -43,7 +44,7 @@ const Dashboard = () => {
     // BAH-003: respeita ?section=financeiro vindo do AdminPanel ClientQuickSwitcher
     try {
       const sec = new URLSearchParams(window.location.search).get('section');
-      const valid = ['home', 'fichaTecnica', 'matrizPreco', 'engenhariaMenu', 'equipe', 'financeiro'];
+      const valid = ['home', 'fichaTecnica', 'matrizPreco', 'engenhariaMenu', 'equipe', 'financeiro', 'assinatura'];
       return sec && valid.includes(sec) ? sec : 'home';
     } catch { return 'home'; }
   });
@@ -128,6 +129,10 @@ const Dashboard = () => {
       ) : activePage === 'equipe' ? (
         <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
           <Equipe />
+        </div>
+      ) : activePage === 'assinatura' ? (
+        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
+          <MinhaAssinatura />
         </div>
       ) : activePage === 'financeiro' ? (
         <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
