@@ -136,8 +136,8 @@ router.post('/admin/login', async (req, res) => {
   return res.status(401).json({ error: 'Credenciais incorretas' });
 });
 
-// Create Client
-router.post('/admin/clients', async (req, res) => {
+// Create Client — admin only (cria registro de cliente, dispara welcome email)
+router.post('/admin/clients', requireAdmin, async (req, res) => {
   try {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
@@ -270,8 +270,8 @@ router.get('/admin/clients', requireAdmin, async (req, res) => {
   }
 });
 
-// Inspect single client — summary mode (sem raw, mais legível)
-router.get('/admin/inspect/:hash', async (req, res) => {
+// Inspect single client — summary mode (sem raw, mais legível) — admin only
+router.get('/admin/inspect/:hash', requireAdmin, async (req, res) => {
   try {
     const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
@@ -359,8 +359,8 @@ router.get('/admin/inspect/:hash', async (req, res) => {
   }
 });
 
-// Inspect raw data (com o JSON inteiro) — pra download de backup manual
-router.get('/admin/inspect/:hash/raw', async (req, res) => {
+// Inspect raw data (com o JSON inteiro) — pra download de backup manual — super_admin only
+router.get('/admin/inspect/:hash/raw', requireSuperAdmin, async (req, res) => {
   try {
     const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
@@ -386,7 +386,7 @@ router.get('/admin/inspect/:hash/raw', async (req, res) => {
 // Diagnóstico do sync onboarding -> BPO
 // Mostra contagens por entidade e quem tá faltando.
 // Útil pra verificar se o sync rodou após deploy ou ediçao do cliente.
-router.get('/admin/sync-status/:hash', async (req, res) => {
+router.get('/admin/sync-status/:hash', requireAdmin, async (req, res) => {
   try {
     const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
@@ -409,7 +409,8 @@ router.get('/admin/sync-status/:hash', async (req, res) => {
 
 // Restaurar data de um cliente específico a partir de JSON enviado (admin manual)
 // Uso: após extrair JSON do snapshot, enviar aqui para injetar em produção
-router.post('/admin/restore-client-data', async (req, res) => {
+// super_admin only — sobrescreve Client.data inteiro.
+router.post('/admin/restore-client-data', requireSuperAdmin, async (req, res) => {
   try {
     const { clientHash, newData, dryRun = true } = req.body;
     if (!clientHash || !newData) {
@@ -479,7 +480,8 @@ router.post('/admin/restore-client-data', async (req, res) => {
 
 // Restauração EM MASSA a partir de um emergency-backup.json
 // Usado pra restaurar estado inteiro após restore destrutivo de snapshot
-router.post('/admin/bulk-restore', async (req, res) => {
+// super_admin only — sobrescreve Client.data em massa.
+router.post('/admin/bulk-restore', requireSuperAdmin, async (req, res) => {
   try {
     const { backup, dryRun = true, excludeHash = null } = req.body;
     if (!backup || !Array.isArray(backup.clients)) {
@@ -543,7 +545,7 @@ router.post('/admin/bulk-restore', async (req, res) => {
 
 // Detecta clientes potencialmente afetados pelo bug de apagamento
 // Critério: dataSize grande (>200KB) mas fichas=0 e insumos=0
-router.get('/admin/affected-clients', async (req, res) => {
+router.get('/admin/affected-clients', requireAdmin, async (req, res) => {
   try {
     const clients = await prisma.client.findMany();
     const affected = [];
@@ -591,7 +593,8 @@ router.get('/admin/affected-clients', async (req, res) => {
 });
 
 // Cria backup imediato via browser (baixa JSON de todos os clientes)
-router.get('/admin/emergency-backup', async (req, res) => {
+// super_admin only — dump completo de TODA a base.
+router.get('/admin/emergency-backup', requireSuperAdmin, async (req, res) => {
   try {
     const clients = await prisma.client.findMany();
     const payload = {
@@ -623,8 +626,8 @@ router.get('/admin/emergency-backup', async (req, res) => {
   }
 });
 
-// Listar backups disponíveis no servidor
-router.get('/admin/backups', async (req, res) => {
+// Listar backups disponíveis no servidor — super_admin only
+router.get('/admin/backups', requireSuperAdmin, async (req, res) => {
   try {
     const fs = require('fs');
     const path = require('path');
@@ -644,7 +647,8 @@ router.get('/admin/backups', async (req, res) => {
 });
 
 // Restaurar fichas/insumos de um backup para um cliente específico
-router.post('/admin/restore-operational', async (req, res) => {
+// super_admin only — lê arquivo do servidor + sobrescreve Client.data.
+router.post('/admin/restore-operational', requireSuperAdmin, async (req, res) => {
   try {
     const { backupFile, clientHash, dryRun = true } = req.body;
     if (!backupFile || !clientHash) {
@@ -744,7 +748,7 @@ router.post('/admin/restore-operational', async (req, res) => {
 
 // Full data export for backup (super_admin only)
 // Each table is fetched independently so a schema mismatch in one doesn't break the whole export.
-router.get('/admin/export', async (req, res) => {
+router.get('/admin/export', requireSuperAdmin, async (req, res) => {
   const result = { _meta: { version: '1.2', exportedAt: new Date().toISOString(), counts: {}, errors: [] }, clients: [], agencies: [], teamMembers: [], broadcasts: [] };
 
   // Use $queryRawUnsafe as a fallback for tables with schema drift
@@ -779,13 +783,10 @@ router.get('/admin/export', async (req, res) => {
 });
 
 // Delete Client (super_admin only)
-router.delete('/admin/clients/:id', async (req, res) => {
+// Middleware requireSuperAdmin já garante a role — NÃO confiar em req.body.role.
+router.delete('/admin/clients/:id', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { role } = req.body;
-    if (role !== 'super_admin') {
-      return res.status(403).json({ error: 'Apenas o Super Admin pode excluir clientes.' });
-    }
     // Soft delete: DELETE físico é PROIBIDO (regra do projeto). Marca active=false.
     await prisma.client.update({
       where: { id },
@@ -810,7 +811,7 @@ router.delete('/admin/clients/:id', async (req, res) => {
 });
 
 // Mark onboarding as completed (admin override)
-router.post('/admin/clients/:id/mark-complete', async (req, res) => {
+router.post('/admin/clients/:id/mark-complete', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { completed } = req.body; // true or false
@@ -832,13 +833,11 @@ router.post('/admin/clients/:id/mark-complete', async (req, res) => {
 });
 
 // Reset Client Credentials (super_admin only)
-router.post('/admin/clients/:id/reset-password', async (req, res) => {
+// Middleware requireSuperAdmin já garante a role — NÃO confiar em req.body.role.
+router.post('/admin/clients/:id/reset-password', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { password, email, role } = req.body;
-    if (role !== 'super_admin') {
-      return res.status(403).json({ error: 'Apenas o Super Admin pode redefinir credenciais.' });
-    }
+    const { password, email } = req.body;
     if (password && password.length < 6) {
       return res.status(400).json({ error: 'A senha deve ter no mínimo 6 caracteres.' });
     }
@@ -873,13 +872,10 @@ router.post('/admin/clients/:id/reset-password', async (req, res) => {
 });
 
 // Resend Welcome Email (super_admin only)
-router.post('/admin/clients/:id/resend-welcome', async (req, res) => {
+// Middleware requireSuperAdmin já garante a role — NÃO confiar em req.body.role.
+router.post('/admin/clients/:id/resend-welcome', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { role } = req.body;
-    if (role !== 'super_admin') {
-      return res.status(403).json({ error: 'Apenas o Super Admin pode reenviar o email.' });
-    }
 
     const client = await prisma.client.findUnique({ where: { id } });
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
@@ -2208,8 +2204,8 @@ router.get('/broadcasts/active', async (req, res) => {
   }
 });
 
-// Admin: List all broadcasts
-router.get('/admin/broadcasts', async (req, res) => {
+// Admin: List all broadcasts — admin only
+router.get('/admin/broadcasts', requireAdmin, async (req, res) => {
   try {
     const broadcasts = await prisma.broadcast.findMany({
       orderBy: { createdAt: 'desc' }
@@ -2220,8 +2216,8 @@ router.get('/admin/broadcasts', async (req, res) => {
   }
 });
 
-// Admin: Create broadcast
-router.post('/admin/broadcasts', async (req, res) => {
+// Admin: Create broadcast — super_admin only (publica popup/banner pra todos os clientes)
+router.post('/admin/broadcasts', requireSuperAdmin, async (req, res) => {
   try {
     const { title, message, imageUrl, type, targetCategory, expiresAt } = req.body;
     if (!title || !message) return res.status(400).json({ error: 'Título e mensagem são obrigatórios' });
@@ -2243,8 +2239,8 @@ router.post('/admin/broadcasts', async (req, res) => {
   }
 });
 
-// Admin: Update broadcast
-router.put('/admin/broadcasts/:id', async (req, res) => {
+// Admin: Update broadcast — super_admin only
+router.put('/admin/broadcasts/:id', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, message, imageUrl, type, active, targetCategory, expiresAt } = req.body;
@@ -2267,8 +2263,8 @@ router.put('/admin/broadcasts/:id', async (req, res) => {
   }
 });
 
-// Admin: Delete broadcast
-router.delete('/admin/broadcasts/:id', async (req, res) => {
+// Admin: Delete broadcast — super_admin only
+router.delete('/admin/broadcasts/:id', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     // Soft delete: DELETE físico é PROIBIDO (regra do projeto). Marca active=false.

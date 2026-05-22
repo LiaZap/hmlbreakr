@@ -21,6 +21,9 @@ const { PrismaClient } = require('@prisma/client');
 const router = express.Router();
 const prisma = new PrismaClient();
 
+// Auth admin — pra gating de /admin/bpo-clients e /admin/clients/:hash/bpo-toggle
+const { requireAdmin } = require('../../middleware/adminAuth');
+
 const suppliersRoutes = require('./suppliers');
 const banksRoutes = require('./banks');
 const categoriesRoutes = require('./categories');
@@ -40,8 +43,8 @@ const tasksRoutes = require('./tasks');
 const { webhookRouter, inboxGlobalRouter, inboxRouter } = require('./whatsapp');
 const alertsRoutes = require('./alerts');
 
-// Toggle BPO pra um cliente (admin only — TODO: validar role)
-router.post('/admin/clients/:hash/bpo-toggle', async (req, res) => {
+// Toggle BPO pra um cliente (admin only)
+router.post('/admin/clients/:hash/bpo-toggle', requireAdmin, async (req, res) => {
   try {
     const { enabled } = req.body;
     const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
@@ -61,8 +64,8 @@ router.post('/admin/clients/:hash/bpo-toggle', async (req, res) => {
   }
 });
 
-// Lista clientes com BPO ativo (pra seletor do operador)
-router.get('/admin/bpo-clients', async (req, res) => {
+// Lista clientes com BPO ativo (pra seletor do operador) — admin only
+router.get('/admin/bpo-clients', requireAdmin, async (req, res) => {
   try {
     const clients = await prisma.client.findMany({
       where: { bpoEnabled: true, active: true },
