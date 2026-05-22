@@ -31,33 +31,42 @@ const { logAudit } = require('./services/auditService');
 // ADMIN ROUTES
 // ========================
 
-// Admin accounts configuration
+// Admin accounts configuration (LEGADO)
+//
+// Cada conta SÓ entra no array se a senha vier de env var. Os fallbacks
+// hardcoded `$SUPER-Brkr26@` / `$ADMIN-Brkr26@` / etc foram REMOVIDOS
+// (sec-auditor #1: senhas commitadas no Git).
+//
+// Em produção, todas essas contas já são materializadas na tabela
+// AdminUser pelo seed idempotente (routes/admin/users.js → seedLegacyAdmins).
+// O caminho legado abaixo serve apenas como bootstrap para o caso
+// extremo de o seed do banco não ter rodado.
 const ADMIN_ACCOUNTS = [
-  {
+  process.env.SUPER_ADMIN_PASSWORD && {
     email: process.env.SUPER_ADMIN_EMAIL || 'gustavo@breakr.com.br',
-    password: process.env.SUPER_ADMIN_PASSWORD || '$SUPER-Brkr26@',
+    password: process.env.SUPER_ADMIN_PASSWORD,
     name: 'Gustavo Costa',
-    role: 'super_admin'
+    role: 'super_admin',
   },
-  {
+  process.env.ADMIN_PASSWORD && {
     email: process.env.ADMIN_EMAIL || 'contato@breakr.com.br',
-    password: process.env.ADMIN_PASSWORD || '$ADMIN-Brkr26@',
+    password: process.env.ADMIN_PASSWORD,
     name: process.env.ADMIN_NAME || 'Admin',
-    role: 'admin'
+    role: 'admin',
   },
-  {
+  process.env.COMMERCIAL_PASSWORD && {
     email: process.env.COMMERCIAL_EMAIL || 'gabriela@breakr.com.br',
-    password: process.env.COMMERCIAL_PASSWORD || '$COM-Brkr26@',
+    password: process.env.COMMERCIAL_PASSWORD,
     name: 'Gabriela',
-    role: 'commercial'
+    role: 'commercial',
   },
-  {
+  process.env.FINANCIAL_PASSWORD && {
     email: process.env.FINANCIAL_EMAIL || 'jeff@breakr.com.br',
-    password: process.env.FINANCIAL_PASSWORD || '$FIN-Brkr26@',
+    password: process.env.FINANCIAL_PASSWORD,
     name: 'Djefeline',
-    role: 'financial'
-  }
-];
+    role: 'financial',
+  },
+].filter(Boolean);
 
 // Exposto pra que o seed idempotente de admins legados (routes/admin/users.js)
 // consiga materializar cada conta hardcoded na tabela AdminUser. Ver BAH-085.
@@ -93,7 +102,7 @@ router.post('/admin/login', async (req, res) => {
         });
         return res.json({
           success: true,
-          token: 'mock-admin-token',
+          token: process.env.ADMIN_TOKEN,
           name: user.name,
           role: user.role,
           adminUserId: user.id,
@@ -119,7 +128,7 @@ router.post('/admin/login', async (req, res) => {
       summary: 'Login no painel administrativo',
       metadata: { role: admin.role, source: 'legacy' },
     });
-    return res.json({ success: true, token: 'mock-admin-token', name: admin.name, role: admin.role });
+    return res.json({ success: true, token: process.env.ADMIN_TOKEN, name: admin.name, role: admin.role });
   }
   // Login FALHOU — evento de segurança (tentativa de acesso indevido).
   logAudit(prisma, {
@@ -986,7 +995,7 @@ router.post('/client/login', async (req, res) => {
             role: 'admin',
             name: dbAdmin.name,
             adminRole: dbAdmin.role,
-            token: 'mock-admin-token',
+            token: process.env.ADMIN_TOKEN,
             adminUserId: dbAdmin.id,
           });
         }
@@ -1003,7 +1012,7 @@ router.post('/client/login', async (req, res) => {
         role: 'admin',
         name: admin.name,
         adminRole: admin.role,
-        token: 'mock-admin-token',
+        token: process.env.ADMIN_TOKEN,
       });
     }
 

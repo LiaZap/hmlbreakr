@@ -3,9 +3,11 @@
  *
  * V1: depois do POST /admin/login, guardamos token + adminUserId + role
  * em sessionStorage. Cada chamada subsequente injeta os headers:
- *   - X-Admin-Token  (validação primária)
- *   - X-Admin-User-Id (pra audit + role do banco)
- *   - X-Admin-Role  (legado/UX, validado se presente)
+ *   - X-Admin-Token  (validação primária, secret do .env)
+ *   - X-Admin-User-Id (obrigatório p/ requireSuperAdmin no backend)
+ *
+ * NOTE: X-Admin-Role NÃO é mais enviado — backend ignora (era spoofável).
+ * A role real vem do AdminUser do banco (lookup via X-Admin-User-Id).
  *
  * V2 (futuro): substituir por JWT no Authorization header. A API permanece
  * tolerante aos headers atuais durante a migração.
@@ -32,12 +34,14 @@ export const clearAdminSession = () => {
 };
 
 export const getAdminAuthHeaders = () => {
-  const token = sessionStorage.getItem(TOKEN_KEY) || 'mock-admin-token';
+  // Sem fallback: se não há sessão admin, mandamos string vazia e o
+  // backend retorna 401. Antes havia um 'mock-admin-token' literal que
+  // mascarava bugs de UX (chamada admin sem login passava em dev).
+  const token = sessionStorage.getItem(TOKEN_KEY) || '';
   const adminUserId = sessionStorage.getItem(USER_ID_KEY);
-  const role = sessionStorage.getItem(ROLE_KEY);
   const headers = { 'X-Admin-Token': token };
   if (adminUserId) headers['X-Admin-User-Id'] = adminUserId;
-  if (role) headers['X-Admin-Role'] = role;
+  // X-Admin-Role propositalmente NÃO enviado — backend usa lookup via DB
   return headers;
 };
 

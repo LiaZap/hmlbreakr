@@ -1,12 +1,21 @@
 const nodemailer = require('nodemailer');
 
+// SMTP_PASS é obrigatório — sem fallback (sec-auditor #2).
+// host/port/user têm defaults pra Hostinger porque não são secretos.
+if (!process.env.SMTP_PASS) {
+  throw new Error(
+    '[emailService] SMTP_PASS obrigatório no .env. ' +
+    'Configure as credenciais SMTP em server/.env (dev) ou Easypanel (prod).'
+  );
+}
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.hostinger.com',
   port: parseInt(process.env.SMTP_PORT || '465'),
   secure: true, // SSL
   auth: {
     user: process.env.SMTP_USER || 'no-reply@breakr.com.br',
-    pass: process.env.SMTP_PASS || '$Dev-NoReply26_Sistema@'
+    pass: process.env.SMTP_PASS
   }
 });
 
