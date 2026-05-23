@@ -8,6 +8,7 @@ const DashboardHeader = ({ data, onNavigate }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isEditingRestaurant, setIsEditingRestaurant] = useState(false);
   const [editName, setEditName] = useState('');
+  const [isJourneyModalOpen, setIsJourneyModalOpen] = useState(false);
   const { updateDashboardData } = useDashboard();
 
   const hash = new URLSearchParams(window.location.search).get('hash');
@@ -79,8 +80,6 @@ const DashboardHeader = ({ data, onNavigate }) => {
                  <div className="w-[18px] h-[18px] md:w-[20px] md:h-[20px] rounded-full border border-white/20" />
                )}
             </div>
-            {/* Caminho das etapas (compacto — 6 dots clicáveis) — só renderiza em md+ pra não apertar o mobile */}
-            <JourneyMap.Dots dashboardData={data} onNavigate={onNavigate} className="hidden md:flex mx-2" />
             <div>
               {isEditingRestaurant ? (
                 <div className="flex items-center gap-1">
@@ -112,6 +111,14 @@ const DashboardHeader = ({ data, onNavigate }) => {
 
       </div>
 
+      {/* CENTRO — Caminho do Restaurante (mapa visual + barra + descricao) */}
+      {/* Aparece apenas em lg+ pra nao apertar o header em telas medias */}
+      <JourneyMap.HeaderPill
+        dashboardData={data}
+        onClick={() => setIsJourneyModalOpen(true)}
+        className="hidden lg:flex"
+      />
+
       {/* Right - User Profile */}
       <div className="flex items-center gap-2 md:gap-8">
 
@@ -141,6 +148,15 @@ const DashboardHeader = ({ data, onNavigate }) => {
         </button>
 
       </div>
+
+      {/* Modal: detalhes do Caminho do Restaurante */}
+      {isJourneyModalOpen && (
+        <JourneyMap.Modal
+          dashboardData={data}
+          onNavigate={onNavigate}
+          onClose={() => setIsJourneyModalOpen(false)}
+        />
+      )}
 
       <ProfileModal
         isOpen={isProfileModalOpen}

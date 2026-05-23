@@ -347,6 +347,195 @@ JourneyMap.Dots = function JourneyDots({ dashboardData, onNavigate, className = 
   );
 };
 
+// JourneyMap.HeaderPill — versão visual MAIS RICA pra área central do header.
+// Mostra: dots + barra de progresso + % + descrição da próxima etapa pendente.
+// Clique abre modal com detalhes completos (JourneyMap.Modal).
+JourneyMap.HeaderPill = function JourneyHeaderPill({ dashboardData, onClick, className = '' }) {
+  const { steps, completedCount, overallPct } = computeJourneyProgress(dashboardData);
+
+  // Próxima etapa pendente/parcial — o que falta fazer
+  const nextStep = steps.find(s => s.status !== 'done');
+  const allDone = !nextStep;
+
+  // Cor do anel de progresso por nível
+  const ringColor = overallPct >= 80 ? '#00B37E' : overallPct >= 40 ? '#F5A623' : '#FF8A9C';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group flex items-center gap-3 px-3 md:px-4 py-2 bg-[#141414]/80 hover:bg-[#1A1A1A] border border-[#252527] hover:border-[#3A3A3C] rounded-full transition-all duration-150 ${className}`}
+      title="Mapa do Caminho — clique para detalhes"
+    >
+      {/* Anel de progresso circular pequeno */}
+      <div className="relative w-7 h-7 shrink-0">
+        <svg width="28" height="28" viewBox="0 0 28 28" className="-rotate-90">
+          <circle cx="14" cy="14" r="11" stroke="#252527" strokeWidth="3" fill="none" />
+          <circle
+            cx="14" cy="14" r="11"
+            stroke={ringColor}
+            strokeWidth="3"
+            fill="none"
+            strokeDasharray={`${(overallPct / 100) * (2 * Math.PI * 11)} 999`}
+            strokeLinecap="round"
+            className="transition-all duration-500"
+          />
+        </svg>
+        <span
+          className="absolute inset-0 flex items-center justify-center text-[9px] font-bold"
+          style={{ color: ringColor }}
+        >
+          {overallPct}%
+        </span>
+      </div>
+
+      {/* Dots + descrição */}
+      <div className="flex flex-col items-start gap-0.5 min-w-0">
+        <div className="flex items-center gap-[5px]">
+          {steps.map(s => {
+            const color = s.status === 'done' ? '#00B37E' : s.status === 'partial' ? '#F5A623' : '#3A3A3C';
+            const ring  = s.status === 'done' ? '#00B37E55' : s.status === 'partial' ? '#F5A62355' : '#2A2A2C';
+            return (
+              <span
+                key={s.id}
+                className="w-[7px] h-[7px] rounded-full shrink-0"
+                style={{ backgroundColor: color, boxShadow: `0 0 0 1.5px ${ring}` }}
+              />
+            );
+          })}
+          <span className="text-[10px] text-[#868686] font-medium ml-1.5 shrink-0">{completedCount}/{steps.length}</span>
+        </div>
+        <div className="text-[11px] text-white/80 group-hover:text-white truncate max-w-[240px] xl:max-w-[320px]">
+          {allDone ? (
+            <span className="text-[#00B37E]">✓ Caminho concluído!</span>
+          ) : (
+            <>
+              <span className="text-[#666] mr-1">Próximo:</span>
+              <span className="font-medium">{nextStep.label}</span>
+              <span className="text-[#666] hidden xl:inline"> — {nextStep.description}</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Chevron sutil */}
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-[#666] group-hover:text-white transition-colors shrink-0">
+        <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
+  );
+};
+
+// JourneyMap.Modal — modal com o JourneyMap completo (sempre expandido).
+JourneyMap.Modal = function JourneyModal({ dashboardData, onNavigate, onClose }) {
+  const { steps, completedCount, overallPct } = computeJourneyProgress(dashboardData);
+  const ringColor = overallPct >= 80 ? '#00B37E' : overallPct >= 40 ? '#F5A623' : '#FF8A9C';
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-[640px] bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-white/[0.08] rounded-[18px] shadow-2xl overflow-hidden"
+      >
+        {/* Header do modal */}
+        <div className="flex items-center gap-4 px-5 md:px-6 py-4 border-b border-white/[0.06]">
+          <div className="relative w-12 h-12 shrink-0">
+            <svg width="48" height="48" viewBox="0 0 48 48" className="-rotate-90">
+              <circle cx="24" cy="24" r="20" stroke="#252527" strokeWidth="4" fill="none" />
+              <circle
+                cx="24" cy="24" r="20"
+                stroke={ringColor}
+                strokeWidth="4"
+                fill="none"
+                strokeDasharray={`${(overallPct / 100) * (2 * Math.PI * 20)} 999`}
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center text-[12px] font-bold" style={{ color: ringColor }}>
+              {overallPct}%
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[16px] font-bold text-white">Mapa do Caminho</h2>
+            <p className="text-[12px] text-[#868686]">{completedCount} de {steps.length} etapas concluídas</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-[#666] hover:text-white transition-colors"
+            aria-label="Fechar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Lista de etapas */}
+        <div className="max-h-[60vh] overflow-y-auto px-3 md:px-4 py-3">
+          {steps.map((s, idx) => {
+            const isDone = s.status === 'done';
+            const isPartial = s.status === 'partial';
+            const color = isDone ? '#00B37E' : isPartial ? '#F5A623' : '#666';
+            const bgColor = isDone ? '#00B37E15' : isPartial ? '#F5A62315' : '#1A1A1A';
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => { if (s.page && onNavigate) { onNavigate(s.page); onClose(); } }}
+                disabled={!s.page}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-[12px] mb-1 transition-all ${s.page ? 'hover:bg-white/[0.03] cursor-pointer' : 'cursor-default'}`}
+              >
+                {/* Número + ícone */}
+                <div className="relative shrink-0">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: bgColor, color }}>
+                    {isDone ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    ) : s.icon}
+                  </div>
+                  <span className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-[#1A1A1A] text-[9px] font-bold text-[#868686] flex items-center justify-center border border-[#252527]">
+                    {idx + 1}
+                  </span>
+                </div>
+
+                {/* Conteúdo */}
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[13px] font-semibold text-white">{s.label}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color }}>
+                      {isDone ? 'Concluído' : isPartial ? 'Em progresso' : 'Pendente'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#868686] mb-1.5">{s.description}</div>
+                  {/* Barra de progresso */}
+                  <div className="w-full h-1 bg-[#252527] rounded-full overflow-hidden">
+                    <div
+                      className="h-full transition-all duration-500"
+                      style={{ width: `${s.progress}%`, backgroundColor: color }}
+                    />
+                  </div>
+                </div>
+
+                {/* Chevron quando navegável */}
+                {s.page && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-[#666] shrink-0">
+                    <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-white/[0.06] bg-white/[0.01]">
+          <p className="text-[11px] text-[#666] text-center">
+            Clique em uma etapa para ir direto à página correspondente
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // BAH-097: anexado como prop estática (em vez de named export) pra não
 // quebrar o react-refresh/only-export-components — o arquivo continua
 // exportando apenas o componente. O Dashboard chama JourneyMap.isComplete().

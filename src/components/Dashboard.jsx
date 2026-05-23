@@ -3,7 +3,6 @@ import { useDashboard } from '../context/DashboardContext';
 import Sidebar from './dashboard/Sidebar';
 import DashboardHeader from './dashboard/DashboardHeader';
 import FinanceOverview from './dashboard/FinanceOverview';
-import JourneyMap from './dashboard/JourneyMap';
 import MoneyOnTable from './dashboard/MoneyOnTable';
 import TechnicalSheets from './dashboard/TechnicalSheets';
 import CostStructure from './dashboard/CostStructure';
@@ -198,15 +197,10 @@ const Dashboard = () => {
         {/* BPO Alerts — só aparece se cliente tem BPO ativado */}
         <BpoClientAlerts bpoInfo={dashboardData._bpo} onNavigateToFinance={() => setActivePage('financeiro')} />
 
-        {/* BAH-097: Mapa do Caminho é um SUPORTE só pra fase de onboarding/setup.
-            Renderiza enquanto o cliente ainda não concluiu as etapas core
-            (onboarding, insumos, fichas, engenharia, equipe). Quando tudo está
-            'done', some do dashboard — não pode ficar empurrando o conteúdo
-            financeiro. O critério de "concluído" vem de JourneyMap.isComplete(),
-            que reusa a mesma lógica de progresso do próprio JourneyMap. */}
-        {!JourneyMap.isComplete(dashboardData) && (
-          <JourneyMap dashboardData={dashboardData} onNavigate={(page) => setActivePage(page)} />
-        )}
+        {/* Mapa do Caminho — REMOVIDO inline. Agora vive no DashboardHeader como
+            pill compacto (com %, dots e descrição da próxima etapa) que abre
+            modal com detalhes ao clicar. Libera espaço crítico do dashboard
+            e não empurra mais o conteúdo financeiro. */}
 
         {/* MAIN GRID - 4 columns layout (responsive fluid) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-4 xl:gap-6 mb-0 min-h-0">
