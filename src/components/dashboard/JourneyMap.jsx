@@ -367,25 +367,25 @@ JourneyMap.HeaderPill = function JourneyHeaderPill({ dashboardData, onClick, cla
       className={`group flex items-center gap-3 px-3 md:px-4 py-2 bg-[#141414]/80 hover:bg-[#1A1A1A] border border-[#252527] hover:border-[#3A3A3C] rounded-full transition-all duration-150 ${className}`}
       title="Mapa do Caminho — clique para detalhes"
     >
-      {/* Anel de progresso circular pequeno */}
-      <div className="relative w-7 h-7 shrink-0">
-        <svg width="28" height="28" viewBox="0 0 28 28" className="-rotate-90">
-          <circle cx="14" cy="14" r="11" stroke="#252527" strokeWidth="3" fill="none" />
+      {/* Anel de progresso circular — maior (38px) com texto branco bold pra
+          contraste garantido sobre o fundo escuro do pill. O ANEL fica
+          colorido (status), o NÚMERO fica branco. */}
+      <div className="relative w-[38px] h-[38px] shrink-0">
+        <svg width="38" height="38" viewBox="0 0 38 38" className="-rotate-90">
+          <circle cx="19" cy="19" r="15" stroke="#252527" strokeWidth="3.5" fill="none" />
           <circle
-            cx="14" cy="14" r="11"
+            cx="19" cy="19" r="15"
             stroke={ringColor}
-            strokeWidth="3"
+            strokeWidth="3.5"
             fill="none"
-            strokeDasharray={`${(overallPct / 100) * (2 * Math.PI * 11)} 999`}
+            strokeDasharray={`${(overallPct / 100) * (2 * Math.PI * 15)} 999`}
             strokeLinecap="round"
             className="transition-all duration-500"
+            style={{ filter: `drop-shadow(0 0 4px ${ringColor}66)` }}
           />
         </svg>
-        <span
-          className="absolute inset-0 flex items-center justify-center text-[9px] font-bold"
-          style={{ color: ringColor }}
-        >
-          {overallPct}%
+        <span className="absolute inset-0 flex items-center justify-center text-[11px] font-extrabold text-white leading-none tracking-tight">
+          {overallPct}<span className="text-[8px] font-bold opacity-60 ml-[1px]">%</span>
         </span>
       </div>
 
