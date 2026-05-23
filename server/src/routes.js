@@ -154,7 +154,11 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
 
-    const hash = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Hash do cliente — CSPRNG (sec-auditor): Math.random() é PRNG
+    // sequencial em V8, não criptográfico. Trocado por crypto.randomBytes(16)
+    // que dá 128 bits de entropia real. O hash é usado como identificador
+    // único de rota pública (/client/:hash/*) — precisa ser inadivinhável.
+    const hash = crypto.randomBytes(16).toString('hex');
     
     // Default initial data structure
     const initialData = {

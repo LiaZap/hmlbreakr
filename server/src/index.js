@@ -42,16 +42,40 @@ app.use(helmet({
 // Também ficamos fora do rate-limiter pra não bloquear retentativas.
 app.use('/api/stripe/webhook', stripeWebhookRouter);
 
-// Rate Limiting
+// Rate Limiting — limiter GERAL (500 req / 15min / IP)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500 // limit each IP to 500 requests per windowMs
 });
 app.use('/api', limiter);
 
+// Rate Limiting DEDICADO pra rotas de credencial (anti brute-force):
+//   - 5 tentativas falhas por IP a cada 1 minuto
+//   - Logins bem-sucedidos não contam (skipSuccessfulRequests) pra não
+//     limitar usuário legítimo que loga várias vezes em sequência
+//   - Resposta uniforme tanto pra credencial inválida quanto pro limit
+//     atingido (não revela existência de usuário)
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Aguarde 1 minuto antes de tentar novamente.' },
+  skipSuccessfulRequests: true,
+});
+app.use('/api/admin/login', loginLimiter);
+app.use('/api/client/login', loginLimiter);
+app.use('/api/agency/login', loginLimiter);
+app.use('/api/auth/forgot-password', loginLimiter);
+app.use('/api/auth/reset-password', loginLimiter);
+
 // CORS
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+// JSON body: 10MB cobre todos os fluxos atuais (incluindo /admin/restore-client-data
+// que recebe Client.data inteiro). Antes era 50MB — vetor de DoS de memória.
+// Uploads de arquivo (Excel/PDF/OFX) NÃO passam por aqui — são multipart/form-data
+// processados pelo multer com limites próprios em routes/bpo/imports.js.
+app.use(express.json({ limit: '10mb' }));
 
 // Auditoria — captura automática de toda mutação (POST/PUT/PATCH/DELETE)
 // em /api e /api/bpo. Registra na trilha AuditLog; best-effort, não bloqueia.
