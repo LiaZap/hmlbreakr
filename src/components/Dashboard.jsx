@@ -50,6 +50,11 @@ const Dashboard = () => {
   });
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showDailyRevenue, setShowDailyRevenue] = useState(false);
+  // Estado do banner admin-viewing: persistido em sessionStorage pra
+  // sobreviver a recargas mas resetar ao fechar a janela.
+  const [adminBannerMinimized, setAdminBannerMinimized] = useState(() => {
+    try { return sessionStorage.getItem('breaker-admin-banner-min') === '1'; } catch { return false; }
+  });
   // BAH-036: BaseModal removido. Indicadores agora ficam inline no CostStructure / SimuladorPrecificacao
 
   // Admin-viewing mode detection
@@ -89,26 +94,50 @@ const Dashboard = () => {
       {sub.ready && sub.showPaymentFailedBanner && <PaymentFailedBanner />}
       {sub.ready && sub.showTrialEndingModal && <TrialEndingModal daysLeft={sub.daysToTrialEnd} />}
       {sub.ready && sub.showCanceledWarningModal && <CanceledWarningModal daysLeft={sub.daysToCharge} />}
-      {/* Banner de modo admin-viewing */}
-      {isAdminViewing && (
-        <div className="sticky top-0 z-[60] bg-gradient-to-r from-[#F5A623] to-[#E5961E] text-black shadow-lg">
-          <div className="px-3 md:px-6 py-2 flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <span className="text-[12px] font-bold">
-                Modo {roleLabel} — Visualizando como <span className="underline">{dashboardData.user?.name || dashboardData.restaurant?.name || 'Cliente'}</span>
-              </span>
+      {/* Banner de modo admin-viewing
+          - Sticky no topo só quando expandido. Slim por padrão (py-1, text-[11px])
+            pra não empurrar muito o conteúdo do dashboard (especialmente
+            crítico em ?section=financeiro e em telas pequenas).
+          - Botão de minimizar transforma em chip fixed bottom-right —
+            fora do fluxo, não empurra nada. Estado em sessionStorage. */}
+      {isAdminViewing && !adminBannerMinimized && (
+        <div className="sticky top-0 z-[60] bg-gradient-to-r from-[#F5A623] to-[#E5961E] text-black shadow-md">
+          <div className="px-3 md:px-6 py-1 md:py-1.5 flex items-center gap-2 md:gap-3 flex-nowrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span className="text-[11px] font-bold truncate">
+              {roleLabel} → <span className="underline">{dashboardData.user?.name || dashboardData.restaurant?.name || 'Cliente'}</span>
+            </span>
+            <span className="text-[10px] opacity-70 hidden md:inline shrink-0">· {adminName}</span>
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => { try { sessionStorage.setItem('breaker-admin-banner-min', '1'); } catch { /* ignore */ } setAdminBannerMinimized(true); }}
+                className="bg-black/15 hover:bg-black/25 text-black w-6 h-6 rounded-[6px] transition-colors flex items-center justify-center"
+                title="Minimizar"
+                aria-label="Minimizar barra de admin"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
+              </button>
+              <button
+                onClick={handleBackToAdmin}
+                className="bg-black/20 hover:bg-black/30 text-black text-[11px] font-bold px-2.5 py-1 rounded-[6px] transition-colors flex items-center gap-1.5"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <span className="hidden sm:inline">Voltar</span>
+              </button>
             </div>
-            <span className="text-[11px] opacity-70 hidden sm:inline">· Logado como {adminName}</span>
-            <button
-              onClick={handleBackToAdmin}
-              className="ml-auto bg-black/20 hover:bg-black/30 text-black text-[11px] font-bold px-3 py-1.5 rounded-[8px] transition-colors flex items-center gap-1.5 shrink-0"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Voltar ao Admin
-            </button>
           </div>
         </div>
+      )}
+      {isAdminViewing && adminBannerMinimized && (
+        <button
+          onClick={() => { try { sessionStorage.removeItem('breaker-admin-banner-min'); } catch { /* ignore */ } setAdminBannerMinimized(false); }}
+          className="fixed bottom-4 right-4 z-[60] bg-gradient-to-br from-[#F5A623] to-[#E5961E] text-black rounded-full shadow-lg pl-2.5 pr-3 py-1.5 flex items-center gap-1.5 text-[11px] font-bold hover:scale-105 transition-transform"
+          title={`Modo ${roleLabel} — clique para expandir`}
+          aria-label="Expandir barra de admin"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span className="hidden sm:inline">Admin</span>
+        </button>
       )}
 
       <BroadcastPopup restaurantCategory={dashboardData.restaurant?.category} />
