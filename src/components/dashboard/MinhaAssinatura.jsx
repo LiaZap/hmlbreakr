@@ -173,9 +173,13 @@ const MinhaAssinatura = () => {
 
 const Header = () => (
   <div>
-    <div className="text-[12px] text-[#868686] mb-1">Breakr &gt; Conta</div>
-    <h1 className="text-[24px] md:text-[28px] font-bold text-white">Minha Assinatura</h1>
-    <p className="text-[12px] md:text-[13px] text-[#868686] mt-1">
+    <div className="flex items-baseline gap-2 flex-wrap">
+      <span className="text-[10px] md:text-[11px] text-[#5C5C5E] font-medium uppercase tracking-wider shrink-0">
+        Breakr <span className="opacity-50 mx-0.5">›</span> Conta <span className="opacity-50 mx-1">·</span>
+      </span>
+      <h1 className="text-[24px] md:text-[28px] font-bold text-white leading-none">Minha Assinatura</h1>
+    </div>
+    <p className="text-[12px] md:text-[13px] text-[#868686] mt-1.5">
       Status do plano, próxima cobrança e gestão de pagamento.
     </p>
   </div>

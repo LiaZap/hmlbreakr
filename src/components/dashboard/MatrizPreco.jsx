@@ -198,8 +198,12 @@ const MatrizPreco = () => {
       {/* LEFT PANEL: LIST */}
       <div className="w-full md:w-[320px] shrink-0 flex flex-col gap-4 md:gap-6 md:overflow-hidden">
         <div>
-          <div className="text-[12px] text-[#868686] mb-1">Breakr &gt; Precificação</div>
-          <h1 className="text-[24px] font-bold leading-tight">Engenharia de<br/>Menu</h1>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-[10px] text-[#5C5C5E] font-medium uppercase tracking-wider shrink-0">
+              Breakr <span className="opacity-50 mx-0.5">›</span> Precificação <span className="opacity-50 mx-1">·</span>
+            </span>
+            <h1 className="text-[24px] font-bold leading-none">Engenharia de Menu</h1>
+          </div>
           <p className="text-[12px] text-[#868686] mt-2">Configure seus custos e veja dados e informações</p>
         </div>
 
