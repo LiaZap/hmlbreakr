@@ -88,8 +88,19 @@ const Dashboard = () => {
     return <SubscriptionBlockedScreen subscription={sub.raw} />;
   }
 
+  // Container raiz: flex-col vertical. Quem decide se tem scroll é o
+  // WRAPPER de cada página (não o raiz).
+  //   - 'home' (dashboard principal): wrapper sem overflow-y-auto em lg+
+  //     pra forçar tudo a caber em uma viewport (cockpit). Em mobile,
+  //     scroll permitido.
+  //   - Outras páginas (Financeiro/Fichas/Equipe/Assinatura/etc):
+  //     wrapper com flex-1 + overflow-y-auto — senão a tabela de
+  //     Relatórios do BPO, lista de fichas etc. ficam cortadas.
+  const pageWrapperBase = 'ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0';
+  const subpageWrapper = `${pageWrapperBase} overflow-y-auto`;
+
   return (
-    <div className="relative w-full h-screen bg-[#1B1B1D] font-jakarta text-white select-none overflow-y-auto lg:overflow-hidden">
+    <div className="relative w-full h-screen flex flex-col bg-[#1B1B1D] font-jakarta text-white select-none overflow-hidden">
       {/* Avisos de assinatura — banner sticky e modais flutuantes */}
       {sub.ready && sub.showPaymentFailedBanner && <PaymentFailedBanner />}
       {sub.ready && sub.showTrialEndingModal && <TrialEndingModal daysLeft={sub.daysToTrialEnd} />}
@@ -144,33 +155,39 @@ const Dashboard = () => {
       <Sidebar activePage={activePage} onNavigate={handleNavigate} isOwner={dashboardData.user?.isOwner !== false} lockCollapsed={activePage === 'financeiro'} />
 
       {activePage === 'fichaTecnica' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
+        <div className={subpageWrapper}>
           <FichaTecnica />
         </div>
       ) : activePage === 'matrizPreco' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
+        <div className={subpageWrapper}>
           <MatrizPreco />
         </div>
       ) : activePage === 'engenhariaMenu' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
+        <div className={subpageWrapper}>
           <EngenhariaMenu />
         </div>
       ) : activePage === 'equipe' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
+        <div className={subpageWrapper}>
           <Equipe />
         </div>
       ) : activePage === 'assinatura' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
+        <div className={subpageWrapper}>
           <MinhaAssinatura />
         </div>
       ) : activePage === 'financeiro' ? (
-        <div className="ml-0 md:ml-[85px] flex-1 min-h-0 pb-[70px] md:pb-0">
+        // Financeiro: BpoLayout interno já tem seu próprio <main overflow-y-auto>.
+        // Mantemos overflow-hidden no wrapper pra não criar nested scroll
+        // (dois scrollbars). O conteúdo do BPO scrolla DENTRO do main do Layout.
+        <div className={`${pageWrapperBase} overflow-hidden`}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-xs text-[#868686]">Carregando Financeiro...</div>}>
             <BpoClientApp />
           </Suspense>
         </div>
       ) : (
-      <>
+      // HOME (dashboard principal) — scroll natural em mobile/médio, sem
+      // scroll em lg+ pra manter o "cockpit" caber numa viewport.
+      // Sem ml-85 aqui — os divs internos já têm seu próprio offset.
+      <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
       {/* MAIN CONTENT - Full-width black background */}
       <div className="w-full bg-[#101010]">
       <div className="ml-0 md:ml-[85px] py-1 md:py-2 pb-2 md:pb-6">
@@ -428,7 +445,7 @@ const Dashboard = () => {
           {/* DRE e Taxa Cartão removidos do dashboard para evitar rolagem */}
         </div>
       </div>
-      </>
+      </div>
       )}
 
       {/* Mobile Bottom Navigation */}
