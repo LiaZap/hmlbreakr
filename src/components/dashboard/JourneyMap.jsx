@@ -315,6 +315,38 @@ const JourneyMap = ({ dashboardData, onNavigate }) => {
   );
 };
 
+// JourneyDots — versão MINI do mapa do caminho (apenas 6 bolinhas coloridas).
+// Pensado pra aparecer inline em locais apertados (header, sidebar) sem
+// roubar espaço. Cada dot é clicável e leva à página da etapa correspondente.
+// Tooltip nativo mostra etapa + status no hover.
+JourneyMap.Dots = function JourneyDots({ dashboardData, onNavigate, className = '' }) {
+  const { steps, completedCount } = computeJourneyProgress(dashboardData);
+  return (
+    <div
+      className={`flex items-center gap-[5px] ${className}`}
+      title={`Mapa do Caminho: ${completedCount}/${steps.length} etapas concluídas`}
+    >
+      {steps.map(s => {
+        const color = s.status === 'done' ? '#00B37E' : s.status === 'partial' ? '#F5A623' : '#3A3A3C';
+        const ring  = s.status === 'done' ? '#00B37E55' : s.status === 'partial' ? '#F5A62355' : '#2A2A2C';
+        const desc  = s.description || '';
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => { if (s.page && onNavigate) onNavigate(s.page); }}
+            className={`w-[7px] h-[7px] rounded-full transition-transform hover:scale-150 focus:outline-none ${s.page ? 'cursor-pointer' : 'cursor-default'}`}
+            style={{ backgroundColor: color, boxShadow: `0 0 0 1.5px ${ring}` }}
+            title={`${s.label} — ${desc}`}
+            aria-label={`${s.label}: ${desc}`}
+            disabled={!s.page}
+          />
+        );
+      })}
+    </div>
+  );
+};
+
 // BAH-097: anexado como prop estática (em vez de named export) pra não
 // quebrar o react-refresh/only-export-components — o arquivo continua
 // exportando apenas o componente. O Dashboard chama JourneyMap.isComplete().

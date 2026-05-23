@@ -193,7 +193,7 @@ const Dashboard = () => {
       <div className="ml-0 md:ml-[85px] py-1 md:py-2 pb-2 md:pb-6">
         <div className="w-full px-3 md:px-6 2xl:px-10 flex flex-col min-h-0">
         
-        <DashboardHeader data={dashboardData} />
+        <DashboardHeader data={dashboardData} onNavigate={handleNavigate} />
 
         {/* BPO Alerts — só aparece se cliente tem BPO ativado */}
         <BpoClientAlerts bpoInfo={dashboardData._bpo} onNavigateToFinance={() => setActivePage('financeiro')} />

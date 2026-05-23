@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useClerk } from '@clerk/clerk-react';
 import ProfileModal from './ProfileModal';
 import { useDashboard } from '../../context/DashboardContext';
+import JourneyMap from './JourneyMap';
 
-const DashboardHeader = ({ data }) => {
+const DashboardHeader = ({ data, onNavigate }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isEditingRestaurant, setIsEditingRestaurant] = useState(false);
   const [editName, setEditName] = useState('');
@@ -78,6 +79,8 @@ const DashboardHeader = ({ data }) => {
                  <div className="w-[18px] h-[18px] md:w-[20px] md:h-[20px] rounded-full border border-white/20" />
                )}
             </div>
+            {/* Caminho das etapas (compacto — 6 dots clicáveis) — só renderiza em md+ pra não apertar o mobile */}
+            <JourneyMap.Dots dashboardData={data} onNavigate={onNavigate} className="hidden md:flex mx-2" />
             <div>
               {isEditingRestaurant ? (
                 <div className="flex items-center gap-1">
