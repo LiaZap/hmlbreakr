@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDashboard } from '../../context/DashboardContext';
 
 const toDisplayDate = (val) => {
   if (!val) return '';
@@ -78,7 +79,9 @@ const CropModal = ({ imageSrc, onConfirm, onCancel }) => {
 };
 
 // ─── Profile Modal ────────────────────────────────────────────────────────────
-const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpdated, clientEmail, clientPhone, clientCpf, clientBirthday, clientPhoto, onPhotoUpdated, isAdminViewing, adminName, adminRole }) => {
+const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpdated, clientEmail, clientPhone, clientCpf, clientBirthday, clientPhoto, onPhotoUpdated, isAdminViewing, adminName, adminRole, onNavigate }) => {
+  const { dashboardData } = useDashboard();
+  const subscription = dashboardData?.subscription || null;
   const [name, setName] = useState(currentName || '');
   const [email, setEmail] = useState(clientEmail || '');
   const [phone, setPhone] = useState(clientPhone || '');
@@ -92,6 +95,8 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -186,6 +191,44 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
       </div>
     );
   }
+
+  // LGPD Art. 18 II + V: download dos próprios dados em JSON
+  const handleExportData = async () => {
+    setExporting(true);
+    setError(''); setSuccess('');
+    try {
+      const res = await fetch(`/api/client/${hash}/export-my-data`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setError(j.error || 'Erro ao exportar dados.');
+        setExporting(false);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Tenta usar o filename do header, fallback pra default
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match ? match[1] : `breakr-meus-dados-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setSuccess('Download iniciado. Guarde o arquivo em local seguro.');
+    } catch (err) {
+      console.error(err);
+      setError('Erro de conexão. Tente novamente.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleGoToPlan = () => {
+    onClose();
+    if (onNavigate) setTimeout(() => onNavigate('assinatura'), 80);
+  };
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -364,6 +407,61 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
               </div>
             )}
 
+            {/* ────────────── SEÇÃO PLANO ────────────── */}
+            <div className="h-px w-full bg-[#222]" />
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[11px] font-bold text-[#868686] uppercase tracking-wider">Plano e Pagamento</h3>
+                <button type="button" onClick={handleGoToPlan}
+                  className="text-[11px] text-[#F5A623] hover:underline font-semibold">
+                  Gerenciar →
+                </button>
+              </div>
+              <PlanCard subscription={subscription} onManage={handleGoToPlan} />
+            </div>
+
+            {/* ────────────── SEÇÃO PRIVACIDADE / LGPD ────────────── */}
+            <div className="h-px w-full bg-[#222]" />
+            <div>
+              <h3 className="text-[11px] font-bold text-[#868686] uppercase tracking-wider mb-1">Privacidade e Dados</h3>
+              <p className="text-[10px] text-[#5C5C5E] mb-3 leading-relaxed">
+                Conforme a <strong>LGPD Art. 18</strong>, você tem direito de acessar, portar e excluir seus dados.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button type="button" onClick={handleExportData} disabled={exporting}
+                  className="flex items-center gap-2.5 px-3 py-2.5 bg-[#1A1A1A] hover:bg-[#202020] border border-[#2A2A2C] hover:border-[#3A3A3C] rounded-[10px] text-left transition-colors disabled:opacity-50">
+                  <div className="w-7 h-7 rounded-full bg-[#5B8DEF]/15 flex items-center justify-center shrink-0">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5B8DEF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-semibold text-white">
+                      {exporting ? 'Gerando...' : 'Baixar meus dados'}
+                    </div>
+                    <div className="text-[10px] text-[#5C5C5E]">Exportar em JSON</div>
+                  </div>
+                </button>
+
+                <button type="button" onClick={() => setShowDeleteAccount(true)}
+                  className="flex items-center gap-2.5 px-3 py-2.5 bg-[#1A1A1A] hover:bg-[#E5484D]/10 border border-[#2A2A2C] hover:border-[#E5484D]/40 rounded-[10px] text-left transition-colors group">
+                  <div className="w-7 h-7 rounded-full bg-[#E5484D]/15 flex items-center justify-center shrink-0">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E5484D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-semibold text-white group-hover:text-[#E5484D] transition-colors">
+                      Excluir minha conta
+                    </div>
+                    <div className="text-[10px] text-[#5C5C5E]">Ação permanente</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             {error && <div className="text-red-500 text-[12px] font-medium">{error}</div>}
             {success && <div className="text-[#E2FD89] text-[12px] font-medium">{success}</div>}
 
@@ -381,7 +479,216 @@ const ProfileModal = ({ isOpen, onClose, currentName, hash, onLogout, onNameUpda
           </div>
         </div>
       </div>
+
+      {/* Modal de exclusão de conta — LGPD Art. 18 VI */}
+      {showDeleteAccount && (
+        <DeleteAccountModal
+          hash={hash}
+          onClose={() => setShowDeleteAccount(false)}
+          onDeleted={() => {
+            setShowDeleteAccount(false);
+            // Logout local imediato — sessão não pode mais usar a conta
+            try {
+              sessionStorage.clear();
+              localStorage.removeItem('breakr-token');
+            } catch { /* ignore */ }
+            setTimeout(() => { window.location.href = '/'; }, 1500);
+          }}
+        />
+      )}
     </>
+  );
+};
+
+// ─── PlanCard ─────────────────────────────────────────────────────────────────
+// Card compacto que mostra o status da assinatura na seção "Plano e Pagamento"
+// do ProfileModal. Lê dashboardData.subscription preparado pelo backend (F3).
+const PlanCard = ({ subscription, onManage }) => {
+  if (!subscription || !subscription.status) {
+    return (
+      <button type="button" onClick={onManage}
+        className="w-full flex items-center gap-3 p-3 bg-[#1A1A1A] hover:bg-[#202020] border border-[#2A2A2C] rounded-[12px] text-left transition-colors">
+        <div className="w-9 h-9 rounded-full bg-[#5C5C5E]/20 flex items-center justify-center shrink-0 text-[16px]">💳</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-semibold text-white">Sem assinatura ativa</div>
+          <div className="text-[10px] text-[#5C5C5E]">Configure seu plano</div>
+        </div>
+      </button>
+    );
+  }
+  const META = {
+    trial:    { label: 'Período de Teste', color: '#5B8DEF', icon: '⏰' },
+    active:   { label: 'Ativa',            color: '#00B37E', icon: '✓' },
+    past_due: { label: 'Pagamento Pendente', color: '#F5A623', icon: '⚠️' },
+    unpaid:   { label: 'Inadimplente',     color: '#E5484D', icon: '⚠️' },
+    canceled: { label: 'Cancelada',        color: '#868686', icon: '✕' },
+  };
+  const m = META[subscription.status] || META.active;
+  const fmtDate = (iso) => {
+    if (!iso) return null;
+    try { return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }); }
+    catch { return null; }
+  };
+  const nextChargeDate = fmtDate(subscription.currentPeriodEnd);
+  return (
+    <button type="button" onClick={onManage}
+      className="w-full flex items-center gap-3 p-3 bg-gradient-to-br from-[#1A1A1A] to-[#161616] hover:from-[#202020] border border-[#2A2A2C] hover:border-[#3A3A3C] rounded-[12px] text-left transition-colors">
+      <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-[14px]" style={{ backgroundColor: `${m.color}20`, color: m.color }}>
+        {m.icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-[12px] font-semibold text-white">Plano Mensal</span>
+          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${m.color}20`, color: m.color }}>
+            {m.label}
+          </span>
+        </div>
+        <div className="text-[10px] text-[#868686]">
+          {subscription.status === 'canceled' && nextChargeDate ? `Acesso até ${nextChargeDate}` :
+           subscription.status === 'trial' && nextChargeDate ? `Teste acaba em ${nextChargeDate}` :
+           nextChargeDate ? `Próxima cobrança: ${nextChargeDate}` : 'Gerenciar pagamento'}
+        </div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-[#666] shrink-0">
+        <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
+  );
+};
+
+// ─── DeleteAccountModal ───────────────────────────────────────────────────────
+// LGPD Art. 18 VI — Direito à eliminação dos dados.
+// Confirmação dupla (senha atual + texto EXCLUIR) + block de 3 segundos
+// (padrão Breakr pra ações críticas) antes de habilitar o botão de confirmar.
+const DeleteAccountModal = ({ hash, onClose, onDeleted }) => {
+  const [pwd, setPwd] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  // Block de 3s — não permite confirmar acidentalmente
+  const [unlocked, setUnlocked] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setUnlocked(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const canSubmit = unlocked && pwd && confirmText === 'EXCLUIR' && !loading;
+
+  const handleSubmit = async () => {
+    setError(''); setLoading(true);
+    try {
+      const res = await fetch(`/api/client/${hash}/request-delete-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldPassword: pwd, confirmText }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Erro ao processar a exclusão.');
+        setLoading(false);
+        return;
+      }
+      setSuccess(data.message || 'Conta encerrada.');
+      setTimeout(() => onDeleted(), 1800);
+    } catch (err) {
+      console.error(err);
+      setError('Erro de conexão. Tente novamente.');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-jakarta">
+      {/* Backdrop — não fecha ao clicar fora (ação crítica) */}
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" />
+
+      <div className="relative w-full max-w-md bg-gradient-to-br from-[#141416] to-[#0F0F11] border border-[#E5484D]/30 rounded-[20px] shadow-2xl overflow-hidden">
+        {/* Top accent vermelho */}
+        <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[#E5484D] to-[#C73B40]" />
+
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-11 h-11 rounded-full bg-[#E5484D]/15 flex items-center justify-center shrink-0">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E5484D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <path d="M12 9v4M12 17h.01"/>
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[16px] font-bold text-white mb-0.5">Excluir minha conta</h2>
+              <p className="text-[11px] text-[#868686]">LGPD Art. 18 VI — Direito de eliminação</p>
+            </div>
+          </div>
+
+          {/* Warnings */}
+          <div className="bg-[#E5484D]/8 border border-[#E5484D]/20 rounded-[12px] p-3.5 mb-4">
+            <p className="text-[12px] font-semibold text-white mb-2">O que vai acontecer:</p>
+            <ul className="text-[11px] text-[#CFCFCF] space-y-1.5 leading-relaxed">
+              <li className="flex items-start gap-2">
+                <span className="text-[#E5484D] mt-0.5">•</span>
+                <span>Sua conta será desativada imediatamente — você não conseguirá mais logar</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[#E5484D] mt-0.5">•</span>
+                <span>Sua assinatura Stripe será cancelada (sem cobrança futura)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[#E5484D] mt-0.5">•</span>
+                <span>Em até 30 dias seus dados pessoais serão anonimizados</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-[#E5484D] mt-0.5">•</span>
+                <span>Dados contábeis/financeiros podem ser preservados por obrigação legal (5 anos)</span>
+              </li>
+              <li className="flex items-start gap-2 text-[#FF8A9C]">
+                <span className="mt-0.5">⚠</span>
+                <span className="font-semibold">Esta ação é irreversível</span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Recomendação */}
+          <div className="text-[11px] text-[#5C5C5E] mb-4 leading-relaxed">
+            <strong className="text-[#868686]">Antes de continuar:</strong> recomendamos baixar seus dados em "Baixar meus dados" pra ter um backup.
+          </div>
+
+          {/* Form */}
+          <div className="space-y-3 mb-4">
+            <div>
+              <label className="block text-[10px] font-semibold text-[#868686] mb-1.5 uppercase tracking-wider">Sua senha atual</label>
+              <input type="password" value={pwd} onChange={e => setPwd(e.target.value)} autoComplete="current-password"
+                className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[10px] px-3 py-2.5 text-[13px] text-white outline-none focus:border-[#E5484D] transition-colors"
+                placeholder="••••••••" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-[#868686] mb-1.5 uppercase tracking-wider">
+                Digite <span className="text-[#E5484D] font-bold">EXCLUIR</span> para confirmar
+              </label>
+              <input type="text" value={confirmText} onChange={e => setConfirmText(e.target.value)} autoComplete="off"
+                className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[10px] px-3 py-2.5 text-[13px] text-white outline-none focus:border-[#E5484D] transition-colors font-mono tracking-wider"
+                placeholder="EXCLUIR" />
+            </div>
+          </div>
+
+          {error && <div className="text-[#E5484D] text-[12px] font-medium mb-3">{error}</div>}
+          {success && <div className="text-[#00B37E] text-[12px] font-medium mb-3">{success}</div>}
+
+          {/* Ações */}
+          <div className="flex gap-2.5">
+            <button type="button" onClick={onClose} disabled={loading}
+              className="flex-1 px-4 py-2.5 bg-[#1A1A1A] hover:bg-[#252527] border border-[#2A2A2C] text-white text-[13px] font-semibold rounded-[10px] transition-colors disabled:opacity-50">
+              Cancelar
+            </button>
+            <button type="button" onClick={handleSubmit} disabled={!canSubmit}
+              className="flex-1 px-4 py-2.5 bg-[#E5484D] hover:bg-[#C73B40] disabled:bg-[#2A2A2C] disabled:text-[#5C5C5E] disabled:cursor-not-allowed text-white text-[13px] font-bold rounded-[10px] transition-colors">
+              {loading ? 'Excluindo…' : unlocked ? 'Excluir permanentemente' : 'Aguarde 3s…'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

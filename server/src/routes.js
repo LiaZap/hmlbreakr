@@ -1718,6 +1718,153 @@ router.put('/client/:hash/profile', async (req, res) => {
   }
 });
 
+// ============================================================================
+// LGPD — DIREITOS DO TITULAR (Lei 13.709/2018 Art. 18)
+// ============================================================================
+
+// GET /api/client/:hash/export-my-data
+//
+// Direito de portabilidade (Art. 18 V) + acesso (Art. 18 II).
+// Devolve um JSON com TODOS os dados do cliente (formData, operacional,
+// menu, profile, etc.) em formato legível. Strip de campos sensíveis
+// internos (password hash, resetToken, clerkUserId).
+router.get('/client/:hash/export-my-data', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const client = await prisma.client.findUnique({ where: { hash } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    if (!client.active) return res.status(410).json({ error: 'Conta encerrada' });
+
+    let parsedData = {};
+    try { parsedData = typeof client.data === 'string' ? JSON.parse(client.data) : (client.data || {}); }
+    catch { parsedData = {}; }
+
+    const payload = {
+      _meta: {
+        exportedAt: new Date().toISOString(),
+        format: 'breakr-export/v1',
+        legalBasis: 'LGPD Art. 18 — Direito de portabilidade e acesso',
+        notice: 'Este arquivo contém todos os dados pessoais e operacionais associados à sua conta. Guarde em local seguro.',
+      },
+      account: {
+        id: client.id,
+        name: client.name,
+        email: client.email,
+        hash: client.hash,
+        createdAt: client.createdAt,
+        updatedAt: client.updatedAt,
+        bpoEnabled: client.bpoEnabled,
+        subscriptionStatus: client.subscriptionStatus || null,
+        subscriptionPlan: client.subscriptionPlan || null,
+      },
+      data: parsedData,
+    };
+
+    logAudit(prisma, {
+      action: 'client.data.export',
+      category: 'data',
+      entityType: 'client',
+      entityId: client.id,
+      actorType: 'client',
+      actorId: client.id,
+      actorLabel: client.email,
+      summary: 'Cliente exportou os próprios dados (LGPD Art. 18)',
+      metadata: { ip: req.ip },
+    });
+
+    res.setHeader('Content-Disposition', `attachment; filename="breakr-meus-dados-${client.hash.substring(0, 8)}-${new Date().toISOString().substring(0, 10)}.json"`);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.json(payload);
+  } catch (err) {
+    logError('client export-my-data', err);
+    res.status(500).json({ error: 'Erro ao exportar dados' });
+  }
+});
+
+// POST /api/client/:hash/request-delete-account
+//
+// Direito de eliminação (Art. 18 VI).
+// Soft delete (regra do projeto — nunca DELETE físico) + cancelamento
+// da assinatura Stripe no fim do período. Exige senha atual + texto
+// de confirmação literal "EXCLUIR" pra evitar disparo acidental ou
+// por hash vazado.
+router.post('/client/:hash/request-delete-account', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const { oldPassword, confirmText } = req.body || {};
+
+    if (!oldPassword) return res.status(400).json({ error: 'Senha atual obrigatória.' });
+    if (confirmText !== 'EXCLUIR') {
+      return res.status(400).json({ error: 'Digite EXCLUIR (em maiúsculas) para confirmar.' });
+    }
+
+    const client = await prisma.client.findUnique({ where: { hash } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    if (!client.active) return res.status(410).json({ error: 'Conta já está encerrada.' });
+    if (!client.password) {
+      return res.status(409).json({ error: 'Conta sem senha definida — contate o suporte.' });
+    }
+
+    const okPwd = await bcrypt.compare(oldPassword, client.password);
+    if (!okPwd) return res.status(401).json({ error: 'Senha atual incorreta.' });
+
+    // 1) Cancela assinatura Stripe (cancel_at_period_end — preserva
+    //    acesso até o fim do período pago, sem cobrar mais).
+    let stripeCanceled = false;
+    if (client.stripeSubscriptionId) {
+      try {
+        const { getStripe } = require('./services/stripeService');
+        const stripe = getStripe();
+        await stripe.subscriptions.update(client.stripeSubscriptionId, {
+          cancel_at_period_end: true,
+        });
+        stripeCanceled = true;
+      } catch (stripeErr) {
+        // Não bloqueia a exclusão — só loga. O webhook eventualmente sincroniza.
+        logError('client delete-account stripe cancel', stripeErr);
+      }
+    }
+
+    // 2) Soft delete + marca timestamp + zera dados sensíveis pra reduzir
+    //    superfície. Mantém o id/createdAt/audit pra rastreabilidade legal.
+    //    Note: Client.data permanece (snapshot histórico). Para apagamento
+    //    completo o titular precisa contatar suporte que faz prune via
+    //    operação manual auditada.
+    await prisma.client.update({
+      where: { id: client.id },
+      data: {
+        active: false,
+        canceledAt: new Date(),
+        // Limpa credenciais — não pode mais logar
+        password: null,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+
+    logAudit(prisma, {
+      action: 'client.account.delete-requested',
+      category: 'security',
+      entityType: 'client',
+      entityId: client.id,
+      actorType: 'client',
+      actorId: client.id,
+      actorLabel: client.email,
+      summary: 'Cliente solicitou exclusão da própria conta (LGPD Art. 18)',
+      metadata: { stripeCanceled, ip: req.ip },
+    });
+
+    res.json({
+      success: true,
+      stripeCanceled,
+      message: 'Conta encerrada. Você não poderá mais acessar. Em até 30 dias seus dados serão anonimizados conforme nossa política de privacidade.',
+    });
+  } catch (err) {
+    logError('client request-delete-account', err);
+    res.status(500).json({ error: 'Erro ao processar a exclusão. Tente novamente ou contate o suporte.' });
+  }
+});
+
 
 // ========================
 // TEAM MANAGEMENT ROUTES

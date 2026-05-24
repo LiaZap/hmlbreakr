@@ -174,6 +174,7 @@ const DashboardHeader = ({ data, onNavigate }) => {
         isAdminViewing={isAdminViewing}
         adminName={adminName}
         adminRole={adminRole}
+        onNavigate={onNavigate}
       />
     </div>
   );
