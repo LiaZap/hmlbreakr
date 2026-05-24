@@ -210,7 +210,12 @@ SMTP_PASS=<rotacionada_na_fase_2>
 # === Stripe (Fase 3) ===
 STRIPE_SECRET_KEY=<sk_live_da_fase_3.4>
 STRIPE_WEBHOOK_SECRET=<whsec_da_fase_3.3>
-STRIPE_PRICE_CLIENT=<price_da_fase_3.2>
+# Catálogo de planos (3 planos Breakr [Hub])
+STRIPE_PRICE_FISPAL=price_1TMEaBQBLcH7ZdgdFS90OFVT
+STRIPE_PRICE_MONTHLY=price_1TYpOpQBLcH7ZdgdAoy49KsD
+STRIPE_PRICE_ANNUAL=price_1TYpS0QBLcH7Zdgd22TqOKG0
+# Legacy (alias do monthly — manter pra compat)
+STRIPE_PRICE_CLIENT=price_1TYpOpQBLcH7ZdgdAoy49KsD
 
 # === URLs e infra ===
 APP_URL=https://app.breakr.com.br

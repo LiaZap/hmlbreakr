@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import SectionHeader from './_SectionHeader';
 import { openBillingPortal } from '../../../hooks/useSubscriptionGuard';
+import PlanSelector from '../PlanSelector';
 
 // Metadados de cada status — icone SVG inline + cor + label
 const STATUS_META = {
@@ -67,7 +68,7 @@ const fmtDate = (iso) => {
   catch { return null; }
 };
 
-const ConfigPlano = ({ dashboardData, onNavigate }) => {
+const ConfigPlano = ({ dashboardData, hash, onNavigate }) => {
   const subscription = dashboardData?.subscription || null;
   const [opening, setOpening] = useState(false);
 
@@ -81,21 +82,12 @@ const ConfigPlano = ({ dashboardData, onNavigate }) => {
     if (onNavigate) onNavigate('assinatura');
   };
 
-  // Empty state: cliente legacy sem assinatura
+  // Empty state: cliente sem assinatura → mostra os 3 planos pra escolher
   if (!subscription || !subscription.status) {
     return (
       <div>
-        <SectionHeader title="Plano e cobrança" description="Gerencie sua assinatura, métodos de pagamento e histórico de faturas." />
-        <div className="bg-[#141416] border border-white/[0.06] rounded-[14px] p-8 text-center">
-          <div className="w-12 h-12 rounded-full bg-white/[0.04] mx-auto mb-3 flex items-center justify-center">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5C5C5E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-            </svg>
-          </div>
-          <p className="text-[14px] font-semibold text-white mb-1">Sem assinatura ativa</p>
-          <p className="text-[12px] text-[#868686] mb-4">Você ainda não tem um plano vinculado à sua conta.</p>
-          <p className="text-[11px] text-[#5C5C5E]">Se acredita que isso é um erro, fale com o suporte.</p>
-        </div>
+        <SectionHeader title="Plano e cobrança" description="Escolha o plano ideal pro seu restaurante." />
+        <PlanSelector hash={hash} />
       </div>
     );
   }
@@ -133,7 +125,14 @@ const ConfigPlano = ({ dashboardData, onNavigate }) => {
           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/[0.04]">
             <div>
               <div className="text-[10px] text-[#5C5C5E] uppercase tracking-wider font-semibold mb-1">Plano</div>
-              <div className="text-[13px] font-semibold text-white">Mensal</div>
+              <div className="text-[13px] font-semibold text-white">
+                {subscription.planLabel
+                  ? subscription.planLabel.replace('Breakr [Hub] | ', '')
+                  : (subscription.planCycle === 'yearly' ? 'Anual' : 'Mensal')}
+              </div>
+              {subscription.planPriceLabel && (
+                <div className="text-[10px] text-[#868686] mt-0.5">{subscription.planPriceLabel}</div>
+              )}
             </div>
             {subscription.status === 'trial' && trialEndDate && (
               <div>

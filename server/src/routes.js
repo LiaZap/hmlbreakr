@@ -1002,6 +1002,53 @@ router.post('/client/register', async (req, res) => {
 // ver faturas e cancelar. SEM subscription guard aqui (cliente bloqueado
 // PRECISA acessar o portal pra reativar). Bloqueio manual do admin
 // continua sem reativação automática (é independente do Stripe).
+// GET /api/plans — catálogo público de planos (pra tela de seleção).
+// Sem auth. Frontend consome pra renderizar cards de pricing.
+router.get('/plans', (req, res) => {
+  try {
+    const { CLIENT_PLANS } = require('./services/stripeService');
+    // Esconde priceId/productId no público — não há razão pra expor IDs Stripe.
+    const safe = CLIENT_PLANS.map(({ priceId, productId, ...rest }) => rest);
+    res.json({ plans: safe });
+  } catch (err) {
+    logError('plans catalog', err);
+    res.status(500).json({ error: 'Erro ao carregar catálogo' });
+  }
+});
+
+// POST /api/client/:hash/checkout
+//
+// Cria uma Checkout Session no Stripe pra o plano selecionado e retorna
+// a URL pra redirecionar o cliente. Aceita body { planSlug } onde slug
+// é 'fispal' | 'monthly' | 'annual'.
+//
+// Cliente já existente reaproveita o stripeCustomerId (pré-fill de
+// cartão, endereço, CNPJ). Cliente novo cria Customer com dados do form.
+router.post('/client/:hash/checkout', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const { planSlug } = req.body || {};
+    if (!planSlug) return res.status(400).json({ error: 'planSlug obrigatório' });
+
+    const client = await prisma.client.findUnique({ where: { hash } });
+    if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
+    if (!client.active) return res.status(410).json({ error: 'Conta encerrada' });
+
+    const { createClientCheckout } = require('./services/stripeService');
+    const session = await createClientCheckout({
+      clientHash: hash,
+      email: client.email,
+      name: client.name,
+      client,
+      planSlug,
+    });
+    res.json({ url: session.url, sessionId: session.id });
+  } catch (err) {
+    logError('client checkout', err);
+    res.status(500).json({ error: err.message || 'Erro ao criar checkout' });
+  }
+});
+
 router.post('/client/:hash/billing-portal', async (req, res) => {
   try {
     const { hash } = req.params;

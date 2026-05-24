@@ -14,9 +14,82 @@ const Stripe = require('stripe');
 
 const APP_URL = process.env.APP_URL || 'https://app.breakr.com.br';
 
-// Price IDs — defina nas variáveis de ambiente após criar produtos no Dashboard.
+// ────────────────────────────────────────────────────────────────────────────
+// CATÁLOGO DE PLANOS — Breakr [Hub]
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Cada plano tem:
+//   - slug:        identificador interno usado em APIs ('fispal' / 'monthly' / 'annual')
+//   - priceId:     Stripe Price ID (env var override)
+//   - productId:   Stripe Product ID (referência)
+//   - label:       nome amigável exibido no UI
+//   - priceLabel:  preço formatado (BRL)
+//   - cycle:       'monthly' | 'yearly'
+//   - paymentLink: URL do Payment Link Stripe (atalho pra checkout sem backend)
+//   - tag:         badge opcional ('Promocional' / 'Mais popular' / 'Melhor custo')
+//
+// IDs default são os de PRODUÇÃO (já criados no Dashboard). Em dev sobrescreva
+// via env vars STRIPE_PRICE_FISPAL / STRIPE_PRICE_MONTHLY / STRIPE_PRICE_ANNUAL
+// com IDs de teste pra não cobrar de verdade.
+const CLIENT_PLANS = [
+  {
+    slug: 'fispal',
+    priceId: process.env.STRIPE_PRICE_FISPAL || 'price_1TMEaBQBLcH7ZdgdFS90OFVT',
+    productId: 'prod_UKuOi6X6kluVrQ',
+    label: 'Breakr [Hub] | FISPAL',
+    priceLabel: 'R$ 996,00/ano',
+    priceCents: 99600,
+    cycle: 'yearly',
+    paymentLink: 'https://buy.stripe.com/9B6bJ3chNdRCgnh3d5dnW00',
+    tag: 'Promocional',
+    description: 'Oferta especial FISPAL 2026',
+  },
+  {
+    slug: 'monthly',
+    priceId: process.env.STRIPE_PRICE_MONTHLY || 'price_1TYpOpQBLcH7ZdgdAoy49KsD',
+    productId: 'prod_UKuN334E3RkWRd',
+    label: 'Breakr [Hub] | Mensal',
+    priceLabel: 'R$ 169,00/mês',
+    priceCents: 16900,
+    cycle: 'monthly',
+    paymentLink: 'https://buy.stripe.com/9B69AV1D94h25IDdRJdnW01',
+    tag: null,
+    description: 'Flexibilidade — cancele quando quiser',
+  },
+  {
+    slug: 'annual',
+    priceId: process.env.STRIPE_PRICE_ANNUAL || 'price_1TYpS0QBLcH7Zdgd22TqOKG0',
+    productId: 'prod_UXvIuoKdcaYISi',
+    label: 'Breakr [Hub] | Anual',
+    priceLabel: 'R$ 1.548,00/ano',
+    priceLabelExtra: 'equivale a R$ 129/mês',
+    priceCents: 154800,
+    cycle: 'yearly',
+    paymentLink: 'https://buy.stripe.com/00w9AVa9FbJuef9291dnW03',
+    tag: 'Melhor custo',
+    description: '24% de desconto vs mensal',
+  },
+];
+
+// Helper rápido pra mapear slug → plano
+const CLIENT_PLAN_BY_SLUG = Object.fromEntries(CLIENT_PLANS.map(p => [p.slug, p]));
+
+// Helper pra mapear priceId → plano (usado pra reconhecer o plano em curso
+// a partir do que vem do Stripe Subscription, ex: no buildSubscriptionInfo)
+const CLIENT_PLAN_BY_PRICE_ID = Object.fromEntries(CLIENT_PLANS.map(p => [p.priceId, p]));
+
+function getClientPlanBySlug(slug) {
+  return CLIENT_PLAN_BY_SLUG[slug] || null;
+}
+
+function getClientPlanByPriceId(priceId) {
+  return CLIENT_PLAN_BY_PRICE_ID[priceId] || null;
+}
+
+// PRICES — mapa legado (usado por createAgencyCheckout). client_monthly mantido
+// como alias do plano monthly pra não quebrar código que ainda usa essa chave.
 const PRICES = {
-  client_monthly:   process.env.STRIPE_PRICE_CLIENT          || '',
+  client_monthly:   process.env.STRIPE_PRICE_CLIENT || CLIENT_PLAN_BY_SLUG.monthly.priceId,
   agency_basic:     process.env.STRIPE_PRICE_AGENCY_BASIC    || '',
   agency_unlimited: process.env.STRIPE_PRICE_AGENCY_UNLIMITED|| '',
 };
@@ -138,8 +211,16 @@ async function ensureTaxId(stripe, customerId, tax) {
  *
  * Métodos de pagamento: cartão + boleto (Pix entra quando confirmado).
  */
-async function createClientCheckout({ clientHash, email, name, client, billing }) {
+async function createClientCheckout({ clientHash, email, name, client, billing, planSlug = 'monthly' }) {
   const stripe = getStripe();
+
+  // Resolve o plano. Default = monthly (compat com fluxo antigo que
+  // não passava planSlug). Se passou slug inválido, joga 400.
+  const plan = getClientPlanBySlug(planSlug);
+  if (!plan) {
+    const valid = CLIENT_PLANS.map(p => p.slug).join('/');
+    throw new Error(`planSlug inválido: "${planSlug}". Valores aceitos: ${valid}`);
+  }
 
   // Garante o Customer com pré-fill se temos o registro do banco.
   let customerId = null;
@@ -152,11 +233,11 @@ async function createClientCheckout({ clientHash, email, name, client, billing }
     mode: 'subscription',
     payment_method_types: PAYMENT_METHODS_BR,
     ...(customerId ? { customer: customerId } : { customer_email: email }),
-    line_items: [{ price: PRICES.client_monthly, quantity: 1 }],
-    success_url: `${APP_URL}?hash=${clientHash}&subscribed=true`,
+    line_items: [{ price: plan.priceId, quantity: 1 }],
+    success_url: `${APP_URL}?hash=${clientHash}&subscribed=true&plan=${plan.slug}`,
     cancel_url:  `${APP_URL}?hash=${clientHash}&subscribed=false`,
-    metadata: { clientHash, type: 'client' },
-    subscription_data: { metadata: { clientHash, type: 'client' } },
+    metadata: { clientHash, type: 'client', planSlug: plan.slug },
+    subscription_data: { metadata: { clientHash, type: 'client', planSlug: plan.slug } },
   });
   return session;
 }
@@ -189,6 +270,10 @@ module.exports = {
   getStripe,
   getOrCreateCustomer,
   createClientCheckout,
+  // Catálogo de planos
+  CLIENT_PLANS,
+  getClientPlanBySlug,
+  getClientPlanByPriceId,
   createAgencyCheckout,
   createPortalSession,
   // Constantes úteis pra outros módulos saberem o que pedimos:

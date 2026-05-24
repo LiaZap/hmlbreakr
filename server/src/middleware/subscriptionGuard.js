@@ -70,19 +70,52 @@ function computeSubscriptionVerdict(client) {
   }
 }
 
+// Lazy import — evita carregar stripeService quando não tem Stripe configurado
+let _getClientPlanBySlug = null;
+let _getClientPlanByPriceId = null;
+function loadPlanHelpers() {
+  if (_getClientPlanBySlug) return;
+  try {
+    const s = require('../services/stripeService');
+    _getClientPlanBySlug = s.getClientPlanBySlug;
+    _getClientPlanByPriceId = s.getClientPlanByPriceId;
+  } catch { /* stripeService pode falhar se STRIPE_SECRET_KEY ausente em dev — ignora */ }
+}
+
 /**
  * Constrói o objeto `subscription` enriquecido que o frontend usa pra
  * decidir modais e telas de bloqueio. Acoplado ao verdict acima.
+ *
+ * Resolve o plano por priceId (preferido — vem do Stripe) OU slug salvo
+ * em Client.subscriptionPlan. Devolve label/cycle/preço prontos pro UI.
  */
 function buildSubscriptionInfo(client) {
   if (!client) return null;
+  loadPlanHelpers();
   const verdict = computeSubscriptionVerdict(client);
   const now = Date.now();
   const trial = client.trialEndsAt ? new Date(client.trialEndsAt).getTime() : null;
   const charge = client.currentPeriodEnd ? new Date(client.currentPeriodEnd).getTime() : null;
+
+  // Resolve plano. client.subscriptionPlan guarda o Stripe priceId
+  // (preenchido pelo webhook em stripeWebhook.js). Tentamos por priceId
+  // primeiro e caímos pra slug se for o caso legado (cliente cadastrado
+  // via createClientCheckout que setou planSlug no metadata).
+  let planInfo = null;
+  if (_getClientPlanByPriceId && client.subscriptionPlan) {
+    planInfo = _getClientPlanByPriceId(client.subscriptionPlan);
+  }
+  if (!planInfo && _getClientPlanBySlug && client.subscriptionPlan) {
+    planInfo = _getClientPlanBySlug(client.subscriptionPlan);
+  }
+
   return {
     status: client.subscriptionStatus || null,
     plan: client.subscriptionPlan || null,
+    planLabel: planInfo?.label || null,
+    planPriceLabel: planInfo?.priceLabel || null,
+    planCycle: planInfo?.cycle || null,
+    planSlug: planInfo?.slug || client.subscriptionPlan || null,
     trialEndsAt: client.trialEndsAt || null,
     currentPeriodEnd: client.currentPeriodEnd || null,
     pastDueSince: client.pastDueSince || null,

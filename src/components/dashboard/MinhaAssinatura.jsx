@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { useDashboard } from '../../context/DashboardContext';
 import { openBillingPortal } from '../../hooks/useSubscriptionGuard';
+import PlanSelector from './PlanSelector';
 
 const STATUS_META = {
   trial:    { label: 'Período de Teste', color: '#5B8DEF', dot: 'bg-[#5B8DEF]' },
@@ -32,6 +33,7 @@ const formatDate = (iso) => {
 const MinhaAssinatura = () => {
   const { dashboardData } = useDashboard();
   const sub = dashboardData?.subscription;
+  const hash = new URLSearchParams(window.location.search).get('hash');
   const [opening, setOpening] = useState(false);
 
   const handleOpenPortal = async () => {
@@ -42,22 +44,19 @@ const MinhaAssinatura = () => {
 
   const meta = sub?.status ? STATUS_META[sub.status] : LEGACY_META;
 
-  // ─── Estado: sem assinatura (cliente legacy / nunca contratou) ─────
+  // ─── Estado: sem assinatura — mostra os 3 planos pra escolher ──────
   if (!sub || !sub.status) {
     return (
       <div className="flex flex-col w-full min-h-screen bg-[#101010] font-jakarta text-white p-4 md:p-8">
         <Header />
-        <div className="max-w-[640px] mx-auto w-full mt-6">
-          <div className="bg-[#1B1B1D] border border-[#2A2A2C] rounded-[16px] p-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-[#F5A623]/15 mx-auto mb-4 flex items-center justify-center text-[28px]">💳</div>
-            <h2 className="text-[18px] font-bold mb-2">Sem assinatura ativa</h2>
-            <p className="text-[13px] text-[#868686] mb-4">
-              Você ainda não tem uma assinatura paga vinculada à sua conta.
-            </p>
-            <p className="text-[11px] text-[#666]">
-              Se você acredita que isso é um erro, entre em contato com o suporte.
+        <div className="max-w-[920px] mx-auto w-full mt-6">
+          <div className="mb-5 text-center">
+            <h2 className="text-[18px] md:text-[20px] font-bold text-white mb-1">Escolha o plano ideal</h2>
+            <p className="text-[12px] text-[#868686]">
+              Sem permanência. Cancele a qualquer momento direto pelo portal do Stripe.
             </p>
           </div>
+          <PlanSelector hash={hash} />
         </div>
       </div>
     );
@@ -86,8 +85,11 @@ const MinhaAssinatura = () => {
             <div className="text-right">
               <div className="text-[11px] text-[#666] uppercase tracking-wider font-semibold mb-1">Plano</div>
               <div className="text-[14px] font-semibold text-white">
-                {sub.plan ? 'Plano Mensal' : '—'}
+                {sub.planLabel ? sub.planLabel.replace('Breakr [Hub] | ', '') : (sub.plan ? '—' : '—')}
               </div>
+              {sub.planPriceLabel && (
+                <div className="text-[10px] text-[#868686] mt-0.5">{sub.planPriceLabel}</div>
+              )}
             </div>
           </div>
 
