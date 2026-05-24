@@ -1645,7 +1645,14 @@ router.put('/client/:hash/profile', async (req, res) => {
 
     // Trocar senha: exige oldPassword conferindo com o hash atual.
     // Sem isso, qualquer um com o hash do cliente trocava a senha (sec-auditor #9).
+    //
+    // DEPRECATION: a partir de 2026-05, troca de senha foi migrada pro
+    // <UserProfile /> do Clerk na aba Seguranca de /configuracoes. Este
+    // endpoint permanece como fallback pra clientes legacy bcrypt que
+    // ainda nao tem sessao Clerk vinculada. Quando 100% dos clientes
+    // estiverem migrados pro Clerk, remover este bloco.
     if (password && password.trim() !== '') {
+      console.warn(`[deprecation] PUT /client/${hash}/profile com password — use Clerk via Configuracoes > Seguranca. Cliente legacy bcrypt acionando troca de senha local.`);
       if (!oldPassword) {
         return res.status(400).json({ error: 'Para trocar a senha, envie a senha atual em oldPassword.' });
       }
