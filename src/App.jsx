@@ -8,11 +8,25 @@ import ClientLogin from './components/ClientLogin';
 import AdminPanel from './components/admin/AdminPanel';
 import DemoPage from './components/DemoPage';
 import AgencyPanel from './components/agency/AgencyPanel';
+import PoliticaPrivacidade from './components/PoliticaPrivacidade';
 import { useDashboard } from './context/DashboardContext';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
+// Rotas publicas (renderizadas ANTES de qualquer check de auth/clerk) —
+// paginas legais/institucionais que precisam ser acessiveis a qualquer
+// um, indexaveis e linkaveis externamente.
+const PUBLIC_ROUTES = {
+  '/privacidade': PoliticaPrivacidade,
+  '/politica-de-privacidade': PoliticaPrivacidade, // alias amigavel
+};
+
 function App() {
+  // Hooks SEMPRE rodam na mesma ordem (regra do React). Decisao de
+  // renderizar publico vs autenticado vem APOS todos os hooks.
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
+  const PublicComponent = PUBLIC_ROUTES[pathname];
+
   const { dashboardData, clientDataError, clientDataLoaded } = useDashboard();
   const { isLoaded: clerkLoaded, isSignedIn, getToken } = useAuth();
   const { signOut } = useClerk();
@@ -170,6 +184,12 @@ function App() {
     window.history.replaceState({}, '', url.toString());
     setCurrentPage('client-login');
   };
+
+  // Rotas publicas (Politica de Privacidade, etc) — short-circuit apos hooks.
+  // Apenas detectadas pela pathname; nao dependem de auth.
+  if (PublicComponent) {
+    return <PublicComponent />;
+  }
 
   // Loading spinner
   if (currentPage === 'loading' || currentPage === 'resolving-clerk') {
