@@ -119,11 +119,18 @@ const DashboardHeader = ({ data, onNavigate }) => {
         className="hidden lg:flex"
       />
 
-      {/* Right - User Profile */}
+      {/* Right - User Profile
+          - Quando admin-viewing: abre o ProfileModal restrito (seguranca)
+          - Quando dono normal: navega pra /configuracoes (pagina dedicada,
+            substitui o modal antigo conforme feedback "modal muito amador") */}
       <div className="flex items-center gap-2 md:gap-8">
 
         <button
-          onClick={() => setIsProfileModalOpen(true)}
+          onClick={() => {
+            if (isAdminViewing) { setIsProfileModalOpen(true); return; }
+            if (onNavigate) onNavigate('configuracoes');
+            else setIsProfileModalOpen(true);
+          }}
           className="flex items-center gap-3 md:gap-4 md:border-l md:border-[#333] md:pl-6 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none"
         >
           {/* SEMPRE mostra o DONO do restaurante (não mistura com admin) */}

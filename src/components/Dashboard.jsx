@@ -18,6 +18,7 @@ import MatrizPreco from './dashboard/MatrizPreco';
 import EngenhariaMenu from './dashboard/EngenhariaMenu';
 import Equipe from './dashboard/Equipe';
 import MinhaAssinatura from './dashboard/MinhaAssinatura';
+import Configuracoes from './dashboard/configuracoes/Configuracoes';
 import BpoClientAlerts from './dashboard/BpoClientAlerts';
 // Code-splitting: BPO carrega só quando usuário entra na seção
 const BpoClientApp = lazy(() => import('./bpo/BpoClientApp'));
@@ -43,7 +44,7 @@ const Dashboard = () => {
     // BAH-003: respeita ?section=financeiro vindo do AdminPanel ClientQuickSwitcher
     try {
       const sec = new URLSearchParams(window.location.search).get('section');
-      const valid = ['home', 'fichaTecnica', 'matrizPreco', 'engenhariaMenu', 'equipe', 'financeiro', 'assinatura'];
+      const valid = ['home', 'fichaTecnica', 'matrizPreco', 'engenhariaMenu', 'equipe', 'financeiro', 'assinatura', 'configuracoes'];
       return sec && valid.includes(sec) ? sec : 'home';
     } catch { return 'home'; }
   });
@@ -172,6 +173,12 @@ const Dashboard = () => {
       ) : activePage === 'assinatura' ? (
         <div className={subpageWrapper}>
           <MinhaAssinatura />
+        </div>
+      ) : activePage === 'configuracoes' ? (
+        // Configuracoes tem layout proprio (sidebar interno + content)
+        // — overflow gerenciado pelo proprio Configuracoes.jsx
+        <div className={`${pageWrapperBase} overflow-hidden`}>
+          <Configuracoes onNavigate={handleNavigate} />
         </div>
       ) : activePage === 'financeiro' ? (
         // Financeiro: BpoLayout interno já tem seu próprio <main overflow-y-auto>.
