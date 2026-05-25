@@ -62,7 +62,7 @@ export function TrialEndingModal({ daysLeft }) {
     <FloatingCard
       icon="⏰"
       iconBg="bg-[#F5A623]/20"
-      title={`Seu teste grátis acaba em ${daysLeft} ${daysLeft === 1 ? 'dia' : 'dias'}`}
+      title={`Seu período de teste acaba em ${daysLeft} ${daysLeft === 1 ? 'dia' : 'dias'}`}
       subtitle="Adicione seu método de pagamento para continuar usando o Breakr sem interrupção."
       primary={{ label: 'Adicionar pagamento', onClick: openBillingPortal }}
       onDismiss={dismiss}

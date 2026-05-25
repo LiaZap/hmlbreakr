@@ -4,14 +4,19 @@ import { motion } from 'framer-motion';
 
 /**
  * CommercialFunnel — BAH-091
- * Funil de jornada de TESTE (trial) de 7 dias para o time comercial.
+ * Funil de novos cadastros (jornada de 7 dias) pro time comercial.
+ *
+ * NOTA: O sistema NAO oferece mais trial gratis. Este funil mostra a
+ * jornada SOFT de abordagem do time comercial sobre clientes que se
+ * cadastraram recentemente mas ainda nao assinaram. "7 dias" e o prazo
+ * interno pra abordar e converter — nao e uma promessa pro cliente.
  *
  * Jornada (7 dias desde o cadastro / createdAt):
  *  - D0: cliente se cadastra -> entra como LEAD
  *  - D1: abordagem do comercial (acompanhar e ajudar a preencher)
  *  - D3: follow-up de cadastro de fichas técnicas
  *  - D5: reunião de leitura/preenchimento dos dados
- *  - D7: follow-up para manter a assinatura
+ *  - D7: follow-up para fechar a assinatura
  *  Dias-chave de AÇÃO: 0, 1, 3, 5, 7. Os demais (2, 4, 6) são de espera.
  *
  * Regras de negócio:
@@ -158,7 +163,7 @@ export default function CommercialFunnel({
         </div>
         <h2 className="text-[28px] font-bold text-white tracking-tight">Comercial</h2>
         <p className="text-[13px] text-[#868686] mt-1">
-          Jornada de 7 dias do trial — saiba quais clientes abordar em cada dia.
+          Jornada de 7 dias do cadastro — saiba quais clientes abordar em cada dia.
         </p>
       </div>
 
@@ -204,7 +209,7 @@ export default function CommercialFunnel({
         <EmptyState text="Nenhum lead em trial — todos já converteram ou foram cadastrados manualmente." />
       ) : (
         <>
-          {/* Funil de 7 dias */}
+          {/* Funil de 7 dias do cadastro */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
             {Array.from({ length: 8 }, (_, d) => {
               const isKey = d in KEY_DAYS;

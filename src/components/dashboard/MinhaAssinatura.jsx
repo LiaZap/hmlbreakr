@@ -95,7 +95,7 @@ const MinhaAssinatura = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/[0.04]">
             {sub.status === 'trial' && sub.trialEndsAt && (
-              <InfoRow label="Teste grátis termina em" value={formatDate(sub.trialEndsAt)} accent="#5B8DEF" />
+              <InfoRow label="Período de teste termina em" value={formatDate(sub.trialEndsAt)} accent="#5B8DEF" />
             )}
             {sub.status !== 'canceled' && sub.currentPeriodEnd && (
               <InfoRow label="Próxima cobrança" value={formatDate(sub.currentPeriodEnd)} />
@@ -130,8 +130,8 @@ const MinhaAssinatura = () => {
           <Alert
             color="#F5A623"
             icon="⏰"
-            title={`Seu teste grátis acaba em ${sub.daysToTrialEnd} ${sub.daysToTrialEnd === 1 ? 'dia' : 'dias'}`}
-            text="Adicione seu método de pagamento agora para continuar sem interrupção."
+            title={`Seu período de teste acaba em ${sub.daysToTrialEnd} ${sub.daysToTrialEnd === 1 ? 'dia' : 'dias'}`}
+            text="Adicione seu método de pagamento para continuar sem interrupção."
           />
         )}
 

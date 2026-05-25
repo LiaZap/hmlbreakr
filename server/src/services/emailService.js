@@ -112,7 +112,7 @@ async function sendWelcomeEmail({ to, clientName, hash }) {
       Olá, ${clientName}!
     </p>
     <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#666;">
-      Sua conta no Breakr foi criada com sucesso. Você tem <strong style="color:#111;">7 dias grátis</strong> para explorar todas as funcionalidades.
+      Sua conta no Breakr foi criada. Acesse agora e configure as informações do seu restaurante para começar a usar a plataforma.
     </p>
 
     <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#333;">Comece agora:</p>
@@ -208,17 +208,23 @@ async function sendPasswordResetEmail({ to, clientName, token }) {
 }
 
 /**
- * Trial expiring reminder — sent 1-2 days before trial ends
+ * Trial expiring reminder — disparado quando o Stripe sinaliza
+ * `customer.subscription.trial_will_end` (1-2 dias antes do fim).
+ *
+ * NOTA: O Breakr NÃO oferece trial padrão atualmente. Esta função
+ * continua existindo pra casos onde o Stripe envia trials manuais
+ * (ex: cortesia aplicada via Dashboard) ou casos legacy. Texto evita
+ * prometer "grátis" — só lembra que o período de teste termina.
  */
 async function sendTrialExpiringEmail({ to, clientName, daysLeft, hash }) {
   const link = `${APP_URL}?hash=${hash}`;
 
   const content = `
     <p style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111;">
-      ${clientName}, seu trial está acabando!
+      ${clientName}, seu período de teste está acabando!
     </p>
     <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#666;">
-      Você tem apenas <strong style="color:#111;">${daysLeft} dia${daysLeft > 1 ? 's' : ''}</strong> restante${daysLeft > 1 ? 's' : ''} no período gratuito do Breakr.
+      Você tem apenas <strong style="color:#111;">${daysLeft} dia${daysLeft > 1 ? 's' : ''}</strong> restante${daysLeft > 1 ? 's' : ''} no seu período de teste do Breakr.
     </p>
 
     <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#333;">Não perca o que você já construiu:</p>
@@ -237,14 +243,14 @@ async function sendTrialExpiringEmail({ to, clientName, daysLeft, hash }) {
     ${ctaButton('Assinar agora', link)}
 
     <p style="margin:0;font-size:12px;color:#BBB;text-align:center;">
-      Após o término do trial, seu acesso será pausado até a assinatura ser ativada.
+      Após o término do período de teste, seu acesso será pausado até a assinatura ser ativada.
     </p>
   `;
 
   await transporter.sendMail({
     from: `"Breakr" <no-reply@breakr.com.br>`,
     to,
-    subject: `Breakr — Seu trial acaba em ${daysLeft} dia${daysLeft > 1 ? 's' : ''}`,
+    subject: `Breakr — Seu período de teste acaba em ${daysLeft} dia${daysLeft > 1 ? 's' : ''}`,
     html: emailWrapper(content)
   });
 }

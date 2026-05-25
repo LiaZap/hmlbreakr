@@ -1863,7 +1863,7 @@ const AdminPanel = () => {
         </motion.div>
 
         ) : activeTab === 'commercial' ? (
-        /* ===== COMMERCIAL TAB (Gabriela) — BAH-091: funil de teste 7 dias ===== */
+        /* ===== COMMERCIAL TAB (Gabriela) — BAH-091: funil de novos cadastros (jornada 7 dias) ===== */
         <CommercialFunnel
           clients={clients}
           getOnboardingProgress={getOnboardingProgress}
