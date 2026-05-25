@@ -357,59 +357,69 @@ async function main() {
   for (const c of catData) cats.push(await prisma.financialCategory.create({ data: { ...c, clientId: client.id } }));
   ok(`${cats.length} categorias`);
 
-  // ── Bancos (4) ────────────────────────────────────────────────────────
+  // ── Bancos (4) — campo CORRETO: type (não accountType), sem initialBalance ─
   const banks = await Promise.all([
-    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '341', bankName: 'Itaú',          agency: '0457', account: '98765-4', accountType: 'corrente', initialBalance: 38500.00, currentBalance: 42180.00 } }),
-    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '001', bankName: 'Banco do Brasil', agency: '1234', account: '11122-3', accountType: 'corrente', initialBalance: 18200.00, currentBalance: 19450.00 } }),
-    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '237', bankName: 'Bradesco',      agency: '0892', account: '44455-6', accountType: 'corrente', initialBalance: 22000.00, currentBalance: 23890.00 } }),
-    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '260', bankName: 'Nubank PJ',     agency: '0001', account: '77788-9', accountType: 'corrente', initialBalance: 8500.00,  currentBalance: 9120.00  } }),
+    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '341', bankName: 'Itaú',           agency: '0457', account: '98765-4', type: 'corrente', currentBalance: 42180.00, isManual: true } }),
+    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '001', bankName: 'Banco do Brasil', agency: '1234', account: '11122-3', type: 'corrente', currentBalance: 19450.00, isManual: true } }),
+    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '237', bankName: 'Bradesco',       agency: '0892', account: '44455-6', type: 'corrente', currentBalance: 23890.00, isManual: true } }),
+    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '260', bankName: 'Nubank PJ',      agency: '0001', account: '77788-9', type: 'corrente', currentBalance: 9120.00,  isManual: true } }),
   ]);
   ok(`${banks.length} contas bancárias — saldo total R$ ${(42180+19450+23890+9120).toLocaleString('pt-BR')}`);
 
-  // ── Fornecedores (12 italianos) ───────────────────────────────────────
+  // ── Fornecedores (12 italianos) — campo CORRETO: cnpj (não document) ────
   const supData = [
-    { name: 'Pasta La Buona Importadora',   document: '12.345.678/0001-90', category: 'CMV', email: 'comercial@pastalabuona.com.br', phone: '(11) 3344-5566' },
-    { name: 'La Latteria Italiana Ltda',    document: '23.456.789/0001-01', category: 'CMV' },
-    { name: 'Olio Carli Brasil',            document: '34.567.890/0001-12', category: 'CMV' },
-    { name: 'Vinhos Toscana Imports',       document: '45.678.901/0001-23', category: 'CMV' },
-    { name: 'Frigorífico Bovino Premium',   document: '56.789.012/0001-34', category: 'CMV' },
-    { name: 'Hortifruti San Marzano',       document: '67.890.123/0001-45', category: 'CMV' },
-    { name: 'Embalagens Bella Casa',        document: '78.901.234/0001-56', category: 'Operacional' },
-    { name: 'Enel Distribuição SP',         document: '61.695.227/0001-93', category: 'Utilities' },
-    { name: 'Sabesp',                       document: '43.776.517/0001-80', category: 'Utilities' },
-    { name: 'Vivo Empresas',                document: '02.558.157/0001-62', category: 'Utilities' },
-    { name: 'Contabilidade Romano',         document: '89.012.345/0001-67', category: 'Operacional' },
-    { name: 'Marketing Digital Forno',      document: '90.123.456/0001-78', category: 'Operacional' },
+    { name: 'Pasta La Buona Importadora',   cnpj: '12.345.678/0001-90', email: 'comercial@pastalabuona.com.br', phone: '(11) 3344-5566', defaultCat: 'CMV - Massas' },
+    { name: 'La Latteria Italiana Ltda',    cnpj: '23.456.789/0001-01', defaultCat: 'CMV - Queijos' },
+    { name: 'Olio Carli Brasil',            cnpj: '34.567.890/0001-12', defaultCat: 'CMV - Massas' },
+    { name: 'Vinhos Toscana Imports',       cnpj: '45.678.901/0001-23', defaultCat: 'CMV - Vinhos/Bebidas' },
+    { name: 'Frigorífico Bovino Premium',   cnpj: '56.789.012/0001-34', defaultCat: 'CMV - Carnes' },
+    { name: 'Hortifruti San Marzano',       cnpj: '67.890.123/0001-45', defaultCat: 'CMV - Hortifruti' },
+    { name: 'Embalagens Bella Casa',        cnpj: '78.901.234/0001-56' },
+    { name: 'Enel Distribuição SP',         cnpj: '61.695.227/0001-93', defaultCat: 'Energia/Água' },
+    { name: 'Sabesp',                       cnpj: '43.776.517/0001-80', defaultCat: 'Energia/Água' },
+    { name: 'Vivo Empresas',                cnpj: '02.558.157/0001-62' },
+    { name: 'Contabilidade Romano',         cnpj: '89.012.345/0001-67' },
+    { name: 'Marketing Digital Forno',      cnpj: '90.123.456/0001-78', defaultCat: 'Marketing' },
   ];
   const sups = [];
-  for (const s of supData) sups.push(await prisma.supplier.create({ data: { ...s, clientId: client.id } }));
+  for (const s of supData) {
+    const cat = s.defaultCat ? cats.find(c => c.name === s.defaultCat) : null;
+    const { defaultCat, ...rest } = s;
+    sups.push(await prisma.supplier.create({ data: { ...rest, clientId: client.id, defaultCategoryId: cat?.id || null } }));
+  }
   ok(`${sups.length} fornecedores`);
 
-  // ── Meios de pagamento ────────────────────────────────────────────────
+  // ── Meios de pagamento — campo CORRETO: feePercent (não feeRate) ─────
+  // Limpa antes — o onboardingSync pode ter rodado e criado duplicatas
+  await prisma.paymentMethod.deleteMany({ where: { clientId: client.id } });
   const pms = await Promise.all([
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Cartão Crédito',    type: 'card_credit',  feeRate: 2.90 } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Cartão Débito',     type: 'card_debit',   feeRate: 1.75 } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'PIX',               type: 'pix',          feeRate: 0.00 } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Dinheiro',          type: 'cash',         feeRate: 0.00 } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'iFood',             type: 'marketplace',  feeRate: 23.00 } }),
+    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Cartão Crédito', type: 'card_credit', feePercent: 2.90, settlementDays: 30 } }),
+    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Cartão Débito',  type: 'card_debit',  feePercent: 1.75, settlementDays: 1  } }),
+    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'PIX',            type: 'pix',         feePercent: 0.00, settlementDays: 0  } }),
+    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Dinheiro',       type: 'cash',        feePercent: 0.00, settlementDays: 0  } }),
+    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'iFood',          type: 'marketplace', feePercent: 23.00, settlementDays: 14 } }),
+    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Rappi',          type: 'marketplace', feePercent: 20.00, settlementDays: 14 } }),
   ]);
   ok(`${pms.length} meios de pagamento`);
 
-  // ── Funcionários BPO (espelham formData.employees) ───────────────────
+  // ── Funcionários BPO (espelham formData.employees) — onboardingSync
+  //    pode ter criado a partir do formData; limpamos e recriamos.
+  await prisma.bpoEmployee.deleteMany({ where: { clientId: client.id } });
   const empData = [
-    { name: 'Marco Rossi',    role: 'Sous Chef',     salary: 4200, cpf: '111.222.333-44' },
-    { name: 'Luca Esposito',  role: 'Cozinheiro',    salary: 2800, cpf: '222.333.444-55' },
-    { name: 'Anna Romano',    role: 'Maître',        salary: 3500, cpf: '333.444.555-66' },
-    { name: 'Paolo Conti',    role: 'Garçom',        salary: 2200, cpf: '444.555.666-77' },
-    { name: 'Carla Moretti',  role: 'Garçonete',     salary: 2200, cpf: '555.666.777-88' },
-    { name: 'Dario Lombardi', role: 'Sommelier',     salary: 3800, cpf: '666.777.888-99' },
+    { name: 'Marco Rossi',    role: 'Sous Chef',  baseSalary: 4200, cpf: '111.222.333-44' },
+    { name: 'Luca Esposito',  role: 'Cozinheiro', baseSalary: 2800, cpf: '222.333.444-55' },
+    { name: 'Anna Romano',    role: 'Maître',     baseSalary: 3500, cpf: '333.444.555-66' },
+    { name: 'Paolo Conti',    role: 'Garçom',     baseSalary: 2200, cpf: '444.555.666-77' },
+    { name: 'Carla Moretti',  role: 'Garçonete',  baseSalary: 2200, cpf: '555.666.777-88' },
+    { name: 'Dario Lombardi', role: 'Sommelier',  baseSalary: 3800, cpf: '666.777.888-99' },
   ];
-  for (const e of empData) await prisma.bpoEmployee.create({ data: { ...e, clientId: client.id, salary: e.salary } });
+  for (const e of empData) await prisma.bpoEmployee.create({ data: { ...e, clientId: client.id } });
   ok(`${empData.length} funcionários`);
 
-  // ── Sócios BPO ───────────────────────────────────────────────────────
-  await prisma.bpoPartner.create({ data: { clientId: client.id, name: 'Giuseppe Ferraro', cpf: '777.888.999-00', equityPct: 50, proLabore: 12000 } });
-  await prisma.bpoPartner.create({ data: { clientId: client.id, name: 'Sofia Bianchi',    cpf: '888.999.000-11', equityPct: 50, proLabore: 10000 } });
+  // ── Sócios BPO — campo CORRETO: prolaboreAmount (sem equityPct) ──────
+  await prisma.bpoPartner.deleteMany({ where: { clientId: client.id } });
+  await prisma.bpoPartner.create({ data: { clientId: client.id, name: 'Giuseppe Ferraro', cpf: '777.888.999-00', prolaboreAmount: 12000 } });
+  await prisma.bpoPartner.create({ data: { clientId: client.id, name: 'Sofia Bianchi',    cpf: '888.999.000-11', prolaboreAmount: 10000 } });
   ok('2 sócios');
 
   // ── Payables (30 — passado/presente/futuro) ──────────────────────────
@@ -444,15 +454,16 @@ async function main() {
     { description: 'Marketing (campanha)',    amount: 1200, status: 'pending',   dueDays: -7,  supplier: 'Marketing Digital Forno',      category: 'Marketing' },
   ];
 
+  let paidCount = 0;
   for (const p of samplePayables) {
     const sup = findSup(p.supplier);
     const cat = findCat(p.category);
     const dueDate = daysFromNow(p.dueDays);
-    await prisma.payable.create({
+    const payable = await prisma.payable.create({
       data: {
         clientId: client.id,
-        supplierId: sup?.id,
-        categoryId: cat?.id,
+        supplierId: sup?.id || null,
+        categoryId: cat?.id || null,
         description: p.description,
         amount: p.amount,
         remainingAmount: p.status === 'paid' ? 0 : p.amount,
@@ -460,11 +471,24 @@ async function main() {
         status: p.status,
         scheduledStatus: p.scheduledStatus || null,
         scheduledAt: p.scheduledStatus ? new Date() : null,
-        paidAt: p.status === 'paid' ? dueDate : null,
       },
     });
+    // Pra payables 'paid', cria PaymentTransaction ligando ao Itaú (banco 0)
+    // — assim aparece histórico de movimentação no dashboard.
+    if (p.status === 'paid') {
+      await prisma.paymentTransaction.create({
+        data: {
+          payableId: payable.id,
+          bankAccountId: banks[0].id,
+          amount: p.amount,
+          paidAt: dueDate,
+          notes: `Pagamento de "${p.description}"`,
+        },
+      });
+      paidCount++;
+    }
   }
-  ok(`${samplePayables.length} contas a pagar`);
+  ok(`${samplePayables.length} contas a pagar (${paidCount} com PaymentTransaction)`);
 
   // ── Receivables (20) ─────────────────────────────────────────────────
   const sampleReceivables = [
@@ -482,24 +506,69 @@ async function main() {
     { payer: 'iFood Repasses (futuro)',  amount: 40500, status: 'pending',   dueDays: 11,  category: 'Vendas - iFood' },
   ];
 
+  let recvCount = 0;
   for (const r of sampleReceivables) {
     const cat = findCat(r.category);
     const dueDate = daysFromNow(r.dueDays);
-    await prisma.receivable.create({
+    const receivable = await prisma.receivable.create({
       data: {
         clientId: client.id,
-        categoryId: cat?.id,
+        categoryId: cat?.id || null,
         payerName: r.payer,
         description: `Recebível: ${r.payer}`,
         amount: r.amount,
         remainingAmount: r.status === 'received' ? 0 : r.amount,
         dueDate, receiptForecast: dueDate,
         status: r.status,
-        receivedAt: r.status === 'received' ? dueDate : null,
+      },
+    });
+    if (r.status === 'received') {
+      // Distribui recebidos entre os 4 bancos pra variar saldo
+      const bankIdx = recvCount % banks.length;
+      await prisma.paymentTransaction.create({
+        data: {
+          receivableId: receivable.id,
+          bankAccountId: banks[bankIdx].id,
+          amount: r.amount,
+          paidAt: dueDate,
+          notes: `Recebimento de "${r.payer}"`,
+        },
+      });
+      recvCount++;
+    }
+  }
+  ok(`${sampleReceivables.length} contas a receber (${recvCount} com PaymentTransaction)`);
+
+  // ── BankTransactions (movimentações da semana) ───────────────────────
+  // Distribui 12 transações nos últimos 7 dias para popular o widget
+  // "Movimentações da semana" do dashboard.
+  const bankTxs = [
+    { bank: 0, type: 'debit',  amount: 4200,  desc: 'PASTA LA BUONA - Massas',         dayOff: -1 },
+    { bank: 0, type: 'debit',  amount: 8800,  desc: 'LATTERIA ITALIANA - Queijos',     dayOff: -2 },
+    { bank: 1, type: 'credit', amount: 42000, desc: 'IFOOD REPASSE SEMANAL',           dayOff: -3 },
+    { bank: 2, type: 'debit',  amount: 1800,  desc: 'CONTABILIDADE ROMANO',            dayOff: -3 },
+    { bank: 0, type: 'credit', amount: 32000, desc: 'STONE CARTAO - LIQUIDACAO',       dayOff: -4 },
+    { bank: 3, type: 'debit',  amount: 320,   desc: 'VIVO EMPRESAS - INTERNET',        dayOff: -4 },
+    { bank: 0, type: 'debit',  amount: 4800,  desc: 'ENEL ENERGIA - CONTA MENSAL',     dayOff: -5 },
+    { bank: 1, type: 'credit', amount: 8200,  desc: 'PIX RESERVA CONFRATERNIZACAO',    dayOff: -5 },
+    { bank: 0, type: 'debit',  amount: 2800,  desc: 'HORTIFRUTI SAN MARZANO',          dayOff: -6 },
+    { bank: 2, type: 'credit', amount: 18500, desc: 'PIX EVENTOS BODA',                dayOff: -6 },
+    { bank: 0, type: 'debit',  amount: 6200,  desc: 'FRIGORIFICO BOVINO PREMIUM',      dayOff: -6 },
+    { bank: 3, type: 'debit',  amount: 920,   desc: 'SABESP - AGUA',                   dayOff: -7 },
+  ];
+  for (const t of bankTxs) {
+    await prisma.bankTransaction.create({
+      data: {
+        bankAccountId: banks[t.bank].id,
+        amount: t.amount,
+        type: t.type,
+        description: t.desc,
+        date: daysFromNow(t.dayOff),
+        source: 'manual',
       },
     });
   }
-  ok(`${sampleReceivables.length} contas a receber`);
+  ok(`${bankTxs.length} movimentações bancárias (últimos 7 dias)`);
 
   log('');
   log('=========================================================');
