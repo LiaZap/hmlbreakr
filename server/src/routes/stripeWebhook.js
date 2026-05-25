@@ -27,8 +27,10 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { getStripe } = require('../services/stripeService');
+const { getStripe, getClientPlanByPriceId } = require('../services/stripeService');
+const { sendWelcomeEmail } = require('../services/emailService');
 const { logAudit } = require('../services/auditService');
 
 const router = express.Router();
@@ -64,32 +66,133 @@ async function findClientByCustomerOrSubscription(stripeCustomerId, stripeSubscr
 }
 
 async function findClientFromCheckoutSession(session) {
-  // 1) metadata.clientHash — setado no createClientCheckout.
+  // 1) metadata.clientHash — setado no createClientCheckout (fluxo via app).
   if (session?.metadata?.clientHash) {
     const c = await prisma.client.findUnique({ where: { hash: session.metadata.clientHash } });
     if (c) return c;
   }
-  // 2) Pelo customer já criado.
+  // 2) Pelo customer Stripe já vinculado.
   if (session?.customer) {
-    return prisma.client.findFirst({ where: { stripeCustomerId: session.customer } });
+    const c = await prisma.client.findFirst({ where: { stripeCustomerId: session.customer } });
+    if (c) return c;
+  }
+  // 3) Pelo email (último fallback — útil quando cliente paga via Payment
+  //    Link externo da LP mas já tem cadastro no Breakr com mesmo email).
+  const email = session?.customer_details?.email || session?.customer_email;
+  if (email) {
+    const c = await prisma.client.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (c) return c;
   }
   return null;
+}
+
+/**
+ * autoCreateClientFromCheckout — cria conta Breakr automaticamente quando
+ * o pagamento vem de fonte EXTERNA (Payment Link da LP, por exemplo) sem
+ * que o cliente tenha cadastrado no app antes.
+ *
+ * Estratégia:
+ *   1. Cria Client com hash CSPRNG, email do checkout, name do checkout
+ *      (fallback "Cliente Breakr").
+ *   2. Marca subscriptionStatus + stripeCustomerId/SubscriptionId já no insert.
+ *   3. password fica null → primeiro acesso cai no /client/register pra
+ *      definir senha (link enviado por email).
+ *   4. Envia welcome email com link ?hash=...
+ *   5. Loga auditoria categoria 'admin' action 'client.auto_created_from_stripe'.
+ *
+ * Retorna o client criado ou null se faltam dados mínimos (sem email).
+ */
+async function autoCreateClientFromCheckout(session, sub) {
+  const email = session?.customer_details?.email || session?.customer_email;
+  if (!email) {
+    console.warn('[stripe webhook] auto-create: session sem email — abortando', session.id);
+    return null;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  // Race-condition guard: se outro webhook já criou nesse meio-tempo, reusa.
+  const existing = await prisma.client.findUnique({ where: { email: normalizedEmail } });
+  if (existing) return existing;
+
+  const name = session?.customer_details?.name || 'Cliente Breakr';
+  const hash = crypto.randomBytes(16).toString('hex');
+
+  // Dados iniciais mínimos — replica padrão de POST /admin/clients
+  const initialData = {
+    restaurant: { name, category: 'Gastronomia' },
+    user: { name, role: 'Gerente' },
+    operational: { fichas: [], insumos: [] },
+  };
+
+  const client = await prisma.client.create({
+    data: {
+      name,
+      hash,
+      email: normalizedEmail,
+      data: JSON.stringify(initialData),
+      stripeCustomerId: session.customer || null,
+      stripeSubscriptionId: session.subscription || null,
+      subscriptionStatus: sub ? mapStripeStatus(sub.status) : 'active',
+      subscriptionPlan: sub?.items?.data?.[0]?.price?.id || null,
+      currentPeriodEnd: tsToDate(sub?.current_period_end),
+      trialEndsAt: tsToDate(sub?.trial_end),
+    },
+  });
+
+  // Welcome email — best-effort, não bloqueia (mas loga)
+  sendWelcomeEmail({ to: normalizedEmail, clientName: name, hash })
+    .catch(err => console.warn('[stripe webhook] auto-create welcome email falhou:', err.message));
+
+  logAudit(prisma, {
+    action: 'client.auto_created_from_stripe',
+    category: 'admin',
+    entityType: 'client',
+    entityId: client.id,
+    actorType: 'system',
+    actorId: null,
+    actorLabel: 'stripe-webhook',
+    summary: `Cliente "${name}" criado automaticamente após pagamento via Stripe`,
+    metadata: {
+      stripeCustomerId: session.customer,
+      stripeSubscriptionId: session.subscription,
+      sessionId: session.id,
+      email: normalizedEmail,
+      source: session?.metadata?.clientHash ? 'app' : 'payment_link',
+    },
+  });
+
+  console.log(`[stripe webhook] auto-criado Client id=${client.id} email=${normalizedEmail} (Payment Link / fonte externa)`);
+  return client;
 }
 
 // ─── Handlers por tipo de evento ─────────────────────────────────────
 async function handleCheckoutCompleted(session) {
   if (session.mode !== 'subscription') return null;
-  const client = await findClientFromCheckoutSession(session);
-  if (!client) {
-    console.warn('[stripe webhook] checkout.session.completed sem client correspondente', session.id);
-    return null;
-  }
+
   // Busca a subscription pra ter dados completos (status, periodos, plano).
+  // Carregamos antes do find/auto-create pra passar pro auto-create se precisar.
   let sub = null;
   if (session.subscription) {
     try { sub = await getStripe().subscriptions.retrieve(session.subscription); }
     catch (err) { console.warn('[stripe webhook] subscriptions.retrieve falhou:', err.message); }
   }
+
+  // 1) Tenta achar cliente existente (metadata.clientHash, stripeCustomerId, ou email)
+  let client = await findClientFromCheckoutSession(session);
+
+  // 2) Se não achou, AUTO-CRIA — fluxo Payment Link externo (LP).
+  //    Já preenche stripeCustomerId/SubscriptionId/status no insert, então
+  //    o update abaixo vira no-op (idempotente).
+  if (!client) {
+    client = await autoCreateClientFromCheckout(session, sub);
+    if (!client) {
+      console.warn('[stripe webhook] checkout.session.completed sem client e auto-create falhou', session.id);
+      return null;
+    }
+    return client.id; // já criado com tudo, não precisa update
+  }
+
+  // 3) Cliente encontrado — atualiza com dados da assinatura.
   await prisma.client.update({
     where: { id: client.id },
     data: {
