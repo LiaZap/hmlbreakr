@@ -38,18 +38,23 @@ const emailWrapper = (content) => `
     <tr><td align="center">
       <table width="580" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
 
-        <!-- Logo Header — bolt logo embedded em base64 SVG (mesma do app web).
-             Suporta Gmail, Apple Mail, Outlook.com, Yahoo. Outlook desktop antigo
-             cai no ALT 'Breakr' (degradação graciosa). -->
+        <!-- Logo Header — bolt logo hospedado como SVG estatico em /email-logo.svg
+             (servido pelo Express estatico). Gmail e Outlook bloqueiam data URIs
+             em <img>; URL publica funciona em todos: Gmail, Apple Mail, Outlook,
+             Yahoo, ProtonMail.
+
+             Fallback: caso a imagem nao carregue (cliente bloqueia imagens
+             remotas), o ALT 'Breakr' aparece dentro de uma celula com fundo
+             preto pra manter a identidade visual. -->
         <tr>
           <td style="padding:32px 40px 24px;border-bottom:1px solid #F0F0F0;">
             <table cellpadding="0" cellspacing="0">
               <tr>
-                <td style="vertical-align:middle;">
+                <td width="40" height="40" style="background-color:#000;border-radius:10px;vertical-align:middle;text-align:center;line-height:40px;">
                   <img
-                    src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI3MiIgaGVpZ2h0PSI3MiIgdmlld0JveD0iMCAwIDcyIDcyIj48cmVjdCB3aWR0aD0iNzIiIGhlaWdodD0iNzIiIHJ4PSIxNiIgZmlsbD0iIzAwMCIvPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDIwIDE5KSI+PHBhdGggZD0iTTcuOTAzODMgMjAuMDQzN0gxNC42NDUzTDEzLjA2OTcgMjYuNjU2SDBMNS42MDUgMEgyNS42NzQ1TDIzLjcxMTUgNi41MDkwNUgzMS45MjUyTDE4LjU3MTQgMzMuMzk3NUgxMS45MDc0TDIyLjAwNjcgMTMuMTIxNEgxNi4zMjQyTDE3Ljg0ODIgNi41MDkwNUgxMC43NzA5TDcuOTAzODMgMjAuMDQzN1oiIGZpbGw9IiNGNUE2MjMiLz48L2c+PC9zdmc+"
+                    src="${APP_URL}/email-logo.svg"
                     width="36" height="36" alt="Breakr"
-                    style="display:block;width:36px;height:36px;border:0;outline:none;"
+                    style="display:block;width:36px;height:36px;border:0;outline:none;margin:2px auto;color:#F5A623;font-weight:900;"
                   />
                 </td>
                 <td style="padding-left:12px;vertical-align:middle;">
