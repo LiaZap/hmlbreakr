@@ -38,20 +38,25 @@ const emailWrapper = (content) => `
     <tr><td align="center">
       <table width="580" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
 
-        <!-- Logo Header — wordmark completo "breakr" com gradiente vermelho->laranja,
-             tagline "Assessoria Gastronômica" e simbolo ®. Hospedado como SVG
-             estatico em /email-logo.svg (servido pelo Express). URL publica
-             funciona em Gmail, Apple Mail, Outlook (versoes modernas), Yahoo
-             e ProtonMail.
+        <!-- Logo Header — logo oficial da Breakr (wordmark + raio + tagline
+             "Assessoria Gastronomica" + simbolo ®). Hospedada como JPEG
+             estatico em /email-logo.jpeg (servida pelo Express estatico).
+             JPEG tem suporte universal em clientes de email (Gmail, Apple
+             Mail, Outlook 2010+, Yahoo, ProtonMail) — diferente de SVG que
+             nao renderiza no Outlook desktop.
 
-             Fallback: ALT "Breakr — Assessoria Gastronomica" dentro de celula
-             preta caso o cliente bloqueie imagens remotas. -->
+             Imagem quadrada (1080x1080) exibida em 180x180px. O JPEG ja
+             traz fundo preto, entao o <td> tambem usa background preto pra
+             eliminar qualquer borda visivel entre celula e imagem.
+
+             Fallback: ALT "Breakr — Assessoria Gastronomica" caso o cliente
+             bloqueie imagens remotas. -->
         <tr>
-          <td align="center" style="padding:28px 40px 24px;border-bottom:1px solid #F0F0F0;background:#000;">
+          <td align="center" style="padding:24px 40px;border-bottom:1px solid #F0F0F0;background:#000;">
             <img
-              src="${APP_URL}/email-logo.svg"
-              width="220" height="70" alt="Breakr — Assessoria Gastronômica"
-              style="display:block;width:220px;height:auto;border:0;outline:none;"
+              src="${APP_URL}/email-logo.jpeg"
+              width="180" height="180" alt="Breakr — Assessoria Gastronômica"
+              style="display:block;width:180px;height:180px;border:0;outline:none;border-radius:12px;"
             />
           </td>
         </tr>
