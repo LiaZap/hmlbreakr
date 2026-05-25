@@ -81,14 +81,14 @@ const MoneyOnTable = ({ data }) => {
           {/* Tooltip — fixed height, always occupies space */}
           <div className="h-[36px] mb-2">
             {active ? (
-              <div className="flex items-center justify-between px-2.5 py-2 bg-[#252527] rounded-[10px] border border-[#333] h-full">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between px-2.5 py-2 bg-[#252527] rounded-[10px] border border-[#333] h-full gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                   <div className="w-[8px] h-[8px] rounded-full shrink-0" style={{ backgroundColor: active.color }} />
-                  <span className="font-medium text-[11px] text-[#E1E1E1]">{active.label}</span>
+                  <span className="font-medium text-[11px] text-[#E1E1E1] truncate">{active.label}</span>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                   <span className="text-[10px] font-semibold" style={{ color: active.color }}>{active.pct}</span>
-                  <span className="font-semibold text-[12px] text-white">R$ {active.value}</span>
+                  <span className="font-semibold text-[12px] text-white tabular-nums">R$ {active.value}</span>
                 </div>
               </div>
             ) : (

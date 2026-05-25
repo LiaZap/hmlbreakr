@@ -157,7 +157,7 @@ const NfeImportModal = ({ onClose }) => {
         ) : preview ? (
           <div className="flex flex-col gap-3">
             <div className="text-[10px] uppercase tracking-wider text-text-subtle font-semibold">Pré-visualização</div>
-            <div className="bg-bg-elevated border border-border rounded-md p-4 grid grid-cols-2 gap-3 text-xs">
+            <div className="bg-bg-elevated border border-border rounded-md p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <Field label="Emitente" value={preview.supplierName} />
               <Field label="CNPJ" value={preview.supplierCnpj} mono />
               <Field label="Nº Nota" value={preview.invoiceNumber} mono />
@@ -264,7 +264,7 @@ const BoletoImportModal = ({ onClose }) => {
             <p className="text-sm text-text-muted">Conta a pagar criada com vencimento em {fmtDate(result.parsed.dueDate)}.</p>
           </div>
         ) : preview ? (
-          <div className="bg-bg-elevated border border-border rounded-md p-4 grid grid-cols-2 gap-3 text-xs">
+          <div className="bg-bg-elevated border border-border rounded-md p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <Field label="Banco emissor" value={preview.bankCode} mono />
             <Field label="Vencimento" value={fmtDate(preview.dueDate)} />
             <Field label="Valor" value={fmtBRL(preview.amount)} bold />
@@ -386,7 +386,7 @@ const PdfImportModal = ({ onClose }) => {
             <div className="bg-warning-soft border border-warning/30 rounded-md px-3 py-2 text-xs text-warning">
               Revise os campos detectados abaixo. A extração por PDF é heurística — corrija o que estiver errado antes de criar.
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input label="CNPJ" value={form.cnpj} onChange={(v) => setForm({ ...form, cnpj: v })} placeholder="14 dígitos" />
               <Input label="Nº Nota Fiscal" value={form.invoiceNumber} onChange={(v) => setForm({ ...form, invoiceNumber: v })} placeholder="opcional" />
               <Input label="Valor (R$)" value={form.valor} onChange={(v) => setForm({ ...form, valor: v })} placeholder="1234,56" />

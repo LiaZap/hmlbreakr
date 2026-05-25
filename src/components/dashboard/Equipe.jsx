@@ -90,10 +90,10 @@ const Equipe = () => {
       <div className="max-w-4xl w-full mx-auto">
         
         {/* Header */}
-        <div className="mb-8">
-          <div className="text-[12px] text-[#868686] mb-1">Configurações &gt; Equipe</div>
-          <h1 className="text-[28px] font-bold leading-tight">Membros da Equipe</h1>
-          <p className="text-[14px] text-[#868686] mt-2">
+        <div className="mb-6 md:mb-8">
+          <div className="text-[11px] md:text-[12px] text-[#868686] mb-1">Configurações &gt; Equipe</div>
+          <h1 className="text-[22px] md:text-[28px] font-bold leading-tight">Membros da Equipe</h1>
+          <p className="text-[13px] md:text-[14px] text-[#868686] mt-2">
             Crie acessos secundários para que seus gerentes possam preencher fichas e gerenciar vendas.
             <br />
             Você pode criar até <span className="font-bold text-white">3 acessos operacionais</span>.
@@ -114,14 +114,14 @@ const Equipe = () => {
               </div>
             ) : (
               members.map((member) => (
-                <div key={member.id} className="bg-[#1A1A1A] border border-[#2A2A2C] rounded-[20px] p-5 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-[44px] h-[44px] rounded-full bg-[#e2fd89]/10 text-[#e2fd89] flex items-center justify-center font-bold text-[16px]">
+                <div key={member.id} className="bg-[#1A1A1A] border border-[#2A2A2C] rounded-[20px] p-4 md:p-5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                    <div className="w-[44px] h-[44px] rounded-full bg-[#e2fd89]/10 text-[#e2fd89] flex items-center justify-center font-bold text-[16px] shrink-0">
                       {member.name.substring(0, 2).toUpperCase()}
                     </div>
-                    <div>
-                      <p className="font-bold text-[16px] text-white leading-tight">{member.name}</p>
-                      <p className="font-normal text-[12px] text-[#868686]">{member.email}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-[15px] md:text-[16px] text-white leading-tight truncate">{member.name}</p>
+                      <p className="font-normal text-[12px] text-[#868686] truncate">{member.email}</p>
                     </div>
                   </div>
                   <button 

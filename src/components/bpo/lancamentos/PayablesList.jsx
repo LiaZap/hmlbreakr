@@ -38,16 +38,16 @@ const PayablesList = () => {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-text-strong">Contas a Pagar</h1>
           <p className="text-xs text-text-muted mt-0.5">
             Total pendente: <span className="text-danger font-semibold">{fmtBRL(pendingTotal)}</span>
           </p>
         </div>
-        <Button variant="primary" onClick={() => setEditing('new')}
+        <Button variant="primary" onClick={() => setEditing('new')} className="w-full sm:w-auto"
           icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>}>
-          Nova Conta a Pagar
+          <span className="sm:hidden">Nova</span><span className="hidden sm:inline">Nova Conta a Pagar</span>
         </Button>
       </div>
 

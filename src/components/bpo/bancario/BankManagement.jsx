@@ -446,7 +446,7 @@ const TransferModal = ({ onClose, onSaved }) => {
           </select>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Input label="Valor" type="number" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} placeholder="0,00" required />
           <Input label="Taxa (TED/DOC)" type="number" value={form.fee} onChange={(v) => setForm({ ...form, fee: v })} placeholder="0,00" />
           <Input label="Data" type="date" value={form.date} onChange={(v) => setForm({ ...form, date: v })} />

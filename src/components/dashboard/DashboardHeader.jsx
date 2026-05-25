@@ -95,11 +95,11 @@ const DashboardHeader = ({ data, onNavigate }) => {
                   <button onClick={() => setIsEditingRestaurant(false)} className="text-[#666] hover:text-white text-[11px] px-1">✕</button>
                 </div>
               ) : isAdminViewing ? (
-                <span className="font-semibold text-[13px] md:text-[14px] text-[#959387]">{data.restaurant.name}</span>
+                <span className="font-semibold text-[13px] md:text-[14px] text-[#959387] truncate block max-w-[180px] sm:max-w-[240px] md:max-w-none">{data.restaurant.name}</span>
               ) : (
-                <button onClick={handleEditRestaurantName} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none">
-                   <span className="font-semibold text-[13px] md:text-[14px] text-[#959387]">{data.restaurant.name}</span>
-                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
+                <button onClick={handleEditRestaurantName} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer focus:outline-none max-w-full">
+                   <span className="font-semibold text-[13px] md:text-[14px] text-[#959387] truncate block max-w-[160px] sm:max-w-[220px] md:max-w-none">{data.restaurant.name}</span>
+                   <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="shrink-0">
                       <path d="M1 1L5 5L9 1" stroke="#595959" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                    </svg>
                 </button>
