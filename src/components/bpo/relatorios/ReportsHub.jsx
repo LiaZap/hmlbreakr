@@ -247,19 +247,24 @@ const PayablesReport = ({ qs }) => {
 
       <Table>
         <thead><tr>
-          <Th>Vencimento</Th><Th>Fornecedor</Th><Th>Descrição</Th><Th>Categoria</Th>
-          <Th align="right">Valor</Th><Th align="right">Saldo</Th><Th>Status</Th>
+          <Th>Vencimento</Th>
+          <Th>Fornecedor</Th>
+          <Th className="hidden md:table-cell">Descrição</Th>
+          <Th className="hidden sm:table-cell">Categoria</Th>
+          <Th align="right">Valor</Th>
+          <Th align="right" className="hidden sm:table-cell">Saldo</Th>
+          <Th className="hidden sm:table-cell">Status</Th>
         </tr></thead>
         <tbody>
           {data.items.map((p) => (
             <Tr key={p.id}>
               <Td>{fmtDate(p.dueDate)}</Td>
               <Td className="font-medium">{p.supplier?.name || '—'}</Td>
-              <Td className="text-xs text-text-muted">{p.description || '—'}</Td>
-              <Td>{p.category ? <Badge variant="default">{p.category.name}</Badge> : '—'}</Td>
+              <Td className="text-xs text-text-muted hidden md:table-cell">{p.description || '—'}</Td>
+              <Td className="hidden sm:table-cell">{p.category ? <Badge variant="default">{p.category.name}</Badge> : '—'}</Td>
               <Td align="right" className="tabular-nums">{fmtBRL(p.amount)}</Td>
-              <Td align="right" className={`tabular-nums ${Number(p.remainingAmount) > 0 ? 'text-danger font-semibold' : 'text-text-subtle'}`}>{fmtBRL(p.remainingAmount)}</Td>
-              <Td><Badge variant={p.status === 'paid' ? 'success' : 'default'}>{p.status}</Badge></Td>
+              <Td align="right" className={`tabular-nums hidden sm:table-cell ${Number(p.remainingAmount) > 0 ? 'text-danger font-semibold' : 'text-text-subtle'}`}>{fmtBRL(p.remainingAmount)}</Td>
+              <Td className="hidden sm:table-cell"><Badge variant={p.status === 'paid' ? 'success' : 'default'}>{p.status}</Badge></Td>
             </Tr>
           ))}
         </tbody>
@@ -292,19 +297,24 @@ const ReceivablesReport = ({ qs }) => {
 
       <Table>
         <thead><tr>
-          <Th>Vencimento</Th><Th>Pagador</Th><Th>Forma Pagto</Th><Th>Categoria</Th>
-          <Th align="right">Valor</Th><Th align="right">Saldo</Th><Th>Status</Th>
+          <Th>Vencimento</Th>
+          <Th>Pagador</Th>
+          <Th className="hidden md:table-cell">Forma Pagto</Th>
+          <Th className="hidden sm:table-cell">Categoria</Th>
+          <Th align="right">Valor</Th>
+          <Th align="right" className="hidden sm:table-cell">Saldo</Th>
+          <Th className="hidden sm:table-cell">Status</Th>
         </tr></thead>
         <tbody>
           {data.items.map((r) => (
             <Tr key={r.id}>
               <Td>{fmtDate(r.dueDate)}</Td>
               <Td className="font-medium">{r.payerName}</Td>
-              <Td>{r.paymentMethod ? <Badge variant="info">{r.paymentMethod.name}</Badge> : '—'}</Td>
-              <Td>{r.category ? <Badge variant="default">{r.category.name}</Badge> : '—'}</Td>
+              <Td className="hidden md:table-cell">{r.paymentMethod ? <Badge variant="info">{r.paymentMethod.name}</Badge> : '—'}</Td>
+              <Td className="hidden sm:table-cell">{r.category ? <Badge variant="default">{r.category.name}</Badge> : '—'}</Td>
               <Td align="right" className="tabular-nums">{fmtBRL(r.amount)}</Td>
-              <Td align="right" className={`tabular-nums ${Number(r.remainingAmount) > 0 ? 'text-success font-semibold' : 'text-text-subtle'}`}>{fmtBRL(r.remainingAmount)}</Td>
-              <Td><Badge variant={r.status === 'received' ? 'success' : 'default'}>{r.status}</Badge></Td>
+              <Td align="right" className={`tabular-nums hidden sm:table-cell ${Number(r.remainingAmount) > 0 ? 'text-success font-semibold' : 'text-text-subtle'}`}>{fmtBRL(r.remainingAmount)}</Td>
+              <Td className="hidden sm:table-cell"><Badge variant={r.status === 'received' ? 'success' : 'default'}>{r.status}</Badge></Td>
             </Tr>
           ))}
         </tbody>
@@ -337,7 +347,10 @@ const TransactionsReport = ({ qs }) => {
 
       <Table>
         <thead><tr>
-          <Th>Data</Th><Th>Tipo</Th><Th>Origem</Th><Th>Banco</Th>
+          <Th>Data</Th>
+          <Th>Tipo</Th>
+          <Th>Origem</Th>
+          <Th className="hidden md:table-cell">Banco</Th>
           <Th align="right">Valor</Th>
         </tr></thead>
         <tbody>
@@ -346,7 +359,7 @@ const TransactionsReport = ({ qs }) => {
               <Td>{fmtDate(t.paidAt)}</Td>
               <Td><Badge variant={t.payableId ? 'danger' : 'success'}>{t.payableId ? 'Saída' : 'Entrada'}</Badge></Td>
               <Td className="font-medium">{t.payable ? t.payable.supplier?.name : t.receivable?.payerName}</Td>
-              <Td className="text-xs text-text-muted">{t.bankAccount?.bankName} / {t.bankAccount?.account}</Td>
+              <Td className="text-xs text-text-muted hidden md:table-cell">{t.bankAccount?.bankName} / {t.bankAccount?.account}</Td>
               <Td align="right" className={`tabular-nums font-semibold ${t.payableId ? 'text-danger' : 'text-success'}`}>
                 {t.payableId ? '-' : '+'}{fmtBRL(t.amount)}
               </Td>
@@ -467,20 +480,20 @@ const CashFlowReport = ({ qs }) => {
             <thead><tr>
               <Th>Período</Th>
               <Th align="right">Entrada real</Th>
-              <Th align="right">Entrada projetada</Th>
+              <Th align="right" className="hidden md:table-cell">Entrada proj.</Th>
               <Th align="right">Saída real</Th>
-              <Th align="right">Saída projetada</Th>
-              <Th align="right">Saldo acumulado</Th>
+              <Th align="right" className="hidden md:table-cell">Saída proj.</Th>
+              <Th align="right" className="hidden sm:table-cell">Saldo acum.</Th>
             </tr></thead>
             <tbody>
               {data.series.map((s) => (
                 <Tr key={s.period}>
                   <Td className="text-xs text-text-muted">{s.period}</Td>
                   <Td align="right" className="text-success tabular-nums">{s.realInflow > 0 ? fmtBRL(s.realInflow) : '—'}</Td>
-                  <Td align="right" className="text-success/60 tabular-nums">{s.projInflow > 0 ? fmtBRL(s.projInflow) : '—'}</Td>
+                  <Td align="right" className="text-success/60 tabular-nums hidden md:table-cell">{s.projInflow > 0 ? fmtBRL(s.projInflow) : '—'}</Td>
                   <Td align="right" className="text-danger tabular-nums">{s.realOutflow > 0 ? fmtBRL(s.realOutflow) : '—'}</Td>
-                  <Td align="right" className="text-danger/60 tabular-nums">{s.projOutflow > 0 ? fmtBRL(s.projOutflow) : '—'}</Td>
-                  <Td align="right" className="font-semibold tabular-nums text-text-strong">{fmtBRL(s.balance)}</Td>
+                  <Td align="right" className="text-danger/60 tabular-nums hidden md:table-cell">{s.projOutflow > 0 ? fmtBRL(s.projOutflow) : '—'}</Td>
+                  <Td align="right" className="font-semibold tabular-nums text-text-strong hidden sm:table-cell">{fmtBRL(s.balance)}</Td>
                 </Tr>
               ))}
             </tbody>

@@ -124,16 +124,20 @@ const ReconciliationTab = () => {
       ) : (
         <Table>
           <thead><tr>
-            <Th>Data</Th><Th>Descrição</Th><Th>Conta</Th>
-            <Th>Tipo</Th><Th align="right">Valor</Th><Th align="right">Ação</Th>
+            <Th>Data</Th>
+            <Th>Descrição</Th>
+            <Th className="hidden md:table-cell">Conta</Th>
+            <Th className="hidden sm:table-cell">Tipo</Th>
+            <Th align="right">Valor</Th>
+            <Th align="right">Ação</Th>
           </tr></thead>
           <tbody>
             {transactions.map((t) => (
               <Tr key={t.id}>
                 <Td>{fmtDate(t.date)}</Td>
                 <Td className="text-xs">{t.description}</Td>
-                <Td className="text-xs text-text-muted">{t.bankAccount?.bankName} {t.bankAccount?.account}</Td>
-                <Td><Badge variant={t.type === 'credit' ? 'success' : 'danger'}>{t.type === 'credit' ? 'Entrada' : 'Saída'}</Badge></Td>
+                <Td className="text-xs text-text-muted hidden md:table-cell">{t.bankAccount?.bankName} {t.bankAccount?.account}</Td>
+                <Td className="hidden sm:table-cell"><Badge variant={t.type === 'credit' ? 'success' : 'danger'}>{t.type === 'credit' ? 'Entrada' : 'Saída'}</Badge></Td>
                 <Td align="right" className={`tabular-nums font-semibold ${t.type === 'credit' ? 'text-success' : 'text-danger'}`}>{fmtBRL(t.amount)}</Td>
                 <Td align="right">
                   <Button variant="link" size="sm" onClick={() => setReconciling(t)}>Conciliar</Button>
@@ -358,8 +362,12 @@ const TransfersTab = () => {
       ) : (
         <Table>
           <thead><tr>
-            <Th>Data</Th><Th>De</Th><Th>Para</Th><Th>Descrição</Th>
-            <Th align="right">Taxa</Th><Th align="right">Valor</Th>
+            <Th>Data</Th>
+            <Th>De</Th>
+            <Th>Para</Th>
+            <Th className="hidden md:table-cell">Descrição</Th>
+            <Th align="right" className="hidden sm:table-cell">Taxa</Th>
+            <Th align="right">Valor</Th>
           </tr></thead>
           <tbody>
             {items.map((t) => (
@@ -367,8 +375,8 @@ const TransfersTab = () => {
                 <Td>{fmtDate(t.date)}</Td>
                 <Td className="text-xs">{t.fromAccount?.bankName}</Td>
                 <Td className="text-xs">{t.toAccount?.bankName}</Td>
-                <Td className="text-xs text-text-muted">{t.description}</Td>
-                <Td align="right" className="tabular-nums text-xs">{fmtBRL(t.fee)}</Td>
+                <Td className="text-xs text-text-muted hidden md:table-cell">{t.description}</Td>
+                <Td align="right" className="tabular-nums text-xs hidden sm:table-cell">{fmtBRL(t.fee)}</Td>
                 <Td align="right" className="tabular-nums font-semibold">{fmtBRL(t.amount)}</Td>
               </Tr>
             ))}

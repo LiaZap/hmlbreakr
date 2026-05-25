@@ -345,12 +345,24 @@ export const Tooltip = ({ content, children, position = 'top', className = '' })
 // TABLE — base pra listas de cadastros / lançamentos BPO
 // ============================================================================
 
+/**
+ * Table — base pra listas de cadastros/lançamentos BPO.
+ *
+ * Em mobile (375px) a tabela tem min-w-[640px] e scrolla horizontalmente.
+ * Adicionamos um gradient fade na direita pra indicar visualmente que tem
+ * mais conteúdo (antes o usuário não percebia o scroll).
+ *
+ * Pra esconder colunas em mobile, use as classes:
+ *   <Th className="hidden md:table-cell">   → some <md
+ *   <Th className="hidden sm:table-cell">   → some <sm (mantém mais)
+ */
 export const Table = ({ children, className = '' }) => (
-  <div className={`bg-bg-card border border-border-strong rounded-2xl overflow-hidden ${className}`}>
-    {/* overflow-x-auto pra scrollar tabela larga em vez de quebrar layout */}
+  <div className={`relative bg-bg-card border border-border-strong rounded-2xl overflow-hidden ${className}`}>
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px]">{children}</table>
+      <table className="w-full min-w-[480px] md:min-w-[640px]">{children}</table>
     </div>
+    {/* Fade gradient direita pra indicar scroll horizontal disponível */}
+    <div className="md:hidden pointer-events-none absolute top-0 right-0 bottom-0 w-8 bg-gradient-to-l from-bg-card to-transparent" />
   </div>
 );
 
@@ -361,7 +373,7 @@ export const Th = ({ children, className = '', align = 'left' }) => (
 );
 
 export const Td = ({ children, className = '', align = 'left' }) => (
-  <td className={`text-${align} text-xs md:text-sm text-text px-3 md:px-4 py-3 border-b border-border-subtle ${className}`}>
+  <td className={`text-${align} text-[13px] md:text-sm text-text px-3 md:px-4 py-3 border-b border-border-subtle ${className}`}>
     {children}
   </td>
 );
