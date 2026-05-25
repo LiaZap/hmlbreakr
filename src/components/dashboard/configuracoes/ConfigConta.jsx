@@ -192,7 +192,7 @@ const ConfigConta = ({ dashboardData, hash }) => {
 
       <div className="flex justify-end mt-5">
         <button type="button" onClick={handleSave} disabled={loading}
-          className="bg-[#F5A623] hover:bg-[#E5961E] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold text-[13px] px-5 py-2.5 rounded-[10px] transition-colors">
+          className="w-full sm:w-auto bg-[#F5A623] hover:bg-[#E5961E] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold text-[13px] px-5 py-3 sm:py-2.5 rounded-[10px] transition-colors">
           {loading ? 'Salvando…' : 'Salvar alterações'}
         </button>
       </div>

@@ -126,9 +126,32 @@ const Configuracoes = ({ onNavigate }) => {
 
       {/* Layout: sidebar interna + content */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-        {/* Sidebar interna */}
-        <aside className="md:w-[240px] lg:w-[260px] shrink-0 border-b md:border-b-0 md:border-r border-white/[0.06] py-3 md:py-5 overflow-x-auto md:overflow-y-auto">
-          <nav className="flex md:flex-col gap-1 px-3 md:px-3 min-w-max md:min-w-0">
+        {/* MOBILE: dropdown nativo no topo (em vez de scroll horizontal que
+            escondia a Zona de perigo fora do viewport).
+            md+: sidebar interna lateral. */}
+        <div className="md:hidden border-b border-white/[0.06] px-4 py-3">
+          <label className="block text-[10px] font-semibold text-[#5C5C5E] uppercase tracking-wider mb-1.5">Seção</label>
+          <div className="relative">
+            <select
+              value={active}
+              onChange={(e) => setActive(e.target.value)}
+              className="w-full appearance-none bg-[#1A1A1A] border border-white/[0.08] rounded-[10px] px-3.5 py-3 pr-10 text-base text-white outline-none focus:border-[#F5A623]/60 transition-colors"
+            >
+              {SECTIONS.map(s => (
+                <option key={s.id} value={s.id} className={s.danger ? 'text-[#E5484D]' : ''}>
+                  {s.label} — {s.description}
+                </option>
+              ))}
+            </select>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+              <path d="M6 9l6 6 6-6" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        </div>
+
+        {/* DESKTOP: sidebar interna vertical */}
+        <aside className="hidden md:flex md:w-[240px] lg:w-[260px] shrink-0 border-r border-white/[0.06] py-5 overflow-y-auto">
+          <nav className="flex flex-col gap-1 px-3 w-full">
             {SECTIONS.map(s => {
               const isActive = active === s.id;
               const isDanger = s.danger;
@@ -137,7 +160,7 @@ const Configuracoes = ({ onNavigate }) => {
                   key={s.id}
                   type="button"
                   onClick={() => setActive(s.id)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-left transition-colors shrink-0 md:shrink min-w-[160px] md:min-w-0 ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-left transition-colors ${
                     isActive
                       ? (isDanger ? 'bg-[#E5484D]/10 text-[#E5484D]' : 'bg-white/[0.06] text-white')
                       : (isDanger ? 'text-[#868686] hover:text-[#E5484D] hover:bg-[#E5484D]/5' : 'text-[#868686] hover:text-white hover:bg-white/[0.03]')
@@ -146,7 +169,7 @@ const Configuracoes = ({ onNavigate }) => {
                   <span className="shrink-0">{s.icon}</span>
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-semibold leading-tight">{s.label}</div>
-                    <div className="text-[10px] text-[#5C5C5E] leading-tight mt-0.5 hidden md:block">{s.description}</div>
+                    <div className="text-[10px] text-[#5C5C5E] leading-tight mt-0.5">{s.description}</div>
                   </div>
                 </button>
               );
@@ -155,7 +178,7 @@ const Configuracoes = ({ onNavigate }) => {
         </aside>
 
         {/* Content principal */}
-        <main className="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 lg:px-12 py-6 md:py-8">
+        <main className="flex-1 min-h-0 overflow-y-auto px-3 md:px-8 lg:px-12 py-5 md:py-8">
           <div className="max-w-[680px] mx-auto">
             {renderContent()}
           </div>

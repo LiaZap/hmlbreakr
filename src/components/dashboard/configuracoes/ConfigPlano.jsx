@@ -122,7 +122,7 @@ const ConfigPlano = ({ dashboardData, hash, onNavigate }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/[0.04]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/[0.04]">
             <div>
               <div className="text-[10px] text-[#5C5C5E] uppercase tracking-wider font-semibold mb-1">Plano</div>
               <div className="text-[13px] font-semibold text-white">

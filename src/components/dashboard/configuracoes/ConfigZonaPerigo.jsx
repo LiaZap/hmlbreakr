@@ -160,14 +160,14 @@ const Step1Warnings = ({ hash, onBack, onContinue }) => {
           </div>
         </div>
 
-        {/* Acoes */}
-        <div className="flex justify-between pt-3 border-t border-white/[0.04]">
+        {/* Acoes — em mobile empilha (Continuar em cima, Voltar embaixo) */}
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 pt-3 border-t border-white/[0.04]">
           <button type="button" onClick={onBack}
-            className="text-[12px] text-[#868686] hover:text-white font-semibold transition-colors px-3 py-2">
+            className="text-[12px] text-[#868686] hover:text-white font-semibold transition-colors px-3 py-2.5 sm:py-2">
             ← Voltar
           </button>
           <button type="button" onClick={onContinue} disabled={!allAck}
-            className="bg-[#E5484D] hover:bg-[#C73B40] disabled:bg-[#2A2A2C] disabled:text-[#5C5C5E] disabled:cursor-not-allowed text-white font-bold text-[12px] px-5 py-2.5 rounded-[10px] transition-colors">
+            className="bg-[#E5484D] hover:bg-[#C73B40] disabled:bg-[#2A2A2C] disabled:text-[#5C5C5E] disabled:cursor-not-allowed text-white font-bold text-[12px] px-5 py-2.5 rounded-[10px] transition-colors w-full sm:w-auto">
             Continuar para confirmação
           </button>
         </div>
@@ -233,8 +233,15 @@ const Step2Confirm = ({ hash, restaurantName, userEmail, onBack }) => {
 
       <div className="px-5 py-5 bg-[#0F0F11]">
         <div className="bg-[#E5484D]/[0.08] border border-[#E5484D]/30 rounded-[10px] p-4 mb-5">
-          <p className="text-[12px] text-white font-semibold mb-1">⚠ Última oportunidade para voltar atrás</p>
-          <p className="text-[11px] text-[#CFCFCF] leading-relaxed">
+          <div className="flex items-start gap-2 mb-1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E5484D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <p className="text-[12px] text-white font-semibold">Última oportunidade para voltar atrás</p>
+          </div>
+          <p className="text-[11px] text-[#CFCFCF] leading-relaxed pl-6">
             Você está prestes a excluir <strong className="text-[#E5484D]">{restaurantName}</strong> permanentemente.
             Não há como desfazer.
           </p>
@@ -290,13 +297,13 @@ const Step2Confirm = ({ hash, restaurantName, userEmail, onBack }) => {
           </div>
         )}
 
-        <div className="flex justify-between mt-6 pt-5 border-t border-white/[0.04]">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-6 pt-5 border-t border-white/[0.04]">
           <button type="button" onClick={onBack} disabled={loading}
-            className="text-[12px] text-[#868686] hover:text-white font-semibold transition-colors px-3 py-2 disabled:opacity-50">
+            className="text-[12px] text-[#868686] hover:text-white font-semibold transition-colors px-3 py-2.5 sm:py-2 disabled:opacity-50">
             ← Voltar
           </button>
           <button type="button" onClick={handleSubmit} disabled={!canSubmit}
-            className="bg-[#E5484D] hover:bg-[#C73B40] disabled:bg-[#2A2A2C] disabled:text-[#5C5C5E] disabled:cursor-not-allowed text-white font-bold text-[12px] px-5 py-2.5 rounded-[10px] transition-colors">
+            className="bg-[#E5484D] hover:bg-[#C73B40] disabled:bg-[#2A2A2C] disabled:text-[#5C5C5E] disabled:cursor-not-allowed text-white font-bold text-[12px] px-5 py-2.5 rounded-[10px] transition-colors w-full sm:w-auto">
             {loading ? 'Excluindo…' : unlocked ? 'Excluir permanentemente' : `Aguarde ${countdown}s…`}
           </button>
         </div>
@@ -308,7 +315,7 @@ const Step2Confirm = ({ hash, restaurantName, userEmail, onBack }) => {
 // ─── Subcomponentes ──────────────────────────────────────────────────────────
 
 const StepHeader = ({ current }) => (
-  <div className="px-5 py-3 bg-[#E5484D]/10 border-b border-[#E5484D]/20 flex items-center gap-3">
+  <div className="px-4 sm:px-5 py-3 bg-[#E5484D]/10 border-b border-[#E5484D]/20 flex items-center gap-2 sm:gap-3 flex-wrap">
     {[1, 2].map(n => (
       <div key={n} className="flex items-center gap-2">
         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${
@@ -320,7 +327,7 @@ const StepHeader = ({ current }) => (
         {n < 2 && <div className={`w-8 h-px ${n < current ? 'bg-[#E5484D]/40' : 'bg-[#252527]'}`} />}
       </div>
     ))}
-    <span className="text-[11px] text-[#CFCFCF] font-semibold ml-2">
+    <span className="text-[11px] text-[#CFCFCF] font-semibold ml-2 hidden sm:inline">
       {current === 1 ? 'Avisos e consentimento' : 'Confirmação final'}
     </span>
   </div>

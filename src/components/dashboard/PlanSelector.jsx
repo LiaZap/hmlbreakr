@@ -82,7 +82,7 @@ const PlanSelector = ({ hash, className = '' }) => {
 
   return (
     <div className={className}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-4">
         {plans.map(plan => (
           <PlanCard
             key={plan.slug}
