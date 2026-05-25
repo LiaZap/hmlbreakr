@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import InfoTooltip from './InfoTooltip';
 
 const MoneyOnTable = ({ data }) => {
   const [activeIdx, setActiveIdx] = useState(null);
@@ -32,8 +33,15 @@ const MoneyOnTable = ({ data }) => {
         <span className="font-semibold text-[14px] md:text-[16px] text-[#FF9406]">R$</span>
         <span className="font-semibold text-[20px] md:text-[24px] text-white tracking-tight">{data.total}</span>
         {data.percentage && data.percentage !== "0%" && (
-          <div className="ml-auto shrink-0 flex items-center justify-center bg-[#FD8989]/15 rounded-md px-2.5 h-[24px]">
-             <span className="text-[#FD8989] text-[10px] font-bold">{data.percentage}</span>
+          <div className="ml-auto shrink-0">
+            <InfoTooltip
+              position="bottom-left"
+              content={`Você está deixando ${data.percentage} do seu faturamento na mesa por decisões operacionais (taxas de marketplace, custos fixos elevados e perdas que podem ser recuperadas).`}
+            >
+              <div className="flex items-center justify-center bg-[#FD8989]/15 rounded-md px-2.5 h-[24px] cursor-help hover:bg-[#FD8989]/25 transition-colors">
+                <span className="text-[#FD8989] text-[10px] font-bold">{data.percentage}</span>
+              </div>
+            </InfoTooltip>
           </div>
         )}
       </div>
