@@ -19,19 +19,57 @@ const PORT = process.env.PORT || 3001;
 // Trust proxy (required behind Easypanel/Traefik reverse proxy)
 app.set('trust proxy', 1);
 
-// Security Middleware — allow Clerk SDK scripts and connections
+// Security Middleware — CSP cobrindo Clerk (Dev e Prod), Cloudflare
+// Turnstile CAPTCHA, Stripe Checkout, e telemetria.
+//
+// Fontes oficiais Clerk:
+//   https://clerk.com/docs/security/clerk-csp
+const CLERK_PROD_DOMAIN = 'https://clerk.breakr.com.br';
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com", "'unsafe-inline'"],
-      scriptSrcElem: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com", "'unsafe-inline'"],
-      connectSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com", "https://api.clerk.com"],
-      imgSrc: ["'self'", "data:", "https://*.clerk.com", "https://img.clerk.com"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      frameSrc: ["'self'", "https://*.clerk.accounts.dev", "https://*.clerk.com"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'", // Clerk SDK exige (script interno usa eval pra parse)
+        "https://*.clerk.accounts.dev", CLERK_PROD_DOMAIN,
+        "https://*.clerk.com",
+        "https://challenges.cloudflare.com", // Turnstile CAPTCHA
+        "https://js.stripe.com", // Stripe Checkout
+      ],
+      scriptSrcElem: [
+        "'self'", "'unsafe-inline'",
+        "https://*.clerk.accounts.dev", CLERK_PROD_DOMAIN,
+        "https://*.clerk.com",
+        "https://challenges.cloudflare.com",
+        "https://js.stripe.com",
+      ],
+      connectSrc: [
+        "'self'",
+        "https://*.clerk.accounts.dev", CLERK_PROD_DOMAIN,
+        "https://*.clerk.com", "https://api.clerk.com",
+        "https://clerk-telemetry.com", "https://*.clerk-telemetry.com",
+        "https://challenges.cloudflare.com",
+        "https://api.stripe.com",
+      ],
+      imgSrc: [
+        "'self'", "data:", "blob:",
+        "https://*.clerk.com", "https://img.clerk.com",
+        "https://*.stripe.com",
+      ],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      styleSrcElem: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      frameSrc: [
+        "'self'",
+        "https://*.clerk.accounts.dev", CLERK_PROD_DOMAIN,
+        "https://*.clerk.com",
+        "https://challenges.cloudflare.com", // Turnstile iframe
+        "https://js.stripe.com", "https://hooks.stripe.com",
+      ],
       workerSrc: ["'self'", "blob:"],
       fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+      formAction: ["'self'", "https://challenges.cloudflare.com"],
     },
   },
 }));
