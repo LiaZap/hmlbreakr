@@ -5,6 +5,7 @@
  * Para alterar email exige senha atual (anti-takeover, sec F5).
  */
 import { useState, useEffect, useRef } from 'react';
+import { useDashboard } from '../../../context/DashboardContext';
 import SectionHeader from './_SectionHeader';
 
 const toDisplayDate = (val) => {
@@ -17,6 +18,7 @@ const toDisplayDate = (val) => {
 };
 
 const ConfigConta = ({ dashboardData, hash }) => {
+  const { updateDashboardData } = useDashboard();
   const initialName     = dashboardData?.user?.name || '';
   const initialEmail    = dashboardData?._clientEmail || '';
   const initialPhone    = dashboardData?._profile?.phone || '';
@@ -90,6 +92,29 @@ const ConfigConta = ({ dashboardData, hash }) => {
         setLoading(false);
         return;
       }
+
+      // Atualiza state local DO CONTEXTO pra a UI refletir as mudanças
+      // imediatamente (foto/nome no avatar do header etc.) sem precisar
+      // de F5. skipSync: true porque o backend já foi atualizado pelo
+      // PUT acima — não disparar sync redundante.
+      const patch = {};
+      if (payload.name)  patch.user = { ...(dashboardData.user || {}), name: payload.name, initials: payload.name.substring(0,2).toUpperCase() };
+      if (payload.photo) patch.user = { ...(patch.user || dashboardData.user || {}), photo: payload.photo };
+      if (payload.email) patch._clientEmail = payload.email;
+      const profilePatch = {};
+      if (payload.phone)    profilePatch.phone = payload.phone;
+      if (payload.cpf)      profilePatch.cpf = payload.cpf;
+      if (payload.birthday) profilePatch.birthday = payload.birthday;
+      if (payload.photo)    profilePatch.photo = payload.photo;
+      if (payload.name)     profilePatch.name = payload.name;
+      if (Object.keys(profilePatch).length) {
+        patch._profile = { ...(dashboardData._profile || {}), ...profilePatch };
+        patch.profile  = { ...(dashboardData.profile  || {}), ...profilePatch };
+      }
+      if (Object.keys(patch).length) {
+        updateDashboardData(patch, { skipSync: true });
+      }
+
       setSuccess('Alterações salvas com sucesso.');
       setOldPassword('');
     } catch (err) {
