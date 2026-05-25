@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SignIn, SignUp } from '@clerk/clerk-react';
+import { SignIn } from '@clerk/clerk-react';
 import boltIcon from '../assets/bolt.svg';
 import { setAdminSession } from '../utils/adminAuth';
 
@@ -218,10 +218,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
               )}
 
               {tab === 'signup' && (
-                <SignUp
-                  routing="virtual"
-                  appearance={undefined}
-                />
+                <SignupRedirect />
               )}
 
               {tab === 'agency' && (
@@ -236,6 +233,49 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
           </AnimatePresence>
         </div>
       </motion.div>
+    </div>
+  );
+};
+
+// ─── SignupRedirect ──────────────────────────────────────────────────────────
+// TEMPORARIO (FISPAL 2026): a aba "Criar conta" redireciona pro Hub onde
+// estao os 3 planos com Payment Link Stripe (FISPAL/Mensal/Anual). Cliente
+// paga la → webhook /api/stripe/webhook auto-cria a conta no Breakr →
+// welcome email com link magico pra entrar no app.
+//
+// Quando o Clerk Production estiver 100% estavel + verificacao Google
+// aprovada, voltar o <SignUp routing="virtual" /> aqui pra cadastro
+// direto pelo widget Clerk.
+const SignupRedirect = () => {
+  const HUB_URL = 'https://hub.breakr.com.br/';
+  return (
+    <div className="flex flex-col items-center text-center gap-5 py-4">
+      <div className="w-14 h-14 rounded-full bg-[#F5A623]/15 flex items-center justify-center">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F5A623" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3"/>
+        </svg>
+      </div>
+      <div>
+        <h2 className="text-[16px] font-bold text-white mb-1.5">Comece sua jornada no Breakr</h2>
+        <p className="text-[12px] text-[#A0A0A0] leading-relaxed max-w-[300px] mx-auto">
+          Escolha o plano ideal pro seu restaurante no nosso hub.
+          Depois do pagamento sua conta é criada automaticamente.
+        </p>
+      </div>
+      <a
+        href={HUB_URL}
+        target="_self"
+        rel="noopener"
+        className="w-full bg-[#F5A623] hover:bg-[#E5961E] text-black font-bold text-[14px] rounded-[12px] py-3.5 transition-colors flex items-center justify-center gap-2"
+      >
+        Ver planos e criar conta
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 17L17 7M17 7H8M17 7V16"/>
+        </svg>
+      </a>
+      <p className="text-[10px] text-[#5C5C5E]">
+        Já tem conta? Use a aba <span className="text-[#F5A623] font-semibold">Entrar</span> ao lado.
+      </p>
     </div>
   );
 };
