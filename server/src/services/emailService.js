@@ -122,7 +122,7 @@ async function sendWelcomeEmail({ to, clientName, hash }) {
       Olá, ${clientName}!
     </p>
     <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#666;">
-      Sua conta no <strong style="color:#111;">Breakr</strong> foi criada. Acesse agora e configure as informações do seu restaurante para começar a usar a plataforma e colher os primeiros resultados.
+      Sua conta no <strong style="color:#111;">Breakr Hub</strong> foi criada. Acesse agora e configure as informações do seu restaurante para começar a usar a plataforma e colher os primeiros resultados.
     </p>
 
     <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#333;">Comece agora:</p>
