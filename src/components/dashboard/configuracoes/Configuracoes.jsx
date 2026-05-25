@@ -13,6 +13,7 @@
  *   - Zona de perigo (excluir conta) — vermelho, isolado
  */
 import { useState, useEffect } from 'react';
+import { useClerk } from '@clerk/clerk-react';
 import { useDashboard } from '../../../context/DashboardContext';
 import ConfigConta from './ConfigConta';
 import ConfigSeguranca from './ConfigSeguranca';
@@ -81,7 +82,19 @@ const SECTIONS = [
 
 const Configuracoes = ({ onNavigate }) => {
   const { dashboardData } = useDashboard();
+  const { signOut } = useClerk();
   const hash = new URLSearchParams(window.location.search).get('hash');
+
+  // Sair: signOut do Clerk (se tiver sessao) + limpa sessionStorage local
+  // (para legacy bcrypt sem Clerk) + redirect pra /. Funciona pros dois fluxos.
+  const handleLogout = async () => {
+    try { await signOut(); } catch { /* ignore — pode nao ter sessao Clerk */ }
+    try {
+      sessionStorage.clear();
+      localStorage.removeItem('breakr-token');
+    } catch { /* ignore */ }
+    window.location.href = '/';
+  };
 
   // Permite deep-link via ?config=seguranca por exemplo (futuro)
   const [active, setActive] = useState(() => {
@@ -112,16 +125,32 @@ const Configuracoes = ({ onNavigate }) => {
   return (
     <div className="w-full h-full flex flex-col bg-[#0F0F11] font-jakarta text-white">
       {/* Header da pagina */}
-      <div className="px-4 md:px-8 py-5 md:py-6 border-b border-white/[0.06]">
-        <div className="flex items-baseline gap-2 flex-wrap mb-1">
-          <span className="text-[10px] md:text-[11px] text-[#5C5C5E] font-medium uppercase tracking-wider shrink-0">
-            Breakr <span className="opacity-50 mx-0.5">›</span> Conta <span className="opacity-50 mx-1">·</span>
-          </span>
-          <h1 className="text-[20px] md:text-[24px] font-bold text-white leading-none">Configurações</h1>
+      <div className="px-4 md:px-8 py-5 md:py-6 border-b border-white/[0.06] flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2 flex-wrap mb-1">
+            <span className="text-[10px] md:text-[11px] text-[#5C5C5E] font-medium uppercase tracking-wider shrink-0">
+              Breakr <span className="opacity-50 mx-0.5">›</span> Conta <span className="opacity-50 mx-1">·</span>
+            </span>
+            <h1 className="text-[20px] md:text-[24px] font-bold text-white leading-none">Configurações</h1>
+          </div>
+          <p className="text-[12px] text-[#868686]">
+            Gerencie sua conta, plano e preferências de privacidade.
+          </p>
         </div>
-        <p className="text-[12px] text-[#868686]">
-          Gerencie sua conta, plano e preferências de privacidade.
-        </p>
+        {/* Botao Sair — sempre visivel em qualquer aba das Configuracoes */}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="shrink-0 flex items-center gap-2 px-3 py-2 bg-[#1A1A1A] hover:bg-[#252527] border border-white/[0.08] hover:border-[#E5484D]/40 text-[#A0A0A0] hover:text-[#E5484D] rounded-[10px] text-[12px] font-semibold transition-colors"
+          title="Sair do sistema"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span className="hidden sm:inline">Sair</span>
+        </button>
       </div>
 
       {/* Layout: sidebar interna + content */}

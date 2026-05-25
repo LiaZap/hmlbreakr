@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SignIn } from '@clerk/clerk-react';
+import ForgotPasswordModal from './ForgotPasswordModal';
 import boltIcon from '../assets/bolt.svg';
 import { setAdminSession } from '../utils/adminAuth';
 
@@ -143,6 +144,7 @@ const AdminLoginTab = ({ onLogin, onAdminLogin }) => {
 const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
   const [tab, setTab] = useState('login');
   const [logoClicks, setLogoClicks] = useState(0);
+  const [showForgotPwd, setShowForgotPwd] = useState(false);
   const showAdmin = logoClicks >= 5;
 
   const mainTabs = [
@@ -211,10 +213,24 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
             <motion.div key={tab} initial={{ opacity: 0, x: tab === 'signup' ? 20 : tab === 'agency' ? 20 : -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
 
               {tab === 'login' && (
-                <SignIn
-                  routing="virtual"
-                  appearance={undefined}
-                />
+                <>
+                  <SignIn
+                    routing="virtual"
+                    appearance={undefined}
+                  />
+                  {/* Link 'Esqueci minha senha' — fallback pra clientes legacy
+                      bcrypt que nao tem sessao Clerk (Clerk widget tem proprio,
+                      mas nao funciona pra usuarios fora do Clerk). */}
+                  <div className="mt-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPwd(true)}
+                      className="text-[12px] text-[#868686] hover:text-[#F5A623] transition-colors font-medium"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
+                </>
               )}
 
               {tab === 'signup' && (
@@ -233,6 +249,9 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
           </AnimatePresence>
         </div>
       </motion.div>
+
+      {/* Modal de Esqueci minha senha (legacy bcrypt) */}
+      {showForgotPwd && <ForgotPasswordModal onClose={() => setShowForgotPwd(false)} />}
     </div>
   );
 };
