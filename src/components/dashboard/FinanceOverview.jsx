@@ -55,9 +55,14 @@ const FinanceOverview = ({ data, onSelectMonth }) => {
       <div className="h-[60px] flex items-end justify-between gap-[3px] w-full mb-4 px-1 relative">
         {useTimeline ? (() => {
             // Timeline mode: oldest → newest, left → right
-            const maxVal = Math.max(...timeline.map(e => e.value), 1);
-            const lastKey = timeline[timeline.length - 1]?.key;
-            return timeline.map((entry) => {
+            // Limita aos ULTIMOS 12 MESES pra nao quebrar o layout quando o
+            // historico cresce alem disso (Jan/24 ate hoje ja sao 17+ barras
+            // que estouravam a largura do card). Mais que 12 fica ilegivel
+            // mesmo em desktop.
+            const timeline12 = timeline.slice(-12);
+            const maxVal = Math.max(...timeline12.map(e => e.value), 1);
+            const lastKey = timeline12[timeline12.length - 1]?.key;
+            return timeline12.map((entry) => {
               const isMostRecent = entry.key === lastKey;
               const isSelected = selectedKey === entry.key;
               const hasData = entry.value > 0;

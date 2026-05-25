@@ -38,30 +38,21 @@ const emailWrapper = (content) => `
     <tr><td align="center">
       <table width="580" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
 
-        <!-- Logo Header — bolt logo hospedado como SVG estatico em /email-logo.svg
-             (servido pelo Express estatico). Gmail e Outlook bloqueiam data URIs
-             em <img>; URL publica funciona em todos: Gmail, Apple Mail, Outlook,
-             Yahoo, ProtonMail.
+        <!-- Logo Header — wordmark completo "breakr" com gradiente vermelho->laranja,
+             tagline "Assessoria Gastronômica" e simbolo ®. Hospedado como SVG
+             estatico em /email-logo.svg (servido pelo Express). URL publica
+             funciona em Gmail, Apple Mail, Outlook (versoes modernas), Yahoo
+             e ProtonMail.
 
-             Fallback: caso a imagem nao carregue (cliente bloqueia imagens
-             remotas), o ALT 'Breakr' aparece dentro de uma celula com fundo
-             preto pra manter a identidade visual. -->
+             Fallback: ALT "Breakr — Assessoria Gastronomica" dentro de celula
+             preta caso o cliente bloqueie imagens remotas. -->
         <tr>
-          <td style="padding:32px 40px 24px;border-bottom:1px solid #F0F0F0;">
-            <table cellpadding="0" cellspacing="0">
-              <tr>
-                <td width="40" height="40" style="background-color:#000;border-radius:10px;vertical-align:middle;text-align:center;line-height:40px;">
-                  <img
-                    src="${APP_URL}/email-logo.svg"
-                    width="36" height="36" alt="Breakr"
-                    style="display:block;width:36px;height:36px;border:0;outline:none;margin:2px auto;color:#F5A623;font-weight:900;"
-                  />
-                </td>
-                <td style="padding-left:12px;vertical-align:middle;">
-                  <span style="font-size:20px;font-weight:800;color:#111;letter-spacing:-0.5px;">Breakr</span>
-                </td>
-              </tr>
-            </table>
+          <td align="center" style="padding:28px 40px 24px;border-bottom:1px solid #F0F0F0;background:#000;">
+            <img
+              src="${APP_URL}/email-logo.svg"
+              width="220" height="70" alt="Breakr — Assessoria Gastronômica"
+              style="display:block;width:220px;height:auto;border:0;outline:none;"
+            />
           </td>
         </tr>
 
