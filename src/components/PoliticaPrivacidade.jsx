@@ -28,11 +28,11 @@
  */
 
 const APP_NAME = 'Breakr';
-const COMPANY = 'Breakr Tecnologia Ltda.'; // ajustar com razao social real
-const CNPJ = '00.000.000/0001-00'; // placeholder — preencher com CNPJ real
-const DPO_EMAIL = 'privacidade@breakr.com.br';
+const COMPANY = 'BREAKR ASSESSORIA LTDA';
+const CNPJ = '46.539.926/0001-50';
+const DPO_EMAIL = 'juridico@breakr.com.br';
 const SUPPORT_EMAIL = 'contato@breakr.com.br';
-const LAST_UPDATED = '23 de maio de 2026';
+const LAST_UPDATED = '25 de maio de 2026';
 
 const PoliticaPrivacidade = () => {
   return (
