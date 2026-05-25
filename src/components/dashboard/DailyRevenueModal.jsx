@@ -105,7 +105,7 @@ const DailyRevenueModal = ({ isOpen, onClose, onSave, existingEntries = {} }) =>
             value={date}
             max={getSaoPauloDateStr(0)}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[12px] px-4 py-3 text-[14px] text-white outline-none focus:border-[#FF9406] transition-all [color-scheme:dark]"
+            className="w-full bg-[#1A1A1A] border border-[#2A2A2C] rounded-[12px] px-4 py-3 text-base md:text-[14px] text-white outline-none focus:border-[#FF9406] transition-all [color-scheme:dark]"
           />
         </div>
 
@@ -113,14 +113,14 @@ const DailyRevenueModal = ({ isOpen, onClose, onSave, existingEntries = {} }) =>
         <div className="mb-5">
           <label className="block text-[11px] font-semibold text-[#666] mb-1.5 uppercase tracking-wider pl-1">Valor Faturado</label>
           <div className="flex items-center bg-[#1A1A1A] border border-[#2A2A2C] rounded-[12px] px-4 py-3 focus-within:border-[#FF9406] transition-all">
-            <span className="text-[14px] text-[#666] mr-2">R$</span>
+            <span className="text-base md:text-[14px] text-[#666] mr-2">R$</span>
             <input
               type="text"
               inputMode="numeric"
               value={rawValue}
               onChange={handleValueChange}
               placeholder="0,00"
-              className="flex-1 bg-transparent text-[14px] text-white outline-none"
+              className="flex-1 bg-transparent text-base md:text-[14px] text-white outline-none"
             />
           </div>
         </div>

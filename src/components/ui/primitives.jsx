@@ -245,7 +245,7 @@ export const Input = ({
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className={`w-full bg-bg-input border ${error ? 'border-danger' : 'border-border'} rounded-md ${icon ? 'pl-9' : 'pl-3'} pr-3 py-2 text-sm text-text-strong placeholder:text-text-placeholder outline-none focus:border-border-focus disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+        className={`w-full bg-bg-input border ${error ? 'border-danger' : 'border-border'} rounded-md ${icon ? 'pl-9' : 'pl-3'} pr-3 py-2 text-base md:text-sm text-text-strong placeholder:text-text-placeholder outline-none focus:border-border-focus disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
         {...rest}
       />
     </div>
