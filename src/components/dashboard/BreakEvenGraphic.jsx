@@ -71,13 +71,13 @@ const BreakEvenGraphic = ({
 
         {/* Revenue accumulated — main value */}
         {revenueAccumulated && (
-          <text x="100" y="85" textAnchor="middle" fill="#FF9406" fontSize="9" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">
+          <text x="100" y="85" textAnchor="middle" fill="#FF9406" fontSize="11" fontWeight="600" fontFamily="Plus Jakarta Sans, sans-serif">
             R$ {revenueAccumulated}
           </text>
         )}
 
         {/* Break-even target — secondary */}
-        <text x="100" y={revenueAccumulated ? "97" : "90"} textAnchor="middle" fill="#595959" fontSize="8" fontWeight="400" fontFamily="Plus Jakarta Sans, sans-serif">
+        <text x="100" y={revenueAccumulated ? "99" : "92"} textAnchor="middle" fill="#7A7A7A" fontSize="10" fontWeight="500" fontFamily="Plus Jakarta Sans, sans-serif">
           Meta: {value}
         </text>
       </svg>

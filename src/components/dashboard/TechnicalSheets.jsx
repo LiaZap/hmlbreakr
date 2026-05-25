@@ -33,7 +33,7 @@ const TechnicalSheets = ({ data }) => {
             {/* Value */}
             <span className="font-semibold text-[14px] text-[#DDDDDD]">{item.value}</span>
             {/* Label */}
-            <p className="font-normal text-[9px] text-[#7E7E7E] text-center leading-tight">{item.label}</p>
+            <p className="font-normal text-[10px] text-[#7E7E7E] text-center leading-tight">{item.label}</p>
           </div>
         ))}
       </div>

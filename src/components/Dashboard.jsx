@@ -248,14 +248,23 @@ const Dashboard = () => {
               </p>
             </div>
 
-            {/* 4. Pills Grid (Responsive) */}
-            <div className="flex flex-nowrap md:flex-wrap overflow-x-auto gap-1.5 md:gap-2 mb-auto mt-2 md:mt-4 pb-1 md:pb-0 scrollbar-hide">
-               {dashboardData.overview.tags.map((tag, idx) => (
-                 <div key={idx} className="bg-[#151515] border border-[#222] rounded-full px-3 py-1.5 flex items-center gap-2">
+            {/* 4. Pills Grid (Responsive) — fade gradient direita em mobile
+                pra indicar visualmente que tem mais pills via scroll. */}
+            <div className="relative mb-auto mt-2 md:mt-4">
+              <div className="flex flex-nowrap md:flex-wrap overflow-x-auto gap-1.5 md:gap-2 pb-1 md:pb-0 scrollbar-hide">
+                {dashboardData.overview.tags.map((tag, idx) => (
+                  <div key={idx} className="bg-[#151515] border border-[#222] rounded-full px-3 py-1.5 flex items-center gap-2 shrink-0">
                     <span className="text-[10px] text-[#999] whitespace-nowrap">{tag.label}</span>
                     <div className="w-2.5 h-1 rounded-full" style={{ backgroundColor: tag.color || '#FDD789' }} />
-                 </div>
-               ))}
+                  </div>
+                ))}
+              </div>
+              {/* Fade gradient direita — só em mobile (md:hidden) e quando
+                  tem mais de 2 pills (heuristica simples pra não ficar feio
+                  com 1-2 pills). */}
+              {dashboardData.overview.tags.length > 2 && (
+                <div className="md:hidden pointer-events-none absolute top-0 right-0 bottom-0 w-8 bg-gradient-to-l from-[#101010] to-transparent" />
+              )}
             </div>
 
             {/* Bottom Link Removed */}

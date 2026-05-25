@@ -42,7 +42,7 @@ const CostStructure = ({ data }) => {
       </div>
 
       {/* Cost breakdown table */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[10px] mb-4">
+      <div className="grid grid-cols-2 gap-x-3 sm:gap-x-6 gap-y-2 text-[10px] mb-4">
         {data.breakdown.map((item, idx) => (
           <div key={idx} className="flex justify-between">
             <span className="text-[#7E7E7E]">{item.label}</span>

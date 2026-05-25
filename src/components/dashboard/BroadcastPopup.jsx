@@ -37,12 +37,12 @@ const BroadcastPopup = ({ restaurantCategory }) => {
   if (current.type === 'banner') {
     return (
       <div className="w-full bg-[#F5A623] px-4 py-2.5 flex items-center justify-center gap-3 relative z-40">
-        <div className="flex items-center gap-2 flex-1 justify-center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <div className="flex items-center gap-2 flex-1 justify-center min-w-0 pr-8">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          <span className="text-[12px] font-bold text-black">{current.title}</span>
-          <span className="text-[12px] text-black/70">{current.message}</span>
+          <span className="text-[12px] font-bold text-black truncate">{current.title}</span>
+          <span className="text-[12px] text-black/70 truncate hidden sm:inline">{current.message}</span>
         </div>
         <button
           onClick={() => dismiss(current.id)}

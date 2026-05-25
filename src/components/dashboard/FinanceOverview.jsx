@@ -193,7 +193,7 @@ const FinanceOverview = ({ data, onSelectMonth }) => {
                       <div className="relative inline-block">
                         <div className="w-3 h-3 rounded-full bg-[#262626] flex items-center justify-center text-[8px] text-[#595959] font-bold cursor-help peer">?</div>
                         {/* Tooltip on hover */}
-                        <div className="absolute bottom-full left-0 mb-2 hidden peer-hover:block z-50 w-[220px] bg-[#1F1F1F] border border-[#2F2F2F] rounded-[8px] p-2.5 shadow-xl pointer-events-none">
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mb-2 hidden peer-hover:block z-50 w-[200px] sm:w-[220px] max-w-[calc(100vw-32px)] bg-[#1F1F1F] border border-[#2F2F2F] rounded-[8px] p-2.5 shadow-xl pointer-events-none">
                           {card.tooltip && (
                             <div className="text-[10px] text-[#B0B0B0] mb-1.5 leading-snug">{card.tooltip}</div>
                           )}

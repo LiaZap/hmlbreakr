@@ -109,11 +109,11 @@ const MoneyOnTable = ({ data }) => {
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <div className="w-[6px] h-[6px] rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                  <span className="text-[9px] text-[#999] truncate">{item.label}</span>
+                  <span className="text-[10px] text-[#999] truncate">{item.label}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {item.recovered > 0 && (
-                    <span className="text-[8px] font-semibold text-[#00B37E]">↓ R$ {item.recovered.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="text-[9px] sm:text-[10px] font-semibold text-[#00B37E]">↓ R$ {item.recovered.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   )}
                 </div>
               </div>

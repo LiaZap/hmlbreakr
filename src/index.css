@@ -59,6 +59,36 @@
 
 body {
   @apply bg-background text-white antialiased;
+  /* Remove o highlight cinza/azul do iOS Safari ao tocar em buttons/links */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch targets — feedback visual sutil ao tocar (substitui o tap-highlight
+   nativo que removemos acima). Aplica a buttons e elementos clicáveis. */
+@media (hover: none) {
+  button:active,
+  a:active,
+  [role="button"]:active {
+    opacity: 0.7;
+    transition: opacity 0.1s;
+  }
+}
+
+/* Animação slideUp pro bottom-sheet do MobileNav */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.animate-slideUp {
+  animation: slideUp 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Safe-area helpers (iPhone notch / Android nav bar) */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
 }
 
 .scrollbar-hide {
