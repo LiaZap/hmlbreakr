@@ -157,7 +157,7 @@ function FloatingCard({ icon, iconBg, title, subtitle, primary, onDismiss }) {
   }, []);
   return (
     <div
-      className={`fixed bottom-4 right-4 left-4 sm:left-auto z-[80] max-w-[380px] transition-all duration-200 ${
+      className={`fixed bottom-20 md:bottom-4 right-4 left-4 sm:left-auto z-[80] max-w-[380px] transition-all duration-200 ${
         enter ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
       }`}
     >
