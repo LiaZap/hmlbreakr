@@ -55,6 +55,33 @@ Cada cliente representa um perfil real diferente. Os hashes são FIXOS pra E2E s
 - **Hash:** `seedsushiprem0000000000`
 - **URL:** `http://localhost:5173/?hash=seedsushiprem0000000000`
 - **Categoria:** Japonês, BPO ativado há 12 meses
+
+### 4. Itálico | Gastronomia Italiana — DEMO FISPAL
+- **Hash:** `seeditalico00000000000`
+- **URL:** `http://localhost:5173/?hash=seeditalico00000000000`
+- **Categoria:** Italiana, BPO ativado há 8 meses
+- **Owner:** Giuseppe Ferraro (chef executivo + sócio)
+- **Comando:** `npm run seed:italico` (script dedicado, separado dos 3 clientes acima)
+- **Conteúdo:**
+  - 12 fornecedores italianos (Pasta La Buona, Latteria, Olio Carli, Vinhos Toscana, etc.)
+  - 4 contas bancárias (Itaú, BB, Bradesco, Nubank PJ) — saldo total ~R$ 94.640
+  - 14 categorias financeiras (CMV com 5 subcategorias italianas + receitas)
+  - 6 funcionários (Sous Chef, Cozinheiro, Maître, Garçons, Sommelier)
+  - 2 sócios (Giuseppe Ferraro, Sofia Bianchi)
+  - 5 meios de pagamento
+  - 30 insumos italianos reais (massas, mussarela de búfala, parmesão Reggiano, mascarpone, ossobuco, etc.)
+  - 15 fichas técnicas de pratos italianos clássicos:
+    Carbonara, Lasanha Bolognese, Risotto ai Funghi, Pizza Margherita,
+    Quattro Formaggi, Fettuccine Alfredo, Penne Arrabbiata, Tagliatelle Ragù,
+    Osso Buco, Bruschetta, Burrata, Tiramisù, Panna Cotta, Espresso, Chianti
+  - 22 payables (pagos, pendentes, vencidos, aguardando aprovação)
+  - 12 receivables (iFood, Stone D+30, eventos, reservas)
+  - formData completo (16 steps do onboarding)
+  - Faturamento histórico 6 meses: R$ 218k → R$ 284k (crescimento ~30%)
+  - Daily revenue do mês corrente
+
+> **Use este cliente para a demo do evento FISPAL** — operação premium completa
+> com dados realistas de cozinha italiana. Cresce ano após ano, margem saudável.
 - **Conteúdo:**
   - 20 fornecedores
   - 5 contas bancárias (Itaú, Bradesco, BB, Nubank, Inter) — saldo total ~R$ 172.000
@@ -74,8 +101,10 @@ Cada cliente representa um perfil real diferente. Os hashes são FIXOS pra E2E s
 
 | Comando | O que faz |
 |---|---|
-| `npm run seed:bpo` | Cria/recria os 3 clientes seed (idempotente — apaga e recria) |
-| `npm run seed:bpo:clean` | Apaga só os 3 clientes seed (mantém demais clientes do banco) |
+| `npm run seed:bpo` | Cria/recria os 3 clientes seed core (idempotente — apaga e recria) |
+| `npm run seed:bpo:clean` | Apaga só os 3 clientes seed core (mantém demais clientes do banco) |
+| `npm run seed:italico` | Cria/recria APENAS o cliente Itálico (demo FISPAL — separado do `seed:bpo`) |
+| `npm run seed:dashboard` | Popula Client.data dos 3 clientes core com fichas/insumos/formData ricos |
 | `npm run seed:samples` | Gera `bulk-fornecedores.xlsx` e `boleto-exemplo.pdf` em `scripts/samples/` |
 | `node scripts/seed-bpo.js --only=burger` | Cria só Burger Brothers |
 | `node scripts/seed-bpo.js --only=pizzaria` | Cria só Pizzaria |

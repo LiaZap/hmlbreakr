@@ -10,6 +10,7 @@
     "seed:bpo": "node scripts/seed-bpo.js",
     "seed:bpo:clean": "node scripts/seed-bpo.js --clean",
     "seed:dashboard": "node scripts/seed-dashboard.js",
+    "seed:italico": "node scripts/seed-italico.js",
     "seed:samples": "node scripts/gen-samples.js"
   },
   "keywords": [],
