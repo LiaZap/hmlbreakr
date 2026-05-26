@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Env files — NUNCA commitar (Vite injeta no build, sobrescrevendo Easypanel)
+.env
+.env.local
+.env.production
+.env.development
+server/.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
