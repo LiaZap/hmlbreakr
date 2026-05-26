@@ -186,9 +186,11 @@ const SimuladorPrecificacao = ({ onClose }) => {
                 </div>
               </div>
 
-              {/* CMV máximo permitido — exibe só o resultado, sem a fórmula */}
+              {/* Indicador de Precificação — exibe só o resultado, sem a fórmula
+                  (renomeado de "CMV máximo permitido" a pedido do Gustavo
+                  pra deixar a leitura mais clara pro cliente final). */}
               <div className="bg-[#161616] border border-[#2A2A2C] rounded-[12px] p-3">
-                <div className="text-[10px] text-[#7E7E7E] uppercase tracking-wider font-semibold mb-2">CMV máximo permitido</div>
+                <div className="text-[10px] text-[#7E7E7E] uppercase tracking-wider font-semibold mb-2">Indicador de Precificação</div>
                 <div className="flex items-baseline gap-2 mb-2 flex-wrap">
                   <span className="text-[24px] font-bold" style={{ color: cmvInviavel ? '#FF4560' : '#00B37E' }}>
                     {cmvAlvo.toFixed(0)}%
