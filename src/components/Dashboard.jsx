@@ -201,7 +201,7 @@ const Dashboard = () => {
       //   - 4K 3840x2160 → cockpit sem scroll
       // Antes era `lg:overflow-hidden` (por largura), que cortava o
       // conteudo embaixo em totem 1080p horizontal.
-      <div className="flex-1 min-h-0 overflow-y-auto [@media(min-height:1100px)]:overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden [@media(min-height:1100px)]:overflow-hidden">
       {/* MAIN CONTENT - Full-width black background */}
       <div className="w-full bg-[#101010]">
       <div className="ml-0 md:ml-[85px] py-1 md:py-2 pb-2 md:pb-6">
@@ -255,9 +255,11 @@ const Dashboard = () => {
             </div>
 
             {/* 4. Pills Grid (Responsive) — fade gradient direita em mobile
-                pra indicar visualmente que tem mais pills via scroll. */}
+                pra indicar visualmente que tem mais pills via scroll.
+                md+ usa flex-wrap + overflow-x-visible pra evitar scrollbar
+                horizontal residual em tablet (1024-1366px). */}
             <div className="relative mb-auto mt-2 md:mt-4">
-              <div className="flex flex-nowrap md:flex-wrap overflow-x-auto gap-1.5 md:gap-2 pb-1 md:pb-0 scrollbar-hide">
+              <div className="flex flex-nowrap md:flex-wrap overflow-x-auto md:overflow-x-visible gap-1.5 md:gap-2 pb-1 md:pb-0 scrollbar-hide">
                 {dashboardData.overview.tags.map((tag, idx) => (
                   <div key={idx} className="bg-[#151515] border border-[#222] rounded-full px-3 py-1.5 flex items-center gap-2 shrink-0">
                     <span className="text-[10px] text-[#999] whitespace-nowrap">{tag.label}</span>

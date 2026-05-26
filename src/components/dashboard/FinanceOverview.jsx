@@ -141,16 +141,21 @@ const FinanceOverview = ({ data, onSelectMonth }) => {
         })()}
       </div>
 
-      {/* Value & Badge Row */}
-      <div className="flex items-end justify-between mb-1">
+      {/* Value & Badge Row — flex-wrap permite o badge cair pra linha de
+          baixo em tablet quando o valor monetario eh longo. Sem truncate
+          (que cortava com '...'); whitespace-nowrap mantem o numero em
+          uma linha. Escalonamento progressivo de fonte: 18 mobile,
+          20 tablet md, 22 lg, 24 xl+ — evita estourar grid 3-col em
+          1366px. */}
+      <div className="flex flex-wrap items-end justify-between gap-y-1 mb-1">
          {/* Value */}
          <div className="flex items-baseline gap-1 min-w-0">
-           <span className="text-[18px] md:text-[24px] font-bold text-[#FF9406]">R$</span>
-           <span className="text-[18px] md:text-[24px] font-bold text-[#E1E1E1] truncate">{displayValue}</span>
+           <span className="text-[18px] md:text-[20px] lg:text-[22px] xl:text-[24px] font-bold text-[#FF9406]">R$</span>
+           <span className="text-[18px] md:text-[20px] lg:text-[22px] xl:text-[24px] font-bold text-[#E1E1E1] whitespace-nowrap">{displayValue}</span>
          </div>
 
          {/* Badge & Status */}
-         <div className="flex flex-col items-end">
+         <div className="flex flex-col items-end shrink-0">
             {(() => {
               const isNegative = data.change?.startsWith('-');
               const isZero = data.change === '0%' || data.change === '+0.0%';

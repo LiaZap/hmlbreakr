@@ -28,10 +28,13 @@ const MoneyOnTable = ({ data }) => {
         </div>
       </div>
 
-      {/* Main Value */}
-      <div className="flex items-baseline gap-1.5 mb-1">
+      {/* Main Value — flex-wrap pra evitar overflow horizontal quando o
+          valor monetario eh longo em tablet (1366px / 3 colunas). Fonte
+          escalonada gradualmente (20 mobile, 22 tablet md, 24 xl+) e
+          whitespace-nowrap no numero pra nao quebrar o R$ do digito. */}
+      <div className="flex flex-wrap items-baseline gap-1.5 gap-y-1 mb-1">
         <span className="font-semibold text-[14px] md:text-[16px] text-[#FF9406]">R$</span>
-        <span className="font-semibold text-[20px] md:text-[24px] text-white tracking-tight">{data.total}</span>
+        <span className="font-semibold text-[20px] md:text-[22px] xl:text-[24px] text-white tracking-tight whitespace-nowrap">{data.total}</span>
         {data.percentage && data.percentage !== "0%" && (
           <div className="ml-auto shrink-0">
             <InfoTooltip

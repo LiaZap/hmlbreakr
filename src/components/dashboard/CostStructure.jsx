@@ -23,15 +23,17 @@ const CostStructure = ({ data }) => {
         </div>
       </div>
 
-      {/* Value */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-baseline gap-1.5">
+      {/* Value — flex-wrap permite o badge 'Fixos: X%' cair pra linha
+          de baixo se nao couber em tablet 1366px (grid 3-col). Fonte
+          escalonada (20/22/24) evita estourar coluna estreita. */}
+      <div className="flex flex-wrap items-center justify-between gap-y-1 mb-4">
+        <div className="flex items-baseline gap-1.5 min-w-0">
           <span className="font-semibold text-[14px] md:text-[16px] text-[#FF9406]">R$</span>
-          <span className="font-semibold text-[20px] md:text-[24px] text-white tracking-tight">{data.total}</span>
+          <span className="font-semibold text-[20px] md:text-[22px] xl:text-[24px] text-white tracking-tight whitespace-nowrap">{data.total}</span>
         </div>
         {data.fixedCostPercentage && (
           <div className="shrink-0 flex items-center justify-center bg-[#FFC100]/15 rounded-md px-2.5 h-[24px]" title="Custos Fixos sobre o faturamento do período">
-            <span className="text-[#FFC100] text-[10px] font-bold">Fixos: {data.fixedCostPercentage}</span>
+            <span className="text-[#FFC100] text-[10px] font-bold whitespace-nowrap">Fixos: {data.fixedCostPercentage}</span>
           </div>
         )}
       </div>
