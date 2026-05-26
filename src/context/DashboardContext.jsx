@@ -919,14 +919,19 @@ export const DashboardProvider = ({ children }) => {
     if (mpCommissionTotal > 0) {
         moneyOnTableTotal += mpCommissionTotal;
         const mpPctOfRevenue = currentRevenue > 0 ? (mpCommissionTotal / currentRevenue) * 100 : 0;
+        // Largura da barra (pctOfRevenue) usa a MESMA porcentagem que aparece
+        // no label — "Marketplaces (32%)" = barra 32%. Antes usava
+        // mpPctOfRevenue (~5-6% — so a comissao sobre o faturamento), o
+        // que deixava a barra desproporcional ao numero exibido.
+        // mpPctOfRevenue agora vai pro tooltip 'pct' pra preservar a info.
         moneyOnTableItems.push({
             key: 'marketplace',
             label: `Marketplaces (${mpTotalSalesPct.toFixed(0)}%)`,
             value: formatMoney(mpCommissionTotal),
             rawValue: mpCommissionTotal,
-            pct: `taxa ${mpAvgCommission.toFixed(1)}%`,
+            pct: `${mpPctOfRevenue.toFixed(1)}% do faturamento · taxa ${mpAvgCommission.toFixed(1)}%`,
             color: '#FF4560',
-            pctOfRevenue: mpPctOfRevenue,
+            pctOfRevenue: mpTotalSalesPct,
             recovered: calcRecovered('marketplace', mpCommissionTotal)
         });
     }
