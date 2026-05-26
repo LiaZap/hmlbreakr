@@ -23,7 +23,7 @@ const CATEGORY = 'Italiana';
 // e a senha em `client.password` (bcrypt hash, 10 rounds — mesmo padrao do
 // resto do sistema). Ambos sao sobrescritos a cada execucao do seed.
 const LOGIN_EMAIL = 'giuseppe@italico.com.br';
-const LOGIN_PASSWORD = 'italico2026';
+const LOGIN_PASSWORD = '$Fispal123'; // definida pelo Gustavo pra demo FISPAL
 
 const log = (...a) => console.log('[seed-italico]', ...a);
 const ok = (...a) => console.log('[seed-italico] OK', ...a);

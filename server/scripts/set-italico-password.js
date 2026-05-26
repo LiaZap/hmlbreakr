@@ -19,7 +19,7 @@ const prisma = new PrismaClient();
 
 const HASH = 'seeditalico00000000000';
 const LOGIN_EMAIL = 'giuseppe@italico.com.br';
-const LOGIN_PASSWORD = 'italico2026';
+const LOGIN_PASSWORD = '$Fispal123'; // definida pelo Gustavo pra demo FISPAL
 
 (async () => {
   try {
