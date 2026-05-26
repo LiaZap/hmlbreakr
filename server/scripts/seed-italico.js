@@ -11,12 +11,19 @@
  */
 
 require('dotenv').config();
+const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 const HASH = 'seeditalico00000000000';
 const NAME = 'Itálico | Gastronomia Italiana';
 const CATEGORY = 'Italiana';
+
+// Credenciais de login do cliente demo (FISPAL). Email vai no `client.email`
+// e a senha em `client.password` (bcrypt hash, 10 rounds — mesmo padrao do
+// resto do sistema). Ambos sao sobrescritos a cada execucao do seed.
+const LOGIN_EMAIL = 'giuseppe@italico.com.br';
+const LOGIN_PASSWORD = 'italico2026';
 
 const log = (...a) => console.log('[seed-italico]', ...a);
 const ok = (...a) => console.log('[seed-italico] OK', ...a);
@@ -323,11 +330,13 @@ async function main() {
     menuEngineering: menuFromFichas(fichas),
   };
 
+  const passwordHash = await bcrypt.hash(LOGIN_PASSWORD, 10);
   const client = await prisma.client.create({
     data: {
       name: NAME,
       hash: HASH,
-      email: 'giuseppe@italico.com.br',
+      email: LOGIN_EMAIL,
+      password: passwordHash,
       data: JSON.stringify(clientData),
       bpoEnabled: true,
       bpoActivatedAt: monthsFromNow(-8),
@@ -335,6 +344,7 @@ async function main() {
     },
   });
   ok('Client criado:', client.id);
+  ok(`Login: ${LOGIN_EMAIL} / senha "${LOGIN_PASSWORD}"`);
 
   // ── Categorias financeiras ────────────────────────────────────────────
   const catData = [
@@ -573,7 +583,8 @@ async function main() {
   log('');
   log('=========================================================');
   log(`SEED ITÁLICO CONCLUÍDO`);
-  log(`Acessar: http://localhost:5173/?hash=${HASH}`);
+  log(`Acessar via hash: http://localhost:5173/?hash=${HASH}`);
+  log(`Login email/senha: ${LOGIN_EMAIL} / ${LOGIN_PASSWORD}`);
   log('=========================================================');
 }
 
