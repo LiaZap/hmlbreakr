@@ -3,7 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/bolt.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Tablet/PWA: permite "Adicionar a tela inicial" no iPad/Android e
+         remove a barra do browser nesse modo (ganha ~80-100px de altura
+         util pra dashboard caber sem scroll em tablets grandes). -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Breakr" />
+    <meta name="theme-color" content="#1B1B1D" />
     <title>Breakr</title>
     <meta name="description" content="Breakr - Plataforma inteligente de gestão financeira e operacional para restaurantes e dark kitchens. Analise lucratividade, engenharia de cardápio e mais." />
     <meta property="og:title" content="Breakr | Gestão de Restaurantes" />
