@@ -192,10 +192,16 @@ const Dashboard = () => {
           </Suspense>
         </div>
       ) : (
-      // HOME (dashboard principal) — scroll natural em mobile/médio, sem
-      // scroll em lg+ pra manter o "cockpit" caber numa viewport.
-      // Sem ml-85 aqui — os divs internos já têm seu próprio offset.
-      <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+      // HOME (dashboard principal) — scroll natural em mobile/médio, e
+      // "cockpit" sem scroll APENAS quando a altura da viewport for
+      // grande o bastante (≥1100px). Resolucoes tipicas:
+      //   - Totem 1920x1080 → altura insuficiente → mantem scroll ativo
+      //   - Laptop 1440x900 → idem (scroll natural)
+      //   - Monitor 2560x1440 → cockpit sem scroll (cabe inteiro)
+      //   - 4K 3840x2160 → cockpit sem scroll
+      // Antes era `lg:overflow-hidden` (por largura), que cortava o
+      // conteudo embaixo em totem 1080p horizontal.
+      <div className="flex-1 min-h-0 overflow-y-auto [@media(min-height:1100px)]:overflow-hidden">
       {/* MAIN CONTENT - Full-width black background */}
       <div className="w-full bg-[#101010]">
       <div className="ml-0 md:ml-[85px] py-1 md:py-2 pb-2 md:pb-6">
