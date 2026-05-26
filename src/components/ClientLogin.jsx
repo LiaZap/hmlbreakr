@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SignIn } from '@clerk/clerk-react';
 import ForgotPasswordModal from './ForgotPasswordModal';
-import LegacyLoginModal from './LegacyLoginModal';
 import boltIcon from '../assets/bolt.svg';
 import { setAdminSession } from '../utils/adminAuth';
 
@@ -146,7 +145,6 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
   const [tab, setTab] = useState('login');
   const [logoClicks, setLogoClicks] = useState(0);
   const [showForgotPwd, setShowForgotPwd] = useState(false);
-  const [showLegacyLogin, setShowLegacyLogin] = useState(false);
   const showAdmin = logoClicks >= 5;
 
   const mainTabs = [
@@ -220,32 +218,16 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
                     routing="virtual"
                     appearance={undefined}
                   />
-                  {/* Links auxiliares — fallback pra clientes legacy bcrypt
-                      que ainda nao foram migrados pro Clerk. Durante o
-                      FISPAL 2026 esse caminho fica visivel; depois que
-                      todos forem migrados, basta remover o "Cliente
-                      existente" e manter so o "Esqueci minha senha". */}
-                  <div className="mt-3 flex flex-col items-center gap-2">
+                  {/* Link 'Esqueci minha senha' — fallback pra clientes legacy
+                      bcrypt. O widget Clerk tem reset proprio, mas nao
+                      funciona pra usuarios fora do Clerk. */}
+                  <div className="mt-3 text-center">
                     <button
                       type="button"
                       onClick={() => setShowForgotPwd(true)}
                       className="text-[12px] text-[#868686] hover:text-[#F5A623] transition-colors font-medium"
                     >
                       Esqueci minha senha
-                    </button>
-                    <div className="flex items-center gap-2 w-full">
-                      <div className="flex-1 h-px bg-white/[0.06]" />
-                      <span className="text-[10px] text-[#5C5C5E] uppercase tracking-wider">ou</span>
-                      <div className="flex-1 h-px bg-white/[0.06]" />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowLegacyLogin(true)}
-                      className="text-[12px] text-[#868686] hover:text-[#F5A623] transition-colors font-medium flex items-center gap-1.5"
-                      title="Use esse acesso se sua conta foi criada antes da nossa atualizacao de login"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-                      Cliente existente? Entre aqui
                     </button>
                   </div>
                 </>
@@ -270,13 +252,6 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
 
       {/* Modal de Esqueci minha senha (legacy bcrypt) */}
       {showForgotPwd && <ForgotPasswordModal onClose={() => setShowForgotPwd(false)} />}
-      {/* Modal de Login Legacy (bcrypt, pre-Clerk) — FISPAL 2026 only */}
-      {showLegacyLogin && (
-        <LegacyLoginModal
-          onClose={() => setShowLegacyLogin(false)}
-          onLogin={onLogin}
-        />
-      )}
     </div>
   );
 };
