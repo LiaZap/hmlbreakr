@@ -10,7 +10,9 @@ const { createPortalSession } = require('./services/stripeService');
 const { createSnapshot, pruneOldSnapshots } = require('./services/snapshotService');
 const { deepMerge } = require('./utils/deepMerge');
 const crypto = require('crypto');
-const { createClerkClient } = require('@clerk/backend');
+// NOTA: createClerkClient e importado mais abaixo no arquivo (na secao
+// CLERK AUTH ROUTES). Pra evitar duplicacao de identificador, o helper
+// abaixo importa via require() inline quando necessario.
 
 // Clerk backend client (lazy) — reusado pelos endpoints que criam/atualizam
 // users no Clerk junto com a criacao no banco.
@@ -18,6 +20,7 @@ let _clerkClient = null;
 function getClerk() {
   if (_clerkClient) return _clerkClient;
   if (!process.env.CLERK_SECRET_KEY) return null;
+  const { createClerkClient } = require('@clerk/backend');
   _clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
   return _clerkClient;
 }
