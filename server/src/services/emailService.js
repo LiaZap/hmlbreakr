@@ -111,8 +111,33 @@ const infoBox = (content) => `
 /**
  * Welcome email — sent when a new client is created
  */
-async function sendWelcomeEmail({ to, clientName, hash }) {
+async function sendWelcomeEmail({ to, clientName, hash, tempPassword }) {
   const onboardingLink = `${APP_URL}?hash=${hash}`;
+
+  // Bloco de credenciais — so renderiza se admin criou a conta com email
+  // (POST /admin/clients atualizado em 27/05/2026 gera senha temporaria
+  // e linka no Clerk). Pra criacoes antigas sem password, esse bloco fica
+  // vazio e o email mantem o comportamento legado (so link magico).
+  const credentialsBlock = tempPassword ? `
+    <div style="margin:0 0 24px;padding:18px 20px;background:#FFF8E8;border:1px solid #F5A623;border-radius:12px;">
+      <p style="margin:0 0 10px;font-size:11px;color:#8A6500;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;">
+        Suas credenciais de acesso
+      </p>
+      <table cellpadding="0" cellspacing="0" style="margin:0;">
+        <tr>
+          <td style="padding:4px 16px 4px 0;font-size:12px;color:#666;font-weight:600;">Email:</td>
+          <td style="padding:4px 0;font-size:14px;color:#111;font-family:monospace;font-weight:700;">${to}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 16px 4px 0;font-size:12px;color:#666;font-weight:600;">Senha temporária:</td>
+          <td style="padding:4px 0;font-size:14px;color:#111;font-family:monospace;font-weight:700;letter-spacing:1px;">${tempPassword}</td>
+        </tr>
+      </table>
+      <p style="margin:12px 0 0;font-size:11px;color:#8A6500;line-height:1.5;">
+        Recomendamos que você altere a senha no primeiro acesso pela seção <strong>Configurações &rsaquo; Segurança</strong>.
+      </p>
+    </div>
+  ` : '';
 
   // Copy revisado pelo Gustavo (2026-05-25): mensagem de boas-vindas
   // mais aspiracional, com 6 bullets cobrindo onboarding + fichas +
@@ -124,6 +149,8 @@ async function sendWelcomeEmail({ to, clientName, hash }) {
     <p style="margin:0 0 24px;font-size:15px;line-height:1.7;color:#666;">
       Sua conta no <strong style="color:#111;">Breakr Hub</strong> foi criada. Acesse agora e configure as informações do seu restaurante para começar a usar a plataforma e colher os primeiros resultados.
     </p>
+
+    ${credentialsBlock}
 
     <p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#333;">Comece agora:</p>
     <table cellpadding="0" cellspacing="0" style="margin:0 0 4px;">

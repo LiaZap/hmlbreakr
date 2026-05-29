@@ -10,6 +10,62 @@ const { createPortalSession } = require('./services/stripeService');
 const { createSnapshot, pruneOldSnapshots } = require('./services/snapshotService');
 const { deepMerge } = require('./utils/deepMerge');
 const crypto = require('crypto');
+const { createClerkClient } = require('@clerk/backend');
+
+// Clerk backend client (lazy) — reusado pelos endpoints que criam/atualizam
+// users no Clerk junto com a criacao no banco.
+let _clerkClient = null;
+function getClerk() {
+  if (_clerkClient) return _clerkClient;
+  if (!process.env.CLERK_SECRET_KEY) return null;
+  _clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+  return _clerkClient;
+}
+
+/**
+ * Cria (ou re-aproveita) um user no Clerk pra um cliente recem criado.
+ * - Idempotente: se ja existe Clerk user com esse email, retorna ele
+ * - Usa passwordDigest bcrypt pra preservar a senha (Clerk aceita nativamente)
+ * - Best-effort: erros sao logados mas NAO bloqueiam a criacao do cliente
+ *   (o welcome email com hash magico continua funcionando como fallback)
+ *
+ * @returns {Promise<{ clerkUserId: string|null, error: string|null }>}
+ */
+async function ensureClerkUserForClient({ email, name, passwordHash }) {
+  const clerk = getClerk();
+  if (!clerk) {
+    return { clerkUserId: null, error: 'CLERK_SECRET_KEY ausente' };
+  }
+  try {
+    const list = await clerk.users.getUserList({ emailAddress: [email] });
+    if (list.totalCount > 0) {
+      return { clerkUserId: list.data[0].id, error: null };
+    }
+    const [firstName, ...rest] = (name || 'Cliente').split(' ');
+    const user = await clerk.users.createUser({
+      emailAddress: [email],
+      firstName: firstName || 'Cliente',
+      lastName: rest.join(' ') || 'Breakr',
+      passwordDigest: passwordHash,
+      passwordHasher: 'bcrypt',
+      skipPasswordChecks: true,
+    });
+    return { clerkUserId: user.id, error: null };
+  } catch (err) {
+    const detail = err?.errors ? JSON.stringify(err.errors) : err.message;
+    console.warn('[clerk] criar user falhou (cliente segue funcional via hash):', detail);
+    return { clerkUserId: null, error: detail };
+  }
+}
+
+/**
+ * Gera senha temporaria amigavel pra cliente novo. 10 chars, hex
+ * (40 bits de entropia — adequado pra senha de primeiro acesso que
+ * o cliente deve trocar). Visualmente: "a3f7b9d2c4".
+ */
+function generateTempPassword() {
+  return crypto.randomBytes(5).toString('hex');
+}
 
 // Sub-routers admin (item 4.1)
 const dailyInsightsRoutes = require('./routes/admin/daily-insights');
@@ -148,18 +204,46 @@ router.post('/admin/login', async (req, res) => {
   return res.status(401).json({ error: 'Credenciais incorretas' });
 });
 
-// Create Client — admin only (cria registro de cliente, dispara welcome email)
+// Create Client — admin only
+//
+// Fluxo completo (pos-atualizacao 27/05/2026):
+//   1. Email + Nome obrigatorios
+//   2. Gera senha temporaria aleatoria (10 hex chars)
+//   3. Cria Client no banco com password bcrypt + email
+//   4. Cria User no Clerk com passwordDigest bcrypt (best-effort,
+//      nao bloqueia — se falhar, cliente acessa via hash magico)
+//   5. Linka client.clerkUserId
+//   6. Dispara welcome email INCLUINDO credenciais (email + senha temp)
+//
+// Resultado: cliente recebe email com link magico + senha pra logar via
+// widget Clerk. Resolve o BO recorrente de "cliente criado nao consegue
+// logar" (Italian incident, repetido).
 router.post('/admin/clients', requireAdmin, async (req, res) => {
   try {
     const { name } = req.body;
+    const clientEmail = (req.body.email || '').trim().toLowerCase();
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+    if (!clientEmail || !clientEmail.includes('@')) {
+      return res.status(400).json({ error: 'Email é obrigatório pra gerar acesso do cliente' });
+    }
 
-    // Hash do cliente — CSPRNG (sec-auditor): Math.random() é PRNG
-    // sequencial em V8, não criptográfico. Trocado por crypto.randomBytes(16)
-    // que dá 128 bits de entropia real. O hash é usado como identificador
-    // único de rota pública (/client/:hash/*) — precisa ser inadivinhável.
+    // Guarda contra duplicacao por email (Clerk tambem rejeita, mas erro
+    // aqui antes evita ter cliente orfao no banco).
+    const existing = await prisma.client.findUnique({ where: { email: clientEmail } });
+    if (existing) {
+      return res.status(409).json({ error: 'Já existe um cliente com esse email' });
+    }
+
+    // Hash do cliente — CSPRNG (sec-auditor): crypto.randomBytes(16) da
+    // 128 bits de entropia. Usado como identificador unico de rota
+    // publica (/client/:hash/*) — precisa ser inadivinhavel.
     const hash = crypto.randomBytes(16).toString('hex');
-    
+
+    // Senha temporaria — 10 chars hex (40 bits). Cliente recebe no email
+    // e deve trocar no primeiro acesso. Bcrypt 10 rounds (padrao do sistema).
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
     // Default initial data structure
     const initialData = {
         restaurant: { name, category: 'Gastronomia' },
@@ -167,22 +251,36 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
         operational: { fichas: [], insumos: [] }
     };
 
-    const { email: clientEmail } = req.body;
-
     const client = await prisma.client.create({
       data: {
         name,
         hash,
-        data: JSON.stringify(initialData)
-      }
+        email: clientEmail,
+        password: passwordHash,
+        data: JSON.stringify(initialData),
+      },
     });
 
-    // Send welcome email if an email was provided at creation
-    if (clientEmail) {
-      sendWelcomeEmail({ to: clientEmail, clientName: name, hash }).catch(err =>
-        console.error('Welcome email error:', err.message)
-      );
+    // Cria no Clerk em paralelo (best-effort, nao bloqueia o response)
+    const clerkResult = await ensureClerkUserForClient({
+      email: clientEmail,
+      name,
+      passwordHash,
+    });
+    if (clerkResult.clerkUserId) {
+      await prisma.client.update({
+        where: { id: client.id },
+        data: { clerkUserId: clerkResult.clerkUserId },
+      });
     }
+
+    // Welcome email com credenciais — best-effort
+    sendWelcomeEmail({
+      to: clientEmail,
+      clientName: name,
+      hash,
+      tempPassword,
+    }).catch(err => console.error('Welcome email error:', err.message));
 
     logAudit(prisma, {
       action: 'client.create',
@@ -193,10 +291,20 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
       actorId: null,
       actorLabel: req.adminUser ? req.adminUser.email : null,
       summary: `Criou o cliente "${name}"`,
-      metadata: { name, hash, hasEmail: !!clientEmail },
+      metadata: {
+        name,
+        hash,
+        email: clientEmail,
+        clerkLinked: !!clerkResult.clerkUserId,
+        clerkError: clerkResult.error,
+      },
     });
 
-    res.json(client);
+    res.json({
+      ...client,
+      clerkLinked: !!clerkResult.clerkUserId,
+      tempPasswordSent: true,
+    });
   } catch (error) {
     logError('admin create client', error);
     res.status(500).json({ error: 'Erro ao criar cliente' });

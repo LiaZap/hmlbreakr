@@ -277,14 +277,24 @@ const AdminPanel = () => {
   };
 
   const handleCreateClient = () => {
-    if (!newClientName.trim()) return;
+    const trimmedName = newClientName.trim();
+    const trimmedEmail = newClientEmail.trim();
+    if (!trimmedName) { alert('Nome do restaurante é obrigatório'); return; }
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      alert('E-mail do cliente é obrigatório (sistema gera senha e envia por email)');
+      return;
+    }
 
     fetch('/api/admin/clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newClientName, email: newClientEmail.trim() || undefined })
+      body: JSON.stringify({ name: trimmedName, email: trimmedEmail })
     })
-    .then(res => res.json())
+    .then(async (res) => {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar cliente');
+      return data;
+    })
     .then(newClient => {
       setClients(prev => [...prev, newClient]);
       setNewClientName('');
@@ -293,12 +303,16 @@ const AdminPanel = () => {
       // Browser notification if user enabled
       if (localStorage.getItem('breakr-admin-notif') !== 'off' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         new Notification('Breakr — Novo cliente', {
-          body: `${newClient.name} foi cadastrado com sucesso.`,
+          body: `${newClient.name} foi cadastrado. Welcome email enviado.`,
           icon: '/bolt.svg',
         });
       }
+      // Feedback inline (alguns clientes pode ter Clerk falhado — informa)
+      if (newClient.clerkLinked === false) {
+        alert(`Cliente "${newClient.name}" criado, mas não foi possível registrar no Clerk. Ele consegue acessar pelo link mágico do email. Veja log do servidor pra detalhes.`);
+      }
     })
-    .catch(() => alert("Erro ao criar cliente"));
+    .catch((err) => alert('Erro ao criar cliente: ' + (err.message || 'desconhecido')));
   };
 
   const handleResendWelcome = async (clientId) => {
@@ -2484,8 +2498,10 @@ const AdminPanel = () => {
                 autoFocus
               />
             </div>
-            <div className="mb-6">
-              <label className="block text-[12px] text-[#868686] mb-2">E-mail do Cliente <span className="text-[#555]">(opcional — envia boas-vindas)</span></label>
+            <div className="mb-4">
+              <label className="block text-[12px] text-[#868686] mb-2">
+                E-mail do Cliente <span className="text-[#F5A623]">*</span>
+              </label>
               <input
                 type="email"
                 value={newClientEmail}
@@ -2493,7 +2509,15 @@ const AdminPanel = () => {
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateClient()}
                 className="w-full bg-[#252527] border border-[#2A2A2C] rounded-[12px] px-4 py-3.5 text-white outline-none focus:border-[#F5A623] transition-colors"
                 placeholder="cliente@email.com"
+                required
               />
+            </div>
+            <div className="mb-6 px-3.5 py-2.5 bg-[#F5A623]/10 border border-[#F5A623]/30 rounded-[10px]">
+              <p className="text-[11px] text-[#F5A623] leading-snug">
+                <strong>O que acontece ao criar:</strong> sistema gera senha temporária,
+                cria a conta no Clerk e envia welcome email com credenciais. Cliente
+                consegue logar imediatamente via email/senha.
+              </p>
             </div>
 
             <div className="flex gap-3">
