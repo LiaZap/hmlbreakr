@@ -285,9 +285,8 @@ const AdminPanel = () => {
       return;
     }
 
-    fetch('/api/admin/clients', {
+    adminFetch('/api/admin/clients', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: trimmedName, email: trimmedEmail })
     })
     .then(async (res) => {
