@@ -38,24 +38,24 @@ const emailWrapper = (content) => `
     <tr><td align="center">
       <table width="580" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06);">
 
-        <!-- Logo Header — logo oficial da Breakr (wordmark + raio + tagline
-             "Assessoria Gastronomica" + simbolo ®). Hospedada como JPEG
-             estatico em /email-logo.jpeg (servida pelo Express estatico).
-             JPEG tem suporte universal em clientes de email (Gmail, Apple
-             Mail, Outlook 2010+, Yahoo, ProtonMail) — diferente de SVG que
-             nao renderiza no Outlook desktop.
+        <!-- Logo Header — logo oficial da Breakr (wordmark "breakr" com
+             raio integrado + gradiente vermelho->laranja + simbolo ®).
+             Hospedada como PNG estatico em /email-logo.png (servida pelo
+             Express estatico). PNG tem suporte universal nos clientes de
+             email (Gmail, Apple Mail, Outlook 2010+, Yahoo, ProtonMail)
+             E preserva transparencia (diferente de JPEG que precisa de
+             fundo solido) — permite que o fundo preto do <td> apareca
+             integrado com a marca.
 
-             Imagem quadrada (1080x1080) exibida em 180x180px. O JPEG ja
-             traz fundo preto, entao o <td> tambem usa background preto pra
-             eliminar qualquer borda visivel entre celula e imagem.
+             Imagem quadrada exibida em 180x180px. <td> com fundo preto
+             pra casar com a logo (que tambem usa fundo escuro/transparente).
 
-             Fallback: ALT "Breakr — Assessoria Gastronomica" caso o cliente
-             bloqueie imagens remotas. -->
+             Fallback: ALT "Breakr" caso o cliente bloqueie imagens. -->
         <tr>
           <td align="center" style="padding:24px 40px;border-bottom:1px solid #F0F0F0;background:#000;">
             <img
-              src="${APP_URL}/email-logo.jpeg"
-              width="180" height="180" alt="Breakr — Assessoria Gastronômica"
+              src="${APP_URL}/email-logo.png"
+              width="180" height="180" alt="Breakr"
               style="display:block;width:180px;height:180px;border:0;outline:none;border-radius:12px;"
             />
           </td>
