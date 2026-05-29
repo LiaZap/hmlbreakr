@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SignIn } from '@clerk/clerk-react';
 import ForgotPasswordModal from './ForgotPasswordModal';
+import LegacyLoginModal from './LegacyLoginModal';
 import boltIcon from '../assets/bolt.svg';
 import { setAdminSession } from '../utils/adminAuth';
 
@@ -145,6 +146,7 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
   const [tab, setTab] = useState('login');
   const [logoClicks, setLogoClicks] = useState(0);
   const [showForgotPwd, setShowForgotPwd] = useState(false);
+  const [showLegacyLogin, setShowLegacyLogin] = useState(false);
   const showAdmin = logoClicks >= 5;
 
   const mainTabs = [
@@ -218,16 +220,26 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
                     routing="virtual"
                     appearance={undefined}
                   />
-                  {/* Link 'Esqueci minha senha' — fallback pra clientes legacy
-                      bcrypt. O widget Clerk tem reset proprio, mas nao
-                      funciona pra usuarios fora do Clerk. */}
-                  <div className="mt-3 text-center">
+                  {/* Links auxiliares — 'Esqueci minha senha' (legacy bcrypt) +
+                      'cliente antigo' (pra clientes pre-Clerk que ainda nao
+                      foram migrados via scripts/migrate-users-to-clerk.js).
+                      Layout discreto: 'esqueci' destacado, 'cliente antigo'
+                      menor em segunda linha. */}
+                  <div className="mt-3 flex flex-col items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => setShowForgotPwd(true)}
                       className="text-[12px] text-[#868686] hover:text-[#F5A623] transition-colors font-medium"
                     >
                       Esqueci minha senha
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowLegacyLogin(true)}
+                      className="text-[10px] text-[#5C5C5E] hover:text-[#868686] transition-colors"
+                      title="Use esse acesso se sua conta foi criada antes da migração para o Clerk"
+                    >
+                      Cliente antigo? Entre aqui
                     </button>
                   </div>
                 </>
@@ -252,6 +264,13 @@ const ClientLogin = ({ onLogin, onAdminLogin, onAgencyLogin }) => {
 
       {/* Modal de Esqueci minha senha (legacy bcrypt) */}
       {showForgotPwd && <ForgotPasswordModal onClose={() => setShowForgotPwd(false)} />}
+      {/* Modal Login Cliente Antigo — fallback bcrypt pra clientes pre-Clerk */}
+      {showLegacyLogin && (
+        <LegacyLoginModal
+          onClose={() => setShowLegacyLogin(false)}
+          onLogin={onLogin}
+        />
+      )}
     </div>
   );
 };
