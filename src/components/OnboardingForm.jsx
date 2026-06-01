@@ -426,10 +426,13 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
 
   const currentQuestion = onboardingQuestions[currentStepIndex];
   const totalSteps = onboardingQuestions.length;
-  const totalWithReg = isEditing ? totalSteps : totalSteps + 1;
+  // totalWithReg/progress: registro removido — agora total = onboarding apenas.
+  // Mantemos o +1 SOMENTE se showRegistration estiver true (codigo dead mas
+  // resiliente caso algum caminho futuro reative o registro).
+  const totalWithReg = isEditing || !showRegistration ? totalSteps : totalSteps + 1;
   const progress = showRegistration
     ? (1 / totalWithReg) * 100
-    : ((currentStepIndex + (registrationDone ? 2 : 1)) / totalWithReg) * 100;
+    : ((currentStepIndex + 1) / totalWithReg) * 100;
 
   // Format currency helper
   const formatCurrency = (value) => {
@@ -507,9 +510,20 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
     if (dashboardData?.formData && Object.keys(dashboardData.formData).length > 0) {
       setFormData(dashboardData.formData);
     }
-    if (!isEditing && dashboardData && !dashboardData._hasCredentials && !registrationDone) {
-      setShowRegistration(true);
-    }
+    // ETAPA DE REGISTRO REMOVIDA (29/05/2026):
+    // Todo cliente agora eh criado COM credenciais — seja pelo admin
+    // (POST /admin/clients que gera senha temp + cria no Clerk) ou pelo
+    // Stripe webhook (que tambem cria credenciais). Pedir email/senha
+    // de novo no onboarding era redundante e travava clientes que ja
+    // estavam autenticados (Clerk/legacy).
+    //
+    // Codigo de registro (showRegistration/handleRegistrationSubmit)
+    // mantido como dead code seguro — pode ser util pra casos manuais
+    // futuros sem afetar o fluxo normal.
+    //
+    // if (!isEditing && dashboardData && !dashboardData._hasCredentials && !registrationDone) {
+    //   setShowRegistration(true);
+    // }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1140,7 +1154,7 @@ const OnboardingForm = ({ onClose = () => {}, onComplete = () => {}, isEditing =
         {/* Header - Top Left */}
         <div className="absolute left-4 md:left-[66px] top-[38px] md:top-[79px]">
           <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[12px] md:text-[14px] leading-[18px] text-white mb-1 md:mb-2">
-            {showRegistration ? `Passo 1 de ${totalWithReg}` : `Passo ${currentStepIndex + (registrationDone ? 2 : 1)} de ${totalWithReg}`}
+            {showRegistration ? `Passo 1 de ${totalWithReg}` : `Passo ${currentStepIndex + 1} de ${totalWithReg}`}
           </div>
           <div className="font-['Plus_Jakarta_Sans'] font-semibold text-[14px] text-white/20">
             {showRegistration ? 'Crie seu Acesso' : currentQuestion.section}
