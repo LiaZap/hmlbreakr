@@ -145,7 +145,7 @@ const AdminPanel = () => {
         if (Array.isArray(data)) setClients(data);
       })
       .catch(err => console.error("Failed to fetch clients", err));
-    fetch('/api/admin/broadcasts')
+    adminFetch('/api/admin/broadcasts')
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setBroadcasts(data); })
       .catch(err => console.error("Failed to fetch broadcasts", err));
@@ -316,9 +316,8 @@ const AdminPanel = () => {
 
   const handleResendWelcome = async (clientId) => {
     try {
-      const res = await fetch(`/api/admin/clients/${clientId}/resend-welcome`, {
+      const res = await adminFetch(`/api/admin/clients/${clientId}/resend-welcome`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: adminRole })
       });
       const data = await res.json();
@@ -354,9 +353,8 @@ const AdminPanel = () => {
     if (!deleteModal || deleteConfirmText !== 'EXCLUIR') return;
     const { id } = deleteModal;
 
-    fetch(`/api/admin/clients/${id}`, {
+    adminFetch(`/api/admin/clients/${id}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: adminRole })
     })
     .then(res => res.json())
@@ -380,9 +378,8 @@ const AdminPanel = () => {
       const payload = { role: adminRole };
       if (resetPassword) payload.password = resetPassword;
       if (resetEmail && resetEmail !== resetModal.currentEmail) payload.email = resetEmail;
-      const res = await fetch(`/api/admin/clients/${resetModal.clientId}/reset-password`, {
+      const res = await adminFetch(`/api/admin/clients/${resetModal.clientId}/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
@@ -405,9 +402,8 @@ const AdminPanel = () => {
 
   const handleMarkComplete = async (clientId, currentlyComplete) => {
     try {
-      const res = await fetch(`/api/admin/clients/${clientId}/mark-complete`, {
+      const res = await adminFetch(`/api/admin/clients/${clientId}/mark-complete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ completed: !currentlyComplete })
       });
       const data = await res.json();
@@ -451,11 +447,11 @@ const AdminPanel = () => {
     };
     try {
       if (broadcastModal === 'new') {
-        const res = await fetch('/api/admin/broadcasts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const res = await adminFetch('/api/admin/broadcasts', { method: 'POST', body: JSON.stringify(payload) });
         const data = await res.json();
         if (data.id) setBroadcasts(prev => [data, ...prev]);
       } else {
-        const res = await fetch(`/api/admin/broadcasts/${broadcastModal.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const res = await adminFetch(`/api/admin/broadcasts/${broadcastModal.id}`, { method: 'PUT', body: JSON.stringify(payload) });
         const data = await res.json();
         if (data.id) setBroadcasts(prev => prev.map(b => b.id === data.id ? data : b));
       }
@@ -465,7 +461,7 @@ const AdminPanel = () => {
 
   const handleToggleBroadcast = async (id, currentActive) => {
     try {
-      const res = await fetch(`/api/admin/broadcasts/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !currentActive }) });
+      const res = await adminFetch(`/api/admin/broadcasts/${id}`, { method: 'PUT', body: JSON.stringify({ active: !currentActive }) });
       const data = await res.json();
       if (data.id) setBroadcasts(prev => prev.map(b => b.id === data.id ? data : b));
     } catch { alert('Erro ao alterar status.'); }
@@ -474,7 +470,7 @@ const AdminPanel = () => {
   const handleDeleteBroadcast = async (id) => {
     if (!window.confirm('Excluir este comunicado?')) return;
     try {
-      await fetch(`/api/admin/broadcasts/${id}`, { method: 'DELETE' });
+      await adminFetch(`/api/admin/broadcasts/${id}`, { method: 'DELETE' });
       setBroadcasts(prev => prev.filter(b => b.id !== id));
     } catch { alert('Erro ao excluir.'); }
   };
