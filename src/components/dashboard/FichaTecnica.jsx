@@ -422,7 +422,7 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   }, [unit]);
 
   const { dashboardData, updateDashboardData } = useDashboard();
-  const categoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
+  const categoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Outros'];
   // Todos os insumos EXCETO o próprio que está sendo editado (para permitir qualquer insumo como sub-ingrediente)
   const availableInsumos = (dashboardData.operational?.insumos || []).filter(i =>
     String(i.id) !== String(insumo.id)
@@ -1090,7 +1090,7 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   const _customFichaCats = (dashboardData.operational?.categories?.fichas || []).filter(c => c !== 'Insumo Pronto Preparado');
   // Sempre incluir defaults + custom, sem deduplicar entre si
   const fichaCategoryOptions = Array.from(new Set([...DEFAULT_FICHA_CATS, ..._customFichaCats]));
-  const insumoCategoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
+  const insumoCategoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Outros'];
   const availableInsumos = dashboardData.operational?.insumos || [];
 
   const [categoria, setCategoria] = useState(editingFicha ? editingFicha.type : fichaCategoryOptions[0]);
@@ -2151,28 +2151,11 @@ const FichaTecnica = () => {
       updatePayload.menuEngineering = newMenuEngineering;
     }
 
-    // Auto-create ficha técnica for "Insumo Pronto Preparado"
-    if (updatedInsumo.category === 'Insumo Pronto Preparado' && !exists) {
-      const autoFicha = {
-        id: `auto_${updatedInsumo.id}`,
-        createdAt: Date.now(),
-        name: updatedInsumo.name,
-        type: 'Insumo Pronto Preparado',
-        progress: 0,
-        insumos: 0,
-        ingredients: [],
-        custoInsumos: updatedInsumo.custo,
-        custoEmbalagem: 'R$ 0,00',
-        rendimento: updatedInsumo.rendimento || '0gr',
-        custoTotal: updatedInsumo.custo,
-        precoVenda: '',
-        vendasMes: '0',
-        lastUpdated: Date.now(),
-        isImported: false
-      };
-
-      updatePayload.operational.fichas = [...(dashboardData.operational?.fichas || []), autoFicha];
-    }
+    // REMOVIDO (29/05/2026): auto-create de ficha tecnica quando categoria
+    // era "Insumo Pronto Preparado". A categoria foi removida dos defaults
+    // (induzia cliente a cadastrar tudo como ficha em vez de insumo). Quem
+    // ainda tiver insumos com essa categoria continua funcionando normal —
+    // so nao tem mais o trigger automatico que duplicava em fichas.
 
     updateDashboardData(updatePayload);
   };
@@ -2953,7 +2936,7 @@ const FichaTecnica = () => {
               {/* Search + Category Filter — fixo no topo do cards container */}
               {(() => {
                 const items = activeTab === 'insumos' ? insumos : fichas;
-                const defaultInsumoCats = ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Insumo Pronto Preparado', 'Outros'];
+                const defaultInsumoCats = ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Outros'];
                 const defaultFichaCats = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
                 // Always merge defaults with custom categories so creating a custom one doesn't hide built-ins
                 const customInsumoCats = dashboardData.operational?.categories?.insumos || [];
