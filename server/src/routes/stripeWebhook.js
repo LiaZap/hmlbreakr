@@ -28,10 +28,12 @@
 
 const express = require('express');
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
 const { getStripe, getClientPlanByPriceId } = require('../services/stripeService');
 const { sendWelcomeEmail } = require('../services/emailService');
 const { logAudit } = require('../services/auditService');
+const { ensureClerkUserForClient, generateTempPassword } = require('../services/clientAuthSetup');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -91,14 +93,18 @@ async function findClientFromCheckoutSession(session) {
  * o pagamento vem de fonte EXTERNA (Payment Link da LP, por exemplo) sem
  * que o cliente tenha cadastrado no app antes.
  *
- * Estratégia:
+ * Estratégia (atualizada 29/05/2026):
  *   1. Cria Client com hash CSPRNG, email do checkout, name do checkout
  *      (fallback "Cliente Breakr").
- *   2. Marca subscriptionStatus + stripeCustomerId/SubscriptionId já no insert.
- *   3. password fica null → primeiro acesso cai no /client/register pra
- *      definir senha (link enviado por email).
- *   4. Envia welcome email com link ?hash=...
- *   5. Loga auditoria categoria 'admin' action 'client.auto_created_from_stripe'.
+ *   2. Gera senha temporaria (10 hex chars) + bcrypt 10 rounds.
+ *   3. Cria user no Clerk com passwordDigest bcrypt (best-effort —
+ *      cliente segue funcional via hash magico se Clerk falhar).
+ *   4. Linka client.clerkUserId no banco.
+ *   5. Marca subscriptionStatus + stripeCustomerId/SubscriptionId.
+ *   6. Envia welcome email com credenciais (email + senha temp) E
+ *      link ?hash=... — cliente pode logar via Clerk OU via link magico.
+ *   7. Loga auditoria 'client.auto_created_from_stripe' com flag
+ *      clerkLinked pra rastreio.
  *
  * Retorna o client criado ou null se faltam dados mínimos (sem email).
  */
@@ -117,6 +123,11 @@ async function autoCreateClientFromCheckout(session, sub) {
   const name = session?.customer_details?.name || 'Cliente Breakr';
   const hash = crypto.randomBytes(16).toString('hex');
 
+  // Senha temporaria — mesma logica do POST /admin/clients pra cliente
+  // logar via Clerk imediatamente apos receber welcome email.
+  const tempPassword = generateTempPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+
   // Dados iniciais mínimos — replica padrão de POST /admin/clients
   const initialData = {
     restaurant: { name, category: 'Gastronomia' },
@@ -129,6 +140,7 @@ async function autoCreateClientFromCheckout(session, sub) {
       name,
       hash,
       email: normalizedEmail,
+      password: passwordHash,
       data: JSON.stringify(initialData),
       stripeCustomerId: session.customer || null,
       stripeSubscriptionId: session.subscription || null,
@@ -139,8 +151,21 @@ async function autoCreateClientFromCheckout(session, sub) {
     },
   });
 
-  // Welcome email — best-effort, não bloqueia (mas loga)
-  sendWelcomeEmail({ to: normalizedEmail, clientName: name, hash })
+  // Cria/linka user no Clerk com mesma senha bcrypt — best-effort
+  const clerkResult = await ensureClerkUserForClient({
+    email: normalizedEmail,
+    name,
+    passwordHash,
+  });
+  if (clerkResult.clerkUserId) {
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { clerkUserId: clerkResult.clerkUserId },
+    });
+  }
+
+  // Welcome email com credenciais — best-effort, não bloqueia (mas loga)
+  sendWelcomeEmail({ to: normalizedEmail, clientName: name, hash, tempPassword })
     .catch(err => console.warn('[stripe webhook] auto-create welcome email falhou:', err.message));
 
   logAudit(prisma, {
@@ -158,10 +183,12 @@ async function autoCreateClientFromCheckout(session, sub) {
       sessionId: session.id,
       email: normalizedEmail,
       source: session?.metadata?.clientHash ? 'app' : 'payment_link',
+      clerkLinked: !!clerkResult.clerkUserId,
+      clerkError: clerkResult.error,
     },
   });
 
-  console.log(`[stripe webhook] auto-criado Client id=${client.id} email=${normalizedEmail} (Payment Link / fonte externa)`);
+  console.log(`[stripe webhook] auto-criado Client id=${client.id} email=${normalizedEmail} clerkLinked=${!!clerkResult.clerkUserId}`);
   return client;
 }
 
