@@ -422,7 +422,12 @@ const EditarInsumoModal = ({ insumo, onClose, onSave, onDelete }) => {
   }, [unit]);
 
   const { dashboardData, updateDashboardData } = useDashboard();
-  const categoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Outros'];
+  // Merge defaults + customs (deduplica via Set). O `||` antigo perdia
+  // os defaults assim que o cliente criava 1 categoria custom — bug
+  // reportado pela Djefeline 29/05/2026.
+  const DEFAULT_INSUMO_CATS = ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Outros'];
+  const customInsumoCats = dashboardData.operational?.categories?.insumos || [];
+  const categoryOptions = Array.from(new Set([...DEFAULT_INSUMO_CATS, ...customInsumoCats]));
   // Todos os insumos EXCETO o próprio que está sendo editado (para permitir qualquer insumo como sub-ingrediente)
   const availableInsumos = (dashboardData.operational?.insumos || []).filter(i =>
     String(i.id) !== String(insumo.id)
@@ -1088,9 +1093,13 @@ const CriarFichaTecnicaModal = ({ onClose, editingFicha, onSave, onSyncInsumo, o
   
   const DEFAULT_FICHA_CATS = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
   const _customFichaCats = (dashboardData.operational?.categories?.fichas || []).filter(c => c !== 'Insumo Pronto Preparado');
-  // Sempre incluir defaults + custom, sem deduplicar entre si
+  // Sempre incluir defaults + custom, deduplicando entre si
   const fichaCategoryOptions = Array.from(new Set([...DEFAULT_FICHA_CATS, ..._customFichaCats]));
-  const insumoCategoryOptions = dashboardData.operational?.categories?.insumos || ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Outros'];
+  // Bug fix: o `||` antigo perdia os defaults assim que existia 1 custom.
+  // Agora merge sempre defaults + customs. (mesmo fix da linha 425).
+  const DEFAULT_INSUMO_CATS_2 = ['Proteínas', 'Grãos', 'Vinhos', 'Molhos', 'Legumes', 'Temperos', 'Óleos', 'Laticínios', 'Outros'];
+  const _customInsumoCats = dashboardData.operational?.categories?.insumos || [];
+  const insumoCategoryOptions = Array.from(new Set([...DEFAULT_INSUMO_CATS_2, ..._customInsumoCats]));
   const availableInsumos = dashboardData.operational?.insumos || [];
 
   const [categoria, setCategoria] = useState(editingFicha ? editingFicha.type : fichaCategoryOptions[0]);

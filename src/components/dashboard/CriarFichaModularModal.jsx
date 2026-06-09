@@ -78,7 +78,11 @@ const CriarFichaModularModal = ({ onClose, editingFicha = null, onSave, onDelete
   const { dashboardData } = useDashboard();
   const isEditing = !!editingFicha;
 
-  const fichaCategorias = (dashboardData.operational?.categories?.fichas || ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos']).filter(c => c !== 'Insumo Pronto Preparado');
+  // Merge defaults + customs — `||` antigo perdia defaults quando havia
+  // 1 custom (bug Djefeline 29/05/2026).
+  const DEFAULT_FICHA_CATS = ['Prato Principal', 'Entrada', 'Sobremesa', 'Drinks, Coquetéis e Sucos', 'Acompanhamento'];
+  const customFichaCats = dashboardData.operational?.categories?.fichas || [];
+  const fichaCategorias = Array.from(new Set([...DEFAULT_FICHA_CATS, ...customFichaCats])).filter(c => c !== 'Insumo Pronto Preparado');
 
   // Fichas técnicas vinculáveis: não-modulares com custo > 0, excluindo
   // a propria ficha em edicao (evita auto-referencia).
