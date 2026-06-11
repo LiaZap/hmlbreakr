@@ -8,8 +8,12 @@
  * NÃO HAVIA HISTÓRICO — perda irrecuperável.
  *
  * Esse serviço cria snapshots imutáveis a cada save (best-effort, não
- * bloqueia o save principal). pruneOldSnapshots mantém só os 20 mais
- * recentes pra não inflar o banco (20 * 330KB ≈ 6.6MB por cliente — ok).
+ * bloqueia o save principal). pruneOldSnapshots mantém só os N mais
+ * recentes pra não inflar o banco.
+ *
+ * Em 29/05/2026 aumentamos default 20 → 50 (Pampa Entreveiro perdeu
+ * histórico do dia 10 porque 56 saves consecutivos em 1 dia pruneram
+ * tudo). 50 * ~1MB ≈ 50MB por cliente ativo — aceitável.
  *
  * Helpers admin permitem listar e restaurar snapshots via UI.
  */
@@ -50,12 +54,12 @@ async function createSnapshot(prisma, clientId, currentData, reason = 'auto') {
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} clientId
- * @param {number} [keepLast=20]
+ * @param {number} [keepLast=50]
  * @returns {Promise<{deleted: number}>}
  */
-async function pruneOldSnapshots(prisma, clientId, keepLast = 20) {
+async function pruneOldSnapshots(prisma, clientId, keepLast = 50) {
   if (!clientId) return { deleted: 0 };
-  const keep = Math.max(1, Number(keepLast) || 20);
+  const keep = Math.max(1, Number(keepLast) || 50);
   // Busca os IDs dos N mais recentes pra preservar
   const recent = await prisma.clientDataSnapshot.findMany({
     where: { clientId },

@@ -1429,6 +1429,67 @@ router.get('/client/:hash', async (req, res) => {
   }
 });
 
+// Version Check — endpoint LEVE pra frontend pollear e detectar
+// edicao concorrente. Retorna so { dataVersion, updatedAt, lastEditor }
+// sem carregar o data inteiro (que pode ter 1MB+).
+//
+// Frontend chama a cada 30s. Se a versao remota > local em memoria E o
+// lastEditor for OUTRA sessao (nao a propria), dispara modal de
+// "atencao, outra pessoa esta editando".
+//
+// Lightweight: select especifico, sem joins, sem parse de data.
+router.get('/client/:hash/version', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    let client = await prisma.client.findUnique({
+      where: { hash },
+      select: { id: true, updatedAt: true, data: true },
+    });
+    if (!client) {
+      const tm = await prisma.teamMember.findUnique({
+        where: { hash },
+        select: { clientId: true },
+      });
+      if (!tm) return res.status(404).json({ error: 'Hash invalido' });
+      client = await prisma.client.findUnique({
+        where: { id: tm.clientId },
+        select: { id: true, updatedAt: true, data: true },
+      });
+    }
+    if (!client) return res.status(404).json({ error: 'Cliente nao encontrado' });
+
+    let dataVersion = 0;
+    try {
+      const parsed = JSON.parse(client.data || '{}');
+      dataVersion = Number(parsed._dataVersion) || 0;
+    } catch { /* ignore */ }
+
+    // Ultimo audit log de save pra ver QUEM salvou por ultimo
+    const lastSync = await prisma.auditLog.findFirst({
+      where: {
+        entityType: 'client',
+        entityId: client.id,
+        action: 'client.data_sync',
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { actorLabel: true, actorType: true, createdAt: true },
+    });
+
+    return res.json({
+      dataVersion,
+      updatedAt: client.updatedAt,
+      lastEditor: lastSync ? {
+        label: lastSync.actorLabel,
+        type: lastSync.actorType,
+        at: lastSync.createdAt,
+      } : null,
+    });
+  } catch (e) {
+    console.error('[client version]', e?.message);
+    return res.status(500).json({ error: 'Erro ao consultar versao' });
+  }
+});
+
 // Sync Data (Save)
 router.post('/client/:hash/sync', async (req, res) => {
   try {
@@ -1565,8 +1626,10 @@ router.post('/client/:hash/sync', async (req, res) => {
       }
     });
 
-    // Best-effort cleanup — mantém só os 20 snapshots mais recentes
-    pruneOldSnapshots(prisma, clientIdToUpdate, 20)
+    // Best-effort cleanup — mantém os 50 snapshots mais recentes
+    // (aumentado 20→50 em 29/05/2026 — Pampa Entreveiro teve 56 saves em
+    // 1 dia e o limite anterior pruneou todo o historico de ontem).
+    pruneOldSnapshots(prisma, clientIdToUpdate, 50)
       .catch(err => console.error('[sync] pruneOldSnapshots falhou:', err.message));
 
     // Espelha sócios/funcionários/payment methods do onboarding pro BPO

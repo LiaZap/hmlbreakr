@@ -9,7 +9,9 @@ import AdminPanel from './components/admin/AdminPanel';
 import DemoPage from './components/DemoPage';
 import AgencyPanel from './components/agency/AgencyPanel';
 import PoliticaPrivacidade from './components/PoliticaPrivacidade';
+import EditingConflictModal from './components/EditingConflictModal';
 import { useDashboard } from './context/DashboardContext';
+import { useEditingConflictDetector } from './hooks/useEditingConflictDetector';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -35,6 +37,17 @@ function App() {
   const [agencyHash, setAgencyHash] = useState(null);
   const [routingDone, setRoutingDone] = useState(false);
   const clerkResolveFailed = useRef(false);
+
+  // Detector de edicao concorrente — so ativa quando estamos no
+  // dashboard (cliente logado). Pollea /api/client/:hash/version cada 30s
+  // e dispara modal se outra sessao tiver salvo no meio.
+  const currentHash = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('hash')
+    : null;
+  const localVersion = Number(dashboardData?._dataVersion) || 0;
+  const conflictHash = currentPage === 'dashboard' ? currentHash : null;
+  const { conflict, dismiss: dismissConflict, reload: reloadFromConflict } =
+    useEditingConflictDetector(conflictHash, localVersion);
 
   const doRouting = (signedIn) => {
     if (routingDone) return;
@@ -213,6 +226,12 @@ function App() {
       {currentPage === 'splash' && <SplashScreen onComplete={handleSplashComplete} />}
       {currentPage === 'landing' && <LandingPage onComplete={handleOnboardingComplete} />}
       {currentPage === 'dashboard' && <Dashboard />}
+      {/* Modal de aviso: edicao concorrente — fica em z-200 sobre tudo */}
+      <EditingConflictModal
+        conflict={conflict}
+        onDismiss={dismissConflict}
+        onReload={reloadFromConflict}
+      />
     </>
   );
 }
