@@ -287,6 +287,17 @@ async function backfillClient(client) {
 
 async function main() {
   console.log(`=== backfill-core ${DRY ? '[DRY-RUN]' : ''}${INSPECT ? '[INSPECT]' : ''}${WIPE ? '[WIPE]' : ''} ===`);
+
+  // TRAVA DE SEGURANÇA: este script é LOCAL-ONLY. Nunca migra/escreve em produção.
+  // O banco de destino (DATABASE_URL) precisa ser local. Override consciente: --allow-remote.
+  const dbUrl = process.env.DATABASE_URL || '';
+  const isLocal = /@(localhost|127\.0\.0\.1|host\.docker\.internal)\b/.test(dbUrl);
+  if (!isLocal && !has('--allow-remote')) {
+    console.error('\nABORTADO: DATABASE_URL não parece LOCAL. Este script só migra na CÓPIA LOCAL.');
+    console.error(`  DATABASE_URL host = ${(dbUrl.match(/@([^/:]+)/) || [])[1] || '(?)'}`);
+    console.error('  Use a cópia local (porta 5433). Para rodar contra remoto (NÃO recomendado): --allow-remote.');
+    process.exit(1);
+  }
   const where = ONLY ? { OR: [{ hash: ONLY }, { id: ONLY }] } : {};
   // Busca só os ids primeiro; carrega o blob (até dezenas de MB) UM por vez → memória constante.
   const list = await prisma.client.findMany({ where, select: { id: true, hash: true, name: true } });
