@@ -20,7 +20,9 @@ const fmtTime = (d) => {
 const EditingConflictModal = ({ conflict, onDismiss, onReload }) => {
   if (!conflict) return null;
   const editor = conflict.editor || {};
-  const editorLabel = editor.label || 'outra sessão';
+  // Preferencia: nome amigavel resolvido no backend > label cru (hash) > fallback
+  // editor.name = vem do endpoint /version, resolve hash → nome do user/restaurante
+  const editorLabel = editor.name || editor.label || 'outra sessão';
   const editorAt = fmtTime(editor.at);
 
   return (

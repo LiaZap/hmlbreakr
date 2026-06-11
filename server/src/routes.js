@@ -1475,11 +1475,39 @@ router.get('/client/:hash/version', async (req, res) => {
       select: { actorLabel: true, actorType: true, createdAt: true },
     });
 
+    // Enriquecimento do nome do editor:
+    // - actorType='client' → actorLabel vem como hash. Resolve buscando o
+    //   nome real no Client.data (user.name ou restaurant.name) ou Client.name.
+    // - actorType='team_member' → actorLabel ja vem como email/name (vide
+    //   routes.js linha 1587), mantemos.
+    // - actorType='admin' → idem, ja vem como email.
+    // Objetivo: o modal de edicao concorrente mostrar "Joao Silva esta
+    //   editando" ao inves de "8kzkj4umms6s2xgzmk6t6 esta editando".
+    let editorName = null;
+    if (lastSync) {
+      if (lastSync.actorType === 'client') {
+        try {
+          const parsed = JSON.parse(client.data || '{}');
+          editorName = parsed.user?.name || parsed.restaurant?.name || null;
+        } catch { /* fallback abaixo */ }
+        if (!editorName) {
+          const fullClient = await prisma.client.findUnique({
+            where: { id: client.id },
+            select: { name: true },
+          });
+          editorName = fullClient?.name || null;
+        }
+      } else {
+        editorName = lastSync.actorLabel;
+      }
+    }
+
     return res.json({
       dataVersion,
       updatedAt: client.updatedAt,
       lastEditor: lastSync ? {
-        label: lastSync.actorLabel,
+        label: lastSync.actorLabel, // mantido pra compat
+        name: editorName,           // nome amigavel (cliente / team / admin)
         type: lastSync.actorType,
         at: lastSync.createdAt,
       } : null,
