@@ -14,9 +14,11 @@ module.exports = defineConfig({
   schema: './src/db/schema.js',
   out: './drizzle',
   dbCredentials: { url: process.env.DATABASE_URL },
-  // tablesFilter evita que o introspect/diff toque nas tabelas do Prisma
+  // tablesFilter evita que o introspect/diff toque nas tabelas do Prisma.
+  // MANTER sincronizado com module.exports do schema.js ao criar tabela nova.
   tablesFilter: [
-    'Ingredient', 'TechnicalSheet', 'TechnicalSheetItem', 'SheetModule',
+    'Category', 'Ingredient', 'IngredientComponent', 'TechnicalSheet',
+    'TechnicalSheetItem', 'TechnicalSheetStep', 'SheetModule',
     'SheetModuleOption', 'MenuItem', 'RevenueEntry', 'DailyRevenue',
     'CompanyProfile', 'FixedCostItem', 'Employee', 'Partner', 'Equipment',
     'Vehicle', 'CardMachine', 'Marketplace', 'MetricSnapshot',

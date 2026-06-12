@@ -15,6 +15,20 @@
       "when": 1781215342574,
       "tag": "0001_cost_and_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781226622115,
+      "tag": "0002_daily_newton_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781230287063,
+      "tag": "0003_wide_warbird",
+      "breakpoints": true
     }
   ]
 }

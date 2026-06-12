@@ -202,22 +202,51 @@ com drivers em colunas, P11). O blob deixa de ser fonte de cálculo.
 
 > Tudo abaixo, até o corte, roda **só no local** espelhado. Produção intocada.
 
-**F0.5 — Corrigir o schema (pré-requisito, barato agora):**
-- [ ] P1: `clientId → Client` vira `ON DELETE RESTRICT` (editar SQL da migração).
-- [ ] P2: criar tabela `Category` + `categoryId` FK nas 3 tabelas.
-- [ ] P7: `UNIQUE (clientId, legacyId) WHERE legacyId IS NOT NULL`.
-- [ ] P8/P9/P10: `modifiedBy` + `isDeleted/deletedAt` + `createdAt/updatedAt` faltantes.
-- [ ] Cap. 4: adicionar colunas perdidas em `Ingredient` (`packUnit`, `yield`,
-      `isPrepared`…) e `TechnicalSheet` (receituário) **ou** tabela
-      `TechnicalSheetStep`.
-- [ ] Decidir P3 (Employee/Partner ↔ Bpo) e P4 (Marketplace/CardMachine ↔ PaymentMethod).
-- [ ] Decidir P5 (MenuItem.sheetId obrigatório?).
-- [ ] Gerar a migração com `drizzle-kit generate` (NUNCA `push`).
+**F0.5 — Corrigir o schema — ✅ CONCLUÍDA no LOCAL (migração `0002_daily_newton_destine`):**
+- [x] P1: `clientId → Client` agora `ON DELETE RESTRICT` (14 tabelas + `Category`). Verificado: `pg_constraint.confdeltype='r'`.
+- [x] P2: tabela `Category` (scope `ingredient|sheet|menu`) + `categoryId` FK (set null) em `Ingredient`/`TechnicalSheet`/`MenuItem`. `category` text mantido como cache de label (verdade = `categoryId`).
+- [x] P7: `UNIQUE (clientId, legacyId) WHERE legacyId IS NOT NULL` + `Category (clientId,scope,name) WHERE isDeleted=false`.
+- [x] P8/P9/P10: `modifiedBy` em todas; soft delete completo nas editáveis; `createdAt/updatedAt` nos filhos de ficha e `DailyRevenue`.
+- [x] Cap. 4: colunas perdidas em `Ingredient` (`packUnit/yield/yieldUnit/isPrepared/price/refQty/defaultQty/grossQty/sourceUpdatedAt`), `TechnicalSheet` (`costIngredients/costPackaging/salesEstimateMonthly/prepTimeMinutes/utensils/finishing/dishPhoto/isImported/progress/sourceCreatedAt/sourceUpdatedAt`), `TechnicalSheetItem` (conversão), `CompanyProfile` (perfil do dono + `cuisineType/businessLogo`), `MetricSnapshot` (drivers→colunas). Nova tabela `TechnicalSheetStep` (modoPreparo).
+- [x] P3: `Employee.bpoEmployeeId`→BpoEmployee e `Partner.bpoPartnerId`→BpoPartner (FK set null, **aditivo, não unifica**). + colunas `cpf`/`role`.
+- [x] P4: `CardMachine.{debit,credit}PaymentMethodId` (são **2** PaymentMethod por máquina) e `Marketplace.paymentMethodId` (FK set null). Link populado no F2 (dual-write), não no backfill.
+- [x] P5: `MenuItem.sheetId` **mantido nullable** (item de revenda sem ficha é válido; CMV usa `MenuItem.cost`). Documentado.
+- [x] Migração gerada com `drizzle-kit generate` + SQL bruto appendado (NUNCA `push`); aplicada com `migrate`. Backfill `--wipe` nos 39 clientes: **0 divergências**.
 
-**F1 — Backfill (estender o já existente):**
-- [ ] Mapear no `backfill-core.js` os campos do cap. 4 e a `Category`.
-- [ ] `prod-to-local` → migrate → `backfill --dry-run` → reconciliar (já provado).
-- [ ] Conferir 0 divergências incluindo os novos campos.
+#### Decisões de modelagem (resolvem achados da revisão adversarial)
+
+- **TIER de auditoria** — *Editáveis* (Ingredient, TechnicalSheet, MenuItem, Category, Employee, Partner, Equipment, Vehicle, CardMachine, Marketplace, CompanyProfile, FixedCostItem) levam soft delete completo. *Fatos* (RevenueEntry, DailyRevenue, MetricSnapshot) **não** levam `isDeleted` — soft delete colidiria com o `UNIQUE` de período (registro "deletado" travaria o re-lançamento do mês); correção é via update/`source`. *Filhos de agregado* (TechnicalSheetItem, SheetModule, SheetModuleOption, TechnicalSheetStep) usam **delete físico** dentro do update da ficha-raiz auditada — sem `isDeleted`.
+- **Optimistic locking** — `updatedAt` é relógio **técnico** (token de versão; server actions comparam no `.where`). A data **real** de edição do usuário vive em `sourceUpdatedAt` (alimenta o card "Fichas Desatualizadas"). O `$onUpdate` do `updatedAt` não pode ser usado como data de negócio.
+- **Imagens base64** — `data.profile.photo` chega a **2,7 MB** em base64 no blob. **Não** são migradas para colunas (recriaria o "castelo de areia" e infla o dump). Backfill só grava `businessLogo`/`ownerPhoto` se for URL (`urlOnly`); o base64 fica no blob até uma migração futura para object storage. Colunas prontas para receber URL.
+- **`_dataVersion`** (contador global do blob) é **abandonado** em favor do `updatedAt` por linha (locking row-level). Não mapeia para tabelas normalizadas.
+- **PII do dono** — `ownerCpf`/`ownerBirthday` capturados em `CompanyProfile` (1:1 com Client); CPF deve ser mascarado em logs (padrão `onboardingSync.js`).
+
+#### Runbook da migração 0002 (regra de ouro: `generate → appendar → migrate`)
+
+1. Editar `schema.js` (colunas nativas + Category + categoryId intra-Drizzle + uniques parciais).
+2. `npm run db:drizzle:generate` → gera `0002`. **Inspecionar** o `.sql`: só pode haver CREATE/ADD COLUMN/ADD CONSTRAINT categoryId/índices — **nenhum** `ALTER COLUMN TYPE` ou `DROP COLUMN` inesperado.
+3. **Appendar** o SQL bruto das FK cross-ORM (idempotente: `DROP CONSTRAINT IF EXISTS` antes de cada `ADD`). Pré-check de órfãos (`LEFT JOIN Client`) = 0 antes do `RESTRICT`.
+4. `npm run db:drizzle:migrate`.
+5. **NUNCA** re-rodar `generate` por cima do mesmo idx 0002 (apagaria o append). Para regenerar: apague `0002.sql` + `0002_snapshot.json` + a entry do journal e refaça o append.
+6. As 19 FK cross-ORM são **raw-only** (invisíveis ao snapshot do Drizzle); **NUNCA** declará-las com `.references()` para tabelas do Prisma — o `generate` duplicaria a constraint.
+
+> **Pendência fora do escopo F0.5 (lado Prisma):** `BpoEmployee`/`BpoPartner`/`PaymentMethod` ainda têm `clientId → Client` **CASCADE** (Prisma). O `set null` cross-ORM só é seguro enquanto o `Client` usar soft delete; trocar esses 3 para `RESTRICT` exige uma migração Prisma separada.
+
+#### Rodada de verificação adversarial → migração `0003_wide_warbird` (perdas que escaparam)
+
+Uma verificação adversarial pós-implementação (3 agentes) achou **perdas que o inspect inicial não revelou** (o cliente-piloto Itálico não tinha esses casos); todas corrigidas com a migração aditiva `0003`:
+
+- **🔴 Insumo preparado perdia a composição.** `operational.insumos[].subIngredients` (sub-receita em **árvore recursiva** — componentes que podem ser eles mesmos preparados) + `rendimentoPreparado`/`rendimentoUnit`/`totalCost` não tinham destino. O backfill gravava `isPrepared=true` mas descartava a receita → casca vazia, custo irreconstruível. **Fix:** tabela `IngredientComponent` (self-FK `parentComponentId` cascade para a árvore; `componentIngredientId` set null linkando ao insumo base; FILHO de agregado, delete físico) + colunas `preparedYield/preparedYieldUnit/preparedTotalCost` em `Ingredient`. Backfill caminha a árvore recursivamente. Resultado: 366 componentes (151 aninhados, 358 linkados), 51 preparados com custo.
+- **🟡 `CardMachine.custom_provider` descartado** (14 máquinas "Outra" perdiam o adquirente real). **Fix:** coluna `customProvider` (espelha `Marketplace`).
+- **🟡 `ownerRole`/`ownerIsOwner` do dono** (`data.user.role`/`isOwner`, presentes em 39/33 clientes — o 1º review afirmara que `role` não existia; **estava errado**, confirmado via `jsonb_object_keys`). **Fix:** colunas em `CompanyProfile`.
+- **🟡 `drizzle.config.js tablesFilter`** não listava `Category`/`TechnicalSheetStep`. **Fix:** adicionadas (+ `IngredientComponent`); manter sincronizado com `schema.js`.
+
+**Drops intencionais documentados (não são perda silenciosa):** imagens base64 (logo/fotos — ficam no blob até object storage), `_dataVersion` (contador global do blob → `updatedAt` por linha), views calculadas (`overview`/`revenue`/`breakEven`/`dre`/`cardComparison` — recomputadas na F4), `data.tips` (estático). Vínculo `paymentMethodId` de cartões/marketplaces é populado na F2 (dual-write via `onboardingSync`), não no backfill.
+
+**F1 — Backfill (estender o já existente) — ✅ CONCLUÍDA no LOCAL:**
+- [x] `backfill-core.js` estendido: Category, TechnicalSheetStep, todos os campos do cap. 4, `modifiedBy='backfill:F1'`, vínculo BPO best-effort (cpf-first/nome-único), drivers→colunas.
+- [x] `migrate` → `backfill --dry-run` → `--wipe` (39 clientes): **0 divergências**; integridade FK conferida (0 órfãos `categoryId`/`bpoEmployeeId`).
+- [x] Cobertura: 382 categorias, 138 passos de preparo, 1402 fichas c/ `sourceUpdatedAt`, 39/39 perfis de dono, 114 vínculos `Employee→BpoEmployee`.
 
 **F2 — Dual-write:**
 - [ ] Estender `onboardingSync.js` (ou o gancho de escrita) para gravar Drizzle.
