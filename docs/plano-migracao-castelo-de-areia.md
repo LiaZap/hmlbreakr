@@ -265,10 +265,12 @@ Uma verificação adversarial pós-implementação (3 agentes) achou **perdas qu
 - [x] Estratégia = **projeção reconstruída a cada save** (wipe+insert por cliente, idempotente). Blob continua a fonte da verdade; `modifiedBy='sync:F2'`. Smoke test OK; backfill regredido (0 divergências) prova o módulo compartilhado.
 - [ ] (próximo) Observar em sombra com edição real pela UI e validar a projeção em produção (após deploy).
 
-**F3 — Leitura por domínio + flag:**
-- [ ] Feature flag por cliente (`Client.readFromTables` ou tabela de flags).
-- [ ] Migrar leitura: insumos → fichas → menu → faturamento → custos.
-- [ ] Piloto 1 cliente → 10% → 100%, com fallback para o blob por flag.
+**F3 — Leitura por domínio + flag — 🚧 INSUMOS feito no LOCAL:**
+- [x] Flag por cliente `Client.readInsumosFromTables` (coluna Prisma, default OFF, kill-switch). Migração `20260612120000_read_insumos_flag`.
+- [x] Reverse mapper `src/services/coreRead.js` (inverso do coreSync): Ingredient(+IngredientComponent árvore) → shape do blob, `id=legacyId` (estável), chaves PT/compra, `R$`/vírgula com precisão preservada.
+- [x] **Portão de round-trip** `scripts/f3-roundtrip-insumos.js`: blob × reconstrução, **100% fiel** nos 39 clientes (1822 insumos, 215 subs, 0 divergência, 0 lossy). Pré-requisito: `IngredientComponent` enriquecido (migração `0004`) c/ o snapshot completo do sub.
+- [x] Injeção no `GET /client/:hash` ([routes.js:1334](../server/src/routes.js)) atrás da flag, best-effort (fallback ao blob); marca `_insumosSource`. Piloto: Itálico ligado, serve 41 insumos da tabela.
+- [ ] (próximo) Validar com a app rodando; ligar p/ 10% → 100%; depois migrar leitura de fichas → menu → faturamento → custos (mesmo padrão).
 
 **F4–F5 — Cálculo no servidor e aposentadoria:**
 - [ ] `financialCalc` lê tabelas; valida indicadores contra o blob no local.

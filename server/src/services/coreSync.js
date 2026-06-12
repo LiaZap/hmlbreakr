@@ -40,9 +40,11 @@ const boolish = (v) => v === true || v === 'true' || v === 'Sim' || v === 'sim';
 // "1000kg" → {value:'1000', unit:'kg'} ; "0,5 L" → {'0.5','L'} ; "" → {null,null}
 function parseYield(v) {
   if (v == null || v === '') return { value: null, unit: null };
-  const m = String(v).trim().match(/^\s*(-?[\d.,]+)\s*([^\d.,\s]*)/);
-  if (!m) return { value: null, unit: null };
-  return { value: money(m[1]), unit: (m[2] || '').trim() || null };
+  const str = String(v).trim();
+  const m = str.match(/^\s*(-?[\d.,]+)\s*([^\d.,\s]*)/);
+  if (m) return { value: money(m[1]), unit: (m[2] || '').trim() || null };
+  // sem número: pode ser só unidade ("kg") — preserva a unidade p/ round-trip fiel
+  return { value: null, unit: /^[^\d.,\s]+$/.test(str) ? str : null };
 }
 // epoch ms (number/string) → Date ; senão null
 function epochToDate(v) {
@@ -74,6 +76,7 @@ function emitComponents(list, rootIngredientId, parentId, ingMap, out, modifiedB
   let pos = 0;
   for (const c of (Array.isArray(list) ? list : [])) {
     const compId = uuid();
+    const ry = parseYield(c.rendimento);
     out.push({
       id: compId, ingredientId: rootIngredientId, parentComponentId: parentId,
       componentIngredientId: c.id != null ? (ingMap[String(c.id)] || null) : null,
@@ -82,6 +85,16 @@ function emitComponents(list, rootIngredientId, parentId, ingMap, out, modifiedB
       category: first(c.category, c.categoria) || null,
       qty: money(first(c.qty, c.quantidade)), unit: c.unit || null,
       unitCost: money(c.price), lineCost: money(c.custo),
+      // snapshot completo do sub (p/ reconstrução fiel na F3)
+      packUnit: first(c.purchaseUnit, c.unidadeCompra) || null,
+      packPrice: money(c.purchaseTotal), packQty: money(c.purchaseQty),
+      defaultQty: money(c.defaultQty), grossQty: money(c.grossQty), netQty: money(c.netQty),
+      correctionFactor: money(c.fc),
+      usageUnit: c.usageUnit || null, originalUnit: c.originalUnit || null,
+      yield: ry.value, yieldUnit: ry.unit,
+      preparedYield: money(c.rendimentoPreparado), preparedYieldUnit: c.rendimentoUnit || null,
+      preparedTotalCost: money(c.totalCost),
+      sourceUpdatedAt: epochToDate(c.lastUpdated),
       isPrepared: boolish(c.isPrepared), position: ++pos,
       modifiedBy,
     });

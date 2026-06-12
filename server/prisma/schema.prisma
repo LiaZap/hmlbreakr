@@ -55,6 +55,10 @@ model Client {
   data                 String
   teamMembers          TeamMember[] @relation("ClientTeam")
 
+  // F3 (strangler): lê operational.insumos das tabelas Drizzle em vez do blob.
+  // Kill-switch por cliente, default OFF. Blob segue como fonte do WRITE.
+  readInsumosFromTables Boolean            @default(false)
+
   // BPO Financeiro V2.0
   bpoEnabled          Boolean              @default(false)
   bpoActivatedAt      DateTime?

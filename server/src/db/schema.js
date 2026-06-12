@@ -117,10 +117,26 @@ const ingredientComponent = pgTable('IngredientComponent', {
   legacyId: text('legacyId'),
   name: text('name').notNull(),
   category: text('category'),
-  qty: numeric('qty', { precision: 18, scale: 4 }),
+  qty: numeric('qty', { precision: 18, scale: 4 }),            // ← qty (usado na receita)
   unit: text('unit'),
   unitCost: numeric('unitCost', { precision: 18, scale: 6 }),   // ← price
   lineCost: numeric('lineCost', { precision: 18, scale: 2 }),   // ← custo
+  // snapshot completo do sub (o blob denormaliza o insumo dentro da sub-receita)
+  packUnit: text('packUnit'),                                  // ← purchaseUnit
+  packPrice: numeric('packPrice', { precision: 18, scale: 2 }), // ← purchaseTotal
+  packQty: numeric('packQty', { precision: 18, scale: 4 }),     // ← purchaseQty
+  defaultQty: numeric('defaultQty', { precision: 18, scale: 4 }),
+  grossQty: numeric('grossQty', { precision: 18, scale: 4 }),
+  netQty: numeric('netQty', { precision: 18, scale: 4 }),
+  correctionFactor: numeric('correctionFactor', { precision: 10, scale: 4 }),  // ← fc
+  usageUnit: text('usageUnit'),
+  originalUnit: text('originalUnit'),
+  yield: numeric('yield', { precision: 18, scale: 4 }),        // ← rendimento (parte numérica)
+  yieldUnit: text('yieldUnit'),                                // ← rendimento (unidade)
+  preparedYield: numeric('preparedYield', { precision: 18, scale: 4 }),     // sub aninhado preparado
+  preparedYieldUnit: text('preparedYieldUnit'),
+  preparedTotalCost: numeric('preparedTotalCost', { precision: 18, scale: 4 }),
+  sourceUpdatedAt: ts('sourceUpdatedAt'),                      // ← lastUpdated (epoch)
   isPrepared: boolean('isPrepared').default(false).notNull(),
   position: integer('position'),
   ...audit(),

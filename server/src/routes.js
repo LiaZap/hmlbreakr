@@ -15,6 +15,8 @@ const crypto = require('crypto');
 const { db: coreDb } = require('./db/client');
 const coreSchema = require('./db/schema');
 const { syncCoreTables } = require('./services/coreSync');
+// F3 read — reconstrói operational.insumos das tabelas (atrás de flag por cliente).
+const { reconstructInsumos } = require('./services/coreRead');
 
 // Helpers de setup de auth pra cliente novo (Clerk + senha temp).
 // Compartilhados com stripeWebhook.js — single source of truth.
@@ -1331,7 +1333,21 @@ router.get('/client/:hash', async (req, res) => {
 
     let dashboardData = JSON.parse(client.data);
 
-    // If it's a team member, override the `user` property in the payload 
+    // F3 (strangler): se a flag estiver ON p/ este cliente, serve operational.insumos
+    // a partir das tabelas Drizzle (Ingredient+IngredientComponent) em vez do blob.
+    // Round-trip provado 100% fiel. Best-effort: se falhar, cai no blob (não quebra a tela).
+    if (client.readInsumosFromTables) {
+      try {
+        const insumosFromTables = await reconstructInsumos(coreDb, coreSchema, client.id);
+        dashboardData.operational = { ...(dashboardData.operational || {}), insumos: insumosFromTables };
+        dashboardData._insumosSource = 'tables';
+      } catch (e) {
+        console.error('[F3 reconstructInsumos] falhou, usando blob:', e?.message || e);
+        dashboardData._insumosSource = 'blob-fallback';
+      }
+    }
+
+    // If it's a team member, override the `user` property in the payload
     // to show the manager's name and role instead of the owner's.
     if (!isOwner && teamMember) {
       dashboardData.user = {
