@@ -18,10 +18,7 @@
  * quebra a resposta ao usuário.
  */
 
-const { PrismaClient } = require('@prisma/client');
 const { logAudit } = require('../services/auditService');
-
-const prisma = new PrismaClient();
 
 // Métodos que alteram estado — só esses são auditados.
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -133,7 +130,7 @@ function createAuditMiddleware() {
         let summary = `${VERB_LABEL[verb] || method} em ${entityType}`;
         if (failed) summary += ` — falhou (${status})`;
 
-        logAudit(prisma, {
+        logAudit({
           action: failed ? `${action}.failed` : action,
           category,
           entityType,

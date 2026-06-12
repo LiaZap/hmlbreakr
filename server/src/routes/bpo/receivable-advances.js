@@ -11,11 +11,16 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const {
+  eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray,
+  isNull, isNotNull, desc, asc, sql, count, getTableColumns,
+} = require('drizzle-orm');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
@@ -40,13 +45,37 @@ const computeAdvance = ({ monthlyRate, averageValue, daysAdvanced }) => {
   return { dailyRate: +dailyRate.toFixed(6), totalDiscount, finalValue };
 };
 
+// Select padrão do paymentMethod relacionado (id, name, type) aninhado.
+const advanceWithMethodSelect = {
+  ...getTableColumns(t.receivableAdvance),
+  paymentMethod: {
+    id: t.paymentMethod.id,
+    name: t.paymentMethod.name,
+    type: t.paymentMethod.type,
+  },
+};
+
+// Quando não há paymentMethodId, a relation deve vir null (igual ao Prisma),
+// não um objeto { id: null, name: null, type: null }.
+const normalizePaymentMethod = (row) => {
+  if (row && row.paymentMethod && row.paymentMethod.id == null) {
+    return { ...row, paymentMethod: null };
+  }
+  return row;
+};
+
 router.get('/', async (req, res) => {
   try {
-    const items = await prisma.receivableAdvance.findMany({
-      where: { clientId: req.bpoClient.id, active: true },
-      include: { paymentMethod: { select: { id: true, name: true, type: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+    const rows = await db
+      .select(advanceWithMethodSelect)
+      .from(t.receivableAdvance)
+      .leftJoin(t.paymentMethod, eq(t.receivableAdvance.paymentMethodId, t.paymentMethod.id))
+      .where(and(
+        eq(t.receivableAdvance.clientId, req.bpoClient.id),
+        eq(t.receivableAdvance.active, true),
+      ))
+      .orderBy(desc(t.receivableAdvance.createdAt));
+    const items = rows.map(normalizePaymentMethod);
     // Soma total perdido em desconto (todas antecipações ativas)
     const totalLostMonthly = items.reduce((acc, i) => acc + parseFloat(i.totalDiscount), 0);
     res.json({ items, total: items.length, totalLostMonthly: +totalLostMonthly.toFixed(2) });
@@ -66,8 +95,11 @@ router.post('/', async (req, res) => {
 
     const calc = computeAdvance({ monthlyRate, averageValue, daysAdvanced });
 
-    const item = await prisma.receivableAdvance.create({
-      data: {
+    const now = new Date().toISOString();
+    const [created] = await db
+      .insert(t.receivableAdvance)
+      .values({
+        id: crypto.randomUUID(),
         clientId: req.bpoClient.id,
         paymentMethodId: paymentMethodId || null,
         description: description.trim(),
@@ -75,9 +107,12 @@ router.post('/', async (req, res) => {
         averageValue: parseFloat(averageValue),
         daysAdvanced: parseInt(daysAdvanced, 10),
         ...calc,
-      },
-      include: { paymentMethod: { select: { id: true, name: true, type: true } } },
-    });
+        updatedAt: now,
+      })
+      .returning();
+
+    // Anexa paymentMethod (id, name, type) igual ao include do Prisma.
+    const item = await attachPaymentMethod(created);
     res.status(201).json(item);
   } catch (err) {
     console.error('[bpo advances create]', err);
@@ -88,9 +123,14 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { description, paymentMethodId, monthlyRate, averageValue, daysAdvanced } = req.body;
-    const existing = await prisma.receivableAdvance.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db
+      .select()
+      .from(t.receivableAdvance)
+      .where(and(
+        eq(t.receivableAdvance.id, req.params.id),
+        eq(t.receivableAdvance.clientId, req.bpoClient.id),
+      ))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
 
     // Se inputs mudaram, recalcula
@@ -99,18 +139,21 @@ router.put('/:id', async (req, res) => {
     const d = daysAdvanced != null ? parseInt(daysAdvanced, 10) : existing.daysAdvanced;
     const calc = computeAdvance({ monthlyRate: m, averageValue: v, daysAdvanced: d });
 
-    const item = await prisma.receivableAdvance.update({
-      where: { id: req.params.id },
-      data: {
+    const [updated] = await db
+      .update(t.receivableAdvance)
+      .set({
         ...(description != null ? { description: String(description).trim() } : {}),
         ...(paymentMethodId !== undefined ? { paymentMethodId: paymentMethodId || null } : {}),
         monthlyRate: m,
         averageValue: v,
         daysAdvanced: d,
         ...calc,
-      },
-      include: { paymentMethod: { select: { id: true, name: true, type: true } } },
-    });
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(t.receivableAdvance.id, req.params.id))
+      .returning();
+
+    const item = await attachPaymentMethod(updated);
     res.json(item);
   } catch (err) {
     console.error('[bpo advances update]', err);
@@ -120,20 +163,40 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const existing = await prisma.receivableAdvance.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db
+      .select()
+      .from(t.receivableAdvance)
+      .where(and(
+        eq(t.receivableAdvance.id, req.params.id),
+        eq(t.receivableAdvance.clientId, req.bpoClient.id),
+      ))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
     // Soft delete pra preservar histórico
-    await prisma.receivableAdvance.update({
-      where: { id: req.params.id },
-      data: { active: false },
-    });
+    await db
+      .update(t.receivableAdvance)
+      .set({ active: false, updatedAt: new Date().toISOString() })
+      .where(eq(t.receivableAdvance.id, req.params.id));
     res.json({ success: true });
   } catch (err) {
     console.error('[bpo advances delete]', err);
     res.status(500).json({ error: 'Erro ao excluir antecipação' });
   }
 });
+
+/**
+ * Carrega o paymentMethod (id, name, type) e aninha no registro, replicando
+ * o `include: { paymentMethod: { select: { id, name, type } } }` do Prisma.
+ */
+async function attachPaymentMethod(advance) {
+  if (!advance) return advance;
+  if (!advance.paymentMethodId) return { ...advance, paymentMethod: null };
+  const [pm] = await db
+    .select({ id: t.paymentMethod.id, name: t.paymentMethod.name, type: t.paymentMethod.type })
+    .from(t.paymentMethod)
+    .where(eq(t.paymentMethod.id, advance.paymentMethodId))
+    .limit(1);
+  return { ...advance, paymentMethod: pm || null };
+}
 
 module.exports = router;

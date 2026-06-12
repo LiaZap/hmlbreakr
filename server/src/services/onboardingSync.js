@@ -10,6 +10,11 @@
  *   feitas direto na BPO depois do onboarding)
  */
 
+const { db } = require('../db/client');
+const t = require('../db/schema-bpo');
+const { eq, and, sql } = require('drizzle-orm');
+const crypto = require('crypto');
+
 const parseCurrency = (value) => {
   if (value == null) return 0;
   if (typeof value === 'number') return value;
@@ -31,10 +36,10 @@ const parsePercent = (value) => {
 
 const norm = (s) => String(s || '').toLowerCase().trim();
 
-async function syncPartners(prisma, clientId, partners) {
+async function syncPartners(clientId, partners) {
   if (!Array.isArray(partners)) return;
 
-  const existing = await prisma.bpoPartner.findMany({ where: { clientId } });
+  const existing = await db.select().from(t.bpoPartner).where(eq(t.bpoPartner.clientId, clientId));
   const byCpf = new Map(existing.filter(p => p.cpf).map(p => [p.cpf, p]));
   const byName = new Map(existing.map(p => [norm(p.name), p]));
 
@@ -45,21 +50,22 @@ async function syncPartners(prisma, clientId, partners) {
       name: p.name,
       cpf: p.cpf || null,
       prolaboreAmount: parseCurrency(p.pro_labore),
+      updatedAt: new Date(),
     };
 
     const match = (p.cpf && byCpf.get(p.cpf)) || byName.get(norm(p.name));
     if (match) {
-      await prisma.bpoPartner.update({ where: { id: match.id }, data });
+      await db.update(t.bpoPartner).set(data).where(eq(t.bpoPartner.id, match.id));
     } else {
-      await prisma.bpoPartner.create({ data: { ...data, clientId } });
+      await db.insert(t.bpoPartner).values({ id: crypto.randomUUID(), ...data, clientId });
     }
   }
 }
 
-async function syncEmployees(prisma, clientId, employees) {
+async function syncEmployees(clientId, employees) {
   if (!Array.isArray(employees)) return;
 
-  const existing = await prisma.bpoEmployee.findMany({ where: { clientId } });
+  const existing = await db.select().from(t.bpoEmployee).where(eq(t.bpoEmployee.clientId, clientId));
   const byCpf = new Map(existing.filter(e => e.cpf).map(e => [e.cpf, e]));
   const byName = new Map(existing.map(e => [norm(e.name), e]));
 
@@ -72,18 +78,19 @@ async function syncEmployees(prisma, clientId, employees) {
       role: e.role || 'Cozinha',
       isFreelancer: e.regime === 'Freelancer',
       baseSalary: parseCurrency(e.base_salary),
+      updatedAt: new Date(),
     };
 
     const match = (e.cpf && byCpf.get(e.cpf)) || byName.get(norm(e.name));
     if (match) {
-      await prisma.bpoEmployee.update({ where: { id: match.id }, data });
+      await db.update(t.bpoEmployee).set(data).where(eq(t.bpoEmployee.id, match.id));
     } else {
-      await prisma.bpoEmployee.create({ data: { ...data, clientId } });
+      await db.insert(t.bpoEmployee).values({ id: crypto.randomUUID(), ...data, clientId });
     }
   }
 }
 
-async function syncPaymentMethods(prisma, clientId, formData) {
+async function syncPaymentMethods(clientId, formData) {
   const methods = [];
 
   // Marketplaces (iFood, Rappi, etc)
@@ -123,19 +130,18 @@ async function syncPaymentMethods(prisma, clientId, formData) {
 
   if (methods.length === 0) return;
 
-  const existing = await prisma.paymentMethod.findMany({ where: { clientId } });
+  const existing = await db.select().from(t.paymentMethod).where(eq(t.paymentMethod.clientId, clientId));
   const byKey = new Map(existing.map(m => [`${norm(m.name)}|${m.type}`, m]));
 
   for (const m of methods) {
     const key = `${norm(m.name)}|${m.type}`;
     const match = byKey.get(key);
     if (match) {
-      await prisma.paymentMethod.update({
-        where: { id: match.id },
-        data: { feePercent: m.feePercent, name: m.name },
-      });
+      await db.update(t.paymentMethod)
+        .set({ feePercent: m.feePercent, name: m.name, updatedAt: new Date() })
+        .where(eq(t.paymentMethod.id, match.id));
     } else {
-      await prisma.paymentMethod.create({ data: { ...m, clientId } });
+      await db.insert(t.paymentMethod).values({ id: crypto.randomUUID(), ...m, clientId, updatedAt: new Date() });
     }
   }
 }
@@ -212,30 +218,40 @@ function collectFixedCosts(formData) {
 
 // Garante que existe uma FinancialCategory de despesa pro custo fixo.
 // Idempotente: match por nome (case-insensitive) + type 'despesa'.
-async function ensureCategory(prisma, clientId, categoryCache, label, dreGroup) {
+async function ensureCategory(clientId, categoryCache, label, dreGroup) {
   const cacheKey = norm(label);
   if (categoryCache.has(cacheKey)) return categoryCache.get(cacheKey);
 
-  let cat = await prisma.financialCategory.findFirst({
-    where: { clientId, type: 'despesa', name: { equals: label, mode: 'insensitive' } },
-  });
+  let [cat] = await db.select().from(t.financialCategory)
+    .where(and(
+      eq(t.financialCategory.clientId, clientId),
+      eq(t.financialCategory.type, 'despesa'),
+      sql`${t.financialCategory.name} ILIKE ${label}`,
+    ))
+    .limit(1);
   if (!cat) {
-    cat = await prisma.financialCategory.create({
-      data: { clientId, name: label, type: 'despesa', dreGroup: dreGroup || 'despesa_op' },
-    });
+    [cat] = await db.insert(t.financialCategory).values({
+      id: crypto.randomUUID(),
+      clientId,
+      name: label,
+      type: 'despesa',
+      dreGroup: dreGroup || 'despesa_op',
+      updatedAt: new Date(),
+    }).returning();
   }
   categoryCache.set(cacheKey, cat);
   return cat;
 }
 
-async function syncFixedCosts(prisma, clientId, formData) {
+async function syncFixedCosts(clientId, formData) {
   const costs = collectFixedCosts(formData);
 
   // Payables já sincronizados pelo onboarding (têm a tag [onb:*]).
-  const existing = await prisma.payable.findMany({
-    where: { clientId, description: { contains: '[onb:' } },
-    include: { recurrence: { select: { id: true } } },
-  });
+  const existing = await db.select().from(t.payable)
+    .where(and(
+      eq(t.payable.clientId, clientId),
+      sql`${t.payable.description} ILIKE ${'%[onb:%'}`,
+    ));
   const byKey = new Map();
   for (const p of existing) {
     const c = costs.find((x) => hasOnbTag(p.description, x.key));
@@ -256,16 +272,15 @@ async function syncFixedCosts(prisma, clientId, formData) {
     // desse custo, cancela (cliente apagou o valor no onboarding).
     if (amount <= 0) {
       if (match && match.status === 'pending') {
-        await prisma.payable.update({
-          where: { id: match.id },
-          data: { status: 'cancelled' },
-        });
+        await db.update(t.payable)
+          .set({ status: 'cancelled', updatedAt: new Date() })
+          .where(eq(t.payable.id, match.id));
         cancelled++;
       }
       continue;
     }
 
-    const category = await ensureCategory(prisma, clientId, categoryCache, cost.label, cost.dreGroup);
+    const category = await ensureCategory(clientId, categoryCache, cost.label, cost.dreGroup);
 
     if (match) {
       // Atualiza valor/categoria. Só mexe em dueDate/status se ainda
@@ -274,6 +289,7 @@ async function syncFixedCosts(prisma, clientId, formData) {
         amount,
         description,
         categoryId: category.id,
+        updatedAt: new Date(),
       };
       if (match.status === 'pending' || match.status === 'cancelled') {
         data.remainingAmount = amount;
@@ -281,25 +297,28 @@ async function syncFixedCosts(prisma, clientId, formData) {
         data.paymentForecast = dueDate;
         data.status = 'pending';
       }
-      await prisma.payable.update({ where: { id: match.id }, data });
+      await db.update(t.payable).set(data).where(eq(t.payable.id, match.id));
       synced++;
     } else {
       // Cria o Payable recorrente mensal (recorrência indefinida).
-      const recurrence = await prisma.recurrence.create({
-        data: { frequency: 'monthly', intervalCount: 1, startDate: dueDate },
-      });
-      await prisma.payable.create({
-        data: {
-          clientId,
-          amount,
-          remainingAmount: amount,
-          dueDate,
-          paymentForecast: dueDate,
-          description,
-          categoryId: category.id,
-          status: 'pending',
-          recurrenceId: recurrence.id,
-        },
+      const [recurrence] = await db.insert(t.recurrence).values({
+        id: crypto.randomUUID(),
+        frequency: 'monthly',
+        intervalCount: 1,
+        startDate: dueDate,
+      }).returning();
+      await db.insert(t.payable).values({
+        id: crypto.randomUUID(),
+        clientId,
+        amount,
+        remainingAmount: amount,
+        dueDate,
+        paymentForecast: dueDate,
+        description,
+        categoryId: category.id,
+        status: 'pending',
+        recurrenceId: recurrence.id,
+        updatedAt: new Date(),
       });
       synced++;
     }
@@ -308,7 +327,7 @@ async function syncFixedCosts(prisma, clientId, formData) {
   return { synced, cancelled };
 }
 
-async function syncOnboardingToBpo(prisma, clientId, formData) {
+async function syncOnboardingToBpo(_prisma, clientId, formData) {
   if (!formData || typeof formData !== 'object') return;
 
   const stats = {
@@ -319,15 +338,15 @@ async function syncOnboardingToBpo(prisma, clientId, formData) {
   };
 
   try {
-    await syncPartners(prisma, clientId, formData.partners);
-    await syncEmployees(prisma, clientId, formData.employees);
-    await syncPaymentMethods(prisma, clientId, formData);
-    const fixed = await syncFixedCosts(prisma, clientId, formData);
+    await syncPartners(clientId, formData.partners);
+    await syncEmployees(clientId, formData.employees);
+    await syncPaymentMethods(clientId, formData);
+    const fixed = await syncFixedCosts(clientId, formData);
     console.log(`[onboardingSync] OK client=${clientId} partners=${stats.partners} employees=${stats.employees} marketplaces=${stats.marketplaces} cards=${stats.cards} fixedCosts=${fixed.synced} cancelled=${fixed.cancelled}`);
   } catch (err) {
     // Sync é best-effort — não quebra o save do cliente se falhar.
     // PII-safe: este fluxo mexe com partners (CPF) e employees (CPF/salário);
-    // Prisma `meta.target` em conflito pode vazar o valor. Loga só message
+    // o driver pg em conflito de unique pode vazar detalhe. Loga só message
     // + code categórico (pii-auditor #7).
     console.error(`[onboardingSync] FAIL client=${clientId}: ${err?.message || err} (code=${err?.code || 'unknown'})`);
   }
@@ -337,13 +356,16 @@ async function syncOnboardingToBpo(prisma, clientId, formData) {
  * Diagnóstico: compara o que tá no formData (onboarding) com o que tá nas
  * tabelas BPO. Útil pra admin verificar se sync rodou.
  */
-async function diffOnboardingVsBpo(prisma, clientId, formData) {
+async function diffOnboardingVsBpo(_prisma, clientId, formData) {
   formData = formData || {};
   const [bpoPartners, bpoEmployees, bpoPaymentMethods, bpoFixedPayables] = await Promise.all([
-    prisma.bpoPartner.findMany({ where: { clientId } }),
-    prisma.bpoEmployee.findMany({ where: { clientId } }),
-    prisma.paymentMethod.findMany({ where: { clientId } }),
-    prisma.payable.findMany({ where: { clientId, description: { contains: '[onb:' } } }),
+    db.select().from(t.bpoPartner).where(eq(t.bpoPartner.clientId, clientId)),
+    db.select().from(t.bpoEmployee).where(eq(t.bpoEmployee.clientId, clientId)),
+    db.select().from(t.paymentMethod).where(eq(t.paymentMethod.clientId, clientId)),
+    db.select().from(t.payable).where(and(
+      eq(t.payable.clientId, clientId),
+      sql`${t.payable.description} ILIKE ${'%[onb:%'}`,
+    )),
   ]);
 
   const fixedCosts = collectFixedCosts(formData).filter((c) => (c.amount || 0) > 0);

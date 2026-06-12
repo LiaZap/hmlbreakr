@@ -2,17 +2,17 @@
  * auditService — Trilha de auditoria do Breaker.
  *
  * O QUE FAZ
- * Centraliza a escrita e a leitura da tabela `AuditLog` (model Prisma
- * append-only). Toda ação administrativa ou de sistema relevante deve gerar
- * um registro aqui: quem fez (actor), o que (action), em qual entidade
- * (entityType/entityId), quando (createdAt) e detalhes (metadata).
+ * Centraliza a escrita e a leitura da tabela `AuditLog` (append-only). Toda
+ * ação administrativa ou de sistema relevante deve gerar um registro aqui:
+ * quem fez (actor), o que (action), em qual entidade (entityType/entityId),
+ * quando (createdAt) e detalhes (metadata).
  *
  * O AuditLog é IMUTÁVEL — nunca recebe UPDATE nem DELETE. Não tem FK, então
  * sobrevive a soft-deletes das entidades referenciadas.
  *
- * PADRÃO DE USO
+ * PADRÃO DE USO (assinatura nova, sem prisma):
  *   const { logAudit } = require('../services/auditService');
- *   await logAudit(prisma, {
+ *   await logAudit({
  *     action: 'client.data_sync',
  *     entityType: 'client',
  *     entityId: client.id,
@@ -23,19 +23,34 @@
  *     metadata: { sizeBefore: 1234, sizeAfter: 1240, shrink: false },
  *   });
  *
+ * Migrado de Prisma → Drizzle (2026-06-12). Para não quebrar os ~30 callers de
+ * uma vez, a assinatura é RETROCOMPATÍVEL: aceita tanto `logAudit(entry)`
+ * quanto o antigo `logAudit(prisma, entry)` (o primeiro arg é ignorado se o
+ * segundo existir). Mesma coisa pra `listAudit`.
+ *
  * IMPORTANTE: `logAudit` é BEST-EFFORT. Nunca lança exceção — uma falha de
  * auditoria não pode quebrar a operação de negócio que a chamou. Em caso de
  * erro, registra no console com prefixo `[auditService]` e retorna null.
- *
- * Princípio SOLID — Dependency Inversion: o `prisma` é recebido como
- * parâmetro, o service não instancia client próprio.
  */
+
+const crypto = require('crypto');
+const { and, eq, gte, lte, desc, count } = require('drizzle-orm');
+const { db } = require('../db/client');
+const { auditLog } = require('../db/schema-bpo');
+
+/**
+ * Normaliza os argumentos pra suportar as duas assinaturas:
+ *   fn(entry)           → retorna entry
+ *   fn(prisma, entry)   → ignora prisma, retorna entry
+ */
+function pickArg(a, b) {
+  return b === undefined ? (a || {}) : (b || {});
+}
 
 /**
  * Registra uma entrada na trilha de auditoria. Best-effort: nunca lança.
  *
- * @param {import('@prisma/client').PrismaClient} prisma - client Prisma
- * @param {Object} entry
+ * @param {Object} entry (ou prisma legado + entry)
  * @param {string} entry.action - ex: 'client.data_sync', 'admin.login'
  * @param {string} [entry.category] - 'security' | 'data' | 'bpo' | 'admin' | 'system'
  * @param {string} entry.entityType - 'client' | 'admin_user' | 'broadcast' | 'team_member' | 'system'
@@ -47,8 +62,9 @@
  * @param {Object|string} [entry.metadata] - detalhes; objeto vira JSON string
  * @returns {Promise<Object|null>} registro criado, ou null em caso de erro
  */
-async function logAudit(prisma, entry = {}) {
+async function logAudit(a, b) {
   try {
+    const entry = pickArg(a, b);
     const {
       action,
       category,
@@ -77,8 +93,10 @@ async function logAudit(prisma, entry = {}) {
         typeof metadata === 'string' ? metadata : JSON.stringify(metadata);
     }
 
-    const record = await prisma.auditLog.create({
-      data: {
+    const [record] = await db
+      .insert(auditLog)
+      .values({
+        id: crypto.randomUUID(),
         action: String(action),
         category: category != null ? String(category) : null,
         entityType: String(entityType),
@@ -88,8 +106,8 @@ async function logAudit(prisma, entry = {}) {
         actorLabel: actorLabel != null ? String(actorLabel) : null,
         summary: summary != null ? String(summary) : null,
         metadata: metadataStr,
-      },
-    });
+      })
+      .returning();
 
     return record;
   } catch (err) {
@@ -103,8 +121,7 @@ async function logAudit(prisma, entry = {}) {
  * Lista registros da trilha de auditoria com filtros opcionais.
  * Ordena por createdAt desc (mais recentes primeiro).
  *
- * @param {import('@prisma/client').PrismaClient} prisma - client Prisma
- * @param {Object} [filters]
+ * @param {Object} [filters] (ou prisma legado + filters)
  * @param {string} [filters.entityType] - filtra por tipo de entidade
  * @param {string} [filters.entityId] - filtra por id da entidade
  * @param {string} [filters.action] - filtra por ação
@@ -116,7 +133,8 @@ async function logAudit(prisma, entry = {}) {
  * @param {number} [filters.offset=0] - deslocamento (paginação)
  * @returns {Promise<{ items: Object[], total: number }>}
  */
-async function listAudit(prisma, filters = {}) {
+async function listAudit(a, b) {
+  const filters = pickArg(a, b);
   const {
     entityType,
     entityId,
@@ -130,34 +148,34 @@ async function listAudit(prisma, filters = {}) {
   } = filters;
 
   // Monta o WHERE só com os filtros realmente informados
-  const where = {};
-  if (entityType) where.entityType = entityType;
-  if (entityId) where.entityId = entityId;
-  if (action) where.action = action;
-  if (category) where.category = category;
-  if (actorType) where.actorType = actorType;
+  const conds = [];
+  if (entityType) conds.push(eq(auditLog.entityType, entityType));
+  if (entityId) conds.push(eq(auditLog.entityId, entityId));
+  if (action) conds.push(eq(auditLog.action, action));
+  if (category) conds.push(eq(auditLog.category, category));
+  if (actorType) conds.push(eq(auditLog.actorType, actorType));
+  // createdAt é mode:'string' — comparações usam ISO string
+  if (fromDate) conds.push(gte(auditLog.createdAt, new Date(fromDate).toISOString()));
+  if (toDate) conds.push(lte(auditLog.createdAt, new Date(toDate).toISOString()));
 
-  if (fromDate || toDate) {
-    where.createdAt = {};
-    if (fromDate) where.createdAt.gte = new Date(fromDate);
-    if (toDate) where.createdAt.lte = new Date(toDate);
-  }
+  const where = conds.length ? and(...conds) : undefined;
 
   // Sanitiza paginação
   const take = Math.max(1, Math.min(Number(limit) || 100, 1000));
   const skip = Math.max(0, Number(offset) || 0);
 
-  const [items, total] = await Promise.all([
-    prisma.auditLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take,
-      skip,
-    }),
-    prisma.auditLog.count({ where }),
+  const [items, totalRows] = await Promise.all([
+    db
+      .select()
+      .from(auditLog)
+      .where(where)
+      .orderBy(desc(auditLog.createdAt))
+      .limit(take)
+      .offset(skip),
+    db.select({ value: count() }).from(auditLog).where(where),
   ]);
 
-  return { items, total };
+  return { items, total: Number(totalRows[0]?.value || 0) };
 }
 
 module.exports = { logAudit, listAudit };

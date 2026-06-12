@@ -6,12 +6,16 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const {
+  eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray,
+  isNull, isNotNull, desc, asc, sql, count, getTableColumns,
+} = require('drizzle-orm');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 const { stripOnbTag } = require('../../services/onboardingSync');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
@@ -34,46 +38,74 @@ router.get('/', async (req, res) => {
       topDueSoon,
       pendingApproval,
     ] = await Promise.all([
-      prisma.payable.count({
-        where: { clientId, dueDate: { lt: now }, status: { in: ['pending', 'paid_partial'] } },
-      }),
-      prisma.payable.count({
-        where: { clientId, dueDate: { gte: now, lte: in7Days }, status: { in: ['pending', 'scheduled'] } },
-      }),
-      prisma.receivable.count({
-        where: { clientId, status: { in: ['pending', 'received_partial'] } },
-      }),
-      prisma.bankTransaction.count({
-        where: { bankAccount: { clientId }, reconciledType: null },
-      }),
-      prisma.whatsappMessage.count({
-        where: { clientId, status: 'pending' },
-      }),
-      prisma.bpoTask.count({
-        where: { clientId, status: 'open' },
-      }),
-      prisma.bankAccount.aggregate({
-        where: { clientId, active: true },
-        _sum: { currentBalance: true },
-      }),
+      db.select({ n: count() }).from(t.payable).where(and(
+        eq(t.payable.clientId, clientId),
+        lt(t.payable.dueDate, now),
+        inArray(t.payable.status, ['pending', 'paid_partial']),
+      )).then(([r]) => r.n),
+      db.select({ n: count() }).from(t.payable).where(and(
+        eq(t.payable.clientId, clientId),
+        gte(t.payable.dueDate, now),
+        lte(t.payable.dueDate, in7Days),
+        inArray(t.payable.status, ['pending', 'scheduled']),
+      )).then(([r]) => r.n),
+      db.select({ n: count() }).from(t.receivable).where(and(
+        eq(t.receivable.clientId, clientId),
+        inArray(t.receivable.status, ['pending', 'received_partial']),
+      )).then(([r]) => r.n),
+      // bankTransaction com filtro pela conta (BankTransaction.bankAccountId → BankAccount.clientId)
+      db.select({ n: count() }).from(t.bankTransaction)
+        .innerJoin(t.bankAccount, eq(t.bankTransaction.bankAccountId, t.bankAccount.id))
+        .where(and(
+          eq(t.bankAccount.clientId, clientId),
+          isNull(t.bankTransaction.reconciledType),
+        )).then(([r]) => r.n),
+      db.select({ n: count() }).from(t.whatsappMessage).where(and(
+        eq(t.whatsappMessage.clientId, clientId),
+        eq(t.whatsappMessage.status, 'pending'),
+      )).then(([r]) => r.n),
+      db.select({ n: count() }).from(t.bpoTask).where(and(
+        eq(t.bpoTask.clientId, clientId),
+        eq(t.bpoTask.status, 'open'),
+      )).then(([r]) => r.n),
+      db.select({ s: sql`coalesce(sum(${t.bankAccount.currentBalance}), 0)` }).from(t.bankAccount).where(and(
+        eq(t.bankAccount.clientId, clientId),
+        eq(t.bankAccount.active, true),
+      )).then(([r]) => r.s),
       // Top 5 contas vencidas (mais antigas primeiro)
-      prisma.payable.findMany({
-        where: { clientId, dueDate: { lt: now }, status: { in: ['pending', 'paid_partial'] } },
-        orderBy: { dueDate: 'asc' },
-        take: 5,
-        include: { supplier: { select: { name: true } } },
-      }),
+      db.select({
+        ...getTableColumns(t.payable),
+        supplier: { name: t.supplier.name },
+      }).from(t.payable)
+        .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+        .where(and(
+          eq(t.payable.clientId, clientId),
+          lt(t.payable.dueDate, now),
+          inArray(t.payable.status, ['pending', 'paid_partial']),
+        ))
+        .orderBy(asc(t.payable.dueDate))
+        .limit(5),
       // Top 5 vencendo nos próximos 7 dias
-      prisma.payable.findMany({
-        where: { clientId, dueDate: { gte: now, lte: in7Days }, status: { in: ['pending', 'scheduled'] } },
-        orderBy: { dueDate: 'asc' },
-        take: 5,
-        include: { supplier: { select: { name: true } } },
-      }),
+      db.select({
+        ...getTableColumns(t.payable),
+        supplier: { name: t.supplier.name },
+      }).from(t.payable)
+        .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+        .where(and(
+          eq(t.payable.clientId, clientId),
+          gte(t.payable.dueDate, now),
+          lte(t.payable.dueDate, in7Days),
+          inArray(t.payable.status, ['pending', 'scheduled']),
+        ))
+        .orderBy(asc(t.payable.dueDate))
+        .limit(5),
       // Pagamentos aguardando aprovação do dono
-      prisma.payable.count({
-        where: { clientId, requiresApproval: true, approvedAt: null, rejectedAt: null },
-      }),
+      db.select({ n: count() }).from(t.payable).where(and(
+        eq(t.payable.clientId, clientId),
+        eq(t.payable.requiresApproval, true),
+        isNull(t.payable.approvedAt),
+        isNull(t.payable.rejectedAt),
+      )).then(([r]) => r.n),
     ]);
 
     // Severity geral
@@ -90,7 +122,7 @@ router.get('/', async (req, res) => {
         whatsappPending,
         tasksOpen,
         pendingApproval,
-        bankBalance: Number(bankBalance._sum.currentBalance || 0),
+        bankBalance: Number(bankBalance || 0),
       },
       severity,
       hasAlerts: overduePay > 0 || dueSoonPay > 0 || unconciliatedTx > 0,
@@ -101,7 +133,7 @@ router.get('/', async (req, res) => {
         dueDate: p.dueDate,
         supplier: p.supplier?.name,
         description: stripOnbTag(p.description),
-        daysOverdue: Math.ceil((now - p.dueDate) / 86400000),
+        daysOverdue: Math.ceil((now - new Date(p.dueDate)) / 86400000),
       })),
       topDueSoon: topDueSoon.map((p) => ({
         id: p.id,
@@ -110,7 +142,7 @@ router.get('/', async (req, res) => {
         dueDate: p.dueDate,
         supplier: p.supplier?.name,
         description: stripOnbTag(p.description),
-        daysUntilDue: Math.ceil((p.dueDate - now) / 86400000),
+        daysUntilDue: Math.ceil((new Date(p.dueDate) - now) / 86400000),
       })),
     });
   } catch (err) {

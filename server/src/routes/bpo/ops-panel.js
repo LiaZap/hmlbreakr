@@ -11,36 +11,50 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count, getTableColumns } = require('drizzle-orm');
+const crypto = require('crypto');
 const { requireBpoOperator } = require('./middleware');
 const { stripOnbTag } = require('../../services/onboardingSync');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 router.use(requireBpoOperator);
 
 // === Overview multi-cliente ===
 router.get('/overview', async (req, res) => {
   try {
-    const clients = await prisma.client.findMany({
-      where: { bpoEnabled: true, active: true },
-      select: { id: true, hash: true, name: true, bpoActivatedAt: true },
-      orderBy: { name: 'asc' },
-    });
+    const clients = await db
+      .select({ id: t.client.id, hash: t.client.hash, name: t.client.name, bpoActivatedAt: t.client.bpoActivatedAt })
+      .from(t.client)
+      .where(and(eq(t.client.bpoEnabled, true), eq(t.client.active, true)))
+      .orderBy(asc(t.client.name));
 
     const now = new Date();
     const in7Days = new Date(now.getTime() + 7 * 86400000);
 
     const perClient = await Promise.all(clients.map(async (c) => {
-      const [overduePay, dueSoonPay, pendingRec, unconciliatedTx, scheduled, banks] = await Promise.all([
-        prisma.payable.count({ where: { clientId: c.id, dueDate: { lt: now }, status: { in: ['pending', 'paid_partial'] } } }),
-        prisma.payable.count({ where: { clientId: c.id, dueDate: { gte: now, lte: in7Days }, status: { in: ['pending', 'scheduled'] } } }),
-        prisma.receivable.count({ where: { clientId: c.id, status: { in: ['pending', 'received_partial'] } } }),
-        prisma.bankTransaction.count({ where: { bankAccount: { clientId: c.id }, reconciledType: null } }),
-        prisma.payable.count({ where: { clientId: c.id, status: 'scheduled' } }),
-        prisma.bankAccount.aggregate({ where: { clientId: c.id, active: true }, _sum: { currentBalance: true } }),
+      const [overduePayRows, dueSoonPayRows, pendingRecRows, unconciliatedTxRows, scheduledRows, banksRows] = await Promise.all([
+        db.select({ n: count() }).from(t.payable)
+          .where(and(eq(t.payable.clientId, c.id), lt(t.payable.dueDate, now), inArray(t.payable.status, ['pending', 'paid_partial']))),
+        db.select({ n: count() }).from(t.payable)
+          .where(and(eq(t.payable.clientId, c.id), gte(t.payable.dueDate, now), lte(t.payable.dueDate, in7Days), inArray(t.payable.status, ['pending', 'scheduled']))),
+        db.select({ n: count() }).from(t.receivable)
+          .where(and(eq(t.receivable.clientId, c.id), inArray(t.receivable.status, ['pending', 'received_partial']))),
+        db.select({ n: count() }).from(t.bankTransaction)
+          .innerJoin(t.bankAccount, eq(t.bankTransaction.bankAccountId, t.bankAccount.id))
+          .where(and(eq(t.bankAccount.clientId, c.id), isNull(t.bankTransaction.reconciledType))),
+        db.select({ n: count() }).from(t.payable)
+          .where(and(eq(t.payable.clientId, c.id), eq(t.payable.status, 'scheduled'))),
+        db.select({ s: sql`coalesce(sum(${t.bankAccount.currentBalance}),0)` }).from(t.bankAccount)
+          .where(and(eq(t.bankAccount.clientId, c.id), eq(t.bankAccount.active, true))),
       ]);
+      const overduePay = overduePayRows[0].n;
+      const dueSoonPay = dueSoonPayRows[0].n;
+      const pendingRec = pendingRecRows[0].n;
+      const unconciliatedTx = unconciliatedTxRows[0].n;
+      const scheduled = scheduledRows[0].n;
       const totalIssues = overduePay + unconciliatedTx;
       return {
         ...c,
@@ -52,7 +66,7 @@ router.get('/overview', async (req, res) => {
           scheduled,     // programados no banco
         },
         totalIssues,
-        balance: Number(banks._sum.currentBalance || 0),
+        balance: Number(banksRows[0].s || 0),
         severity: overduePay > 5 ? 'critical' : overduePay > 0 ? 'high' : unconciliatedTx > 10 ? 'normal' : 'low',
       };
     }));
@@ -82,15 +96,19 @@ router.get('/overview', async (req, res) => {
 router.get('/tasks', async (req, res) => {
   try {
     const { status = 'open', clientId } = req.query;
-    const tasks = await prisma.bpoTask.findMany({
-      where: {
-        status: status === 'all' ? undefined : status,
-        ...(clientId ? { clientId } : {}),
-      },
-      orderBy: [{ severity: 'asc' }, { dueAt: 'asc' }],
-      include: { client: { select: { name: true, hash: true } } },
-      take: 200,
-    });
+    const conds = [];
+    if (status !== 'all') conds.push(eq(t.bpoTask.status, status));
+    if (clientId) conds.push(eq(t.bpoTask.clientId, clientId));
+    const tasks = await db
+      .select({
+        ...getTableColumns(t.bpoTask),
+        client: { name: t.client.name, hash: t.client.hash },
+      })
+      .from(t.bpoTask)
+      .leftJoin(t.client, eq(t.bpoTask.clientId, t.client.id))
+      .where(conds.length ? and(...conds) : undefined)
+      .orderBy(asc(t.bpoTask.severity), asc(t.bpoTask.dueAt))
+      .limit(200);
     res.json({ items: tasks, total: tasks.length });
   } catch (err) {
     console.error('[bpo ops-panel tasks]', err);
@@ -105,7 +123,9 @@ router.get('/tasks', async (req, res) => {
  */
 const assertTaskTenant = async (taskId, clientId) => {
   if (!clientId) return { ok: false, status: 400, error: 'clientId obrigatório' };
-  const found = await prisma.bpoTask.findFirst({ where: { id: taskId, clientId } });
+  const [found] = await db.select().from(t.bpoTask)
+    .where(and(eq(t.bpoTask.id, taskId), eq(t.bpoTask.clientId, clientId)))
+    .limit(1);
   if (!found) return { ok: false, status: 404, error: 'Registro não encontrado' };
   return { ok: true };
 };
@@ -116,10 +136,10 @@ router.post('/tasks/:id/resolve', async (req, res) => {
     const guard = await assertTaskTenant(req.params.id, clientId);
     if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
 
-    const task = await prisma.bpoTask.update({
-      where: { id: req.params.id },
-      data: { status: 'resolved', resolvedAt: new Date() },
-    });
+    const [task] = await db.update(t.bpoTask)
+      .set({ status: 'resolved', resolvedAt: new Date(), updatedAt: new Date() })
+      .where(eq(t.bpoTask.id, req.params.id))
+      .returning();
     res.json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -132,10 +152,10 @@ router.post('/tasks/:id/dismiss', async (req, res) => {
     const guard = await assertTaskTenant(req.params.id, clientId);
     if (!guard.ok) return res.status(guard.status).json({ error: guard.error });
 
-    const task = await prisma.bpoTask.update({
-      where: { id: req.params.id },
-      data: { status: 'dismissed', resolvedAt: new Date() },
-    });
+    const [task] = await db.update(t.bpoTask)
+      .set({ status: 'dismissed', resolvedAt: new Date(), updatedAt: new Date() })
+      .where(eq(t.bpoTask.id, req.params.id))
+      .returning();
     res.json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -145,29 +165,29 @@ router.post('/tasks/:id/dismiss', async (req, res) => {
 // === Scan: gera tarefas auto pra todos clientes ===
 router.post('/scan', async (req, res) => {
   try {
-    const clients = await prisma.client.findMany({ where: { bpoEnabled: true, active: true } });
+    const clients = await db.select().from(t.client)
+      .where(and(eq(t.client.bpoEnabled, true), eq(t.client.active, true)));
     const now = new Date();
     const in7Days = new Date(now.getTime() + 7 * 86400000);
     let created = 0;
 
     for (const c of clients) {
       // 1. Contas vencidas
-      const overdue = await prisma.payable.findMany({
-        where: { clientId: c.id, dueDate: { lt: now }, status: { in: ['pending', 'paid_partial'] } },
-        take: 50,
-      });
+      const overdue = await db.select().from(t.payable)
+        .where(and(eq(t.payable.clientId, c.id), lt(t.payable.dueDate, now), inArray(t.payable.status, ['pending', 'paid_partial'])))
+        .limit(50);
       for (const p of overdue) {
-        const exists = await prisma.bpoTask.findFirst({
-          where: { clientId: c.id, type: 'overdue_payable', relatedId: p.id, status: 'open' },
-        });
+        const [exists] = await db.select().from(t.bpoTask)
+          .where(and(eq(t.bpoTask.clientId, c.id), eq(t.bpoTask.type, 'overdue_payable'), eq(t.bpoTask.relatedId, p.id), eq(t.bpoTask.status, 'open')))
+          .limit(1);
         if (!exists) {
-          await prisma.bpoTask.create({
-            data: {
-              clientId: c.id, type: 'overdue_payable', severity: 'high',
-              title: `Conta vencida: ${stripOnbTag(p.description) || p.invoiceNumber || 'sem descrição'}`,
-              description: `R$ ${p.remainingAmount} venceu em ${p.dueDate.toISOString().slice(0, 10)}`,
-              relatedType: 'payable', relatedId: p.id, dueAt: p.dueDate,
-            },
+          await db.insert(t.bpoTask).values({
+            id: crypto.randomUUID(),
+            clientId: c.id, type: 'overdue_payable', severity: 'high',
+            title: `Conta vencida: ${stripOnbTag(p.description) || p.invoiceNumber || 'sem descrição'}`,
+            description: `R$ ${p.remainingAmount} venceu em ${new Date(p.dueDate).toISOString().slice(0, 10)}`,
+            relatedType: 'payable', relatedId: p.id, dueAt: p.dueDate,
+            updatedAt: new Date(),
           });
           created++;
         }
@@ -175,26 +195,23 @@ router.post('/scan', async (req, res) => {
 
       // 2. Transações não conciliadas (mais de 3 dias)
       const threeDaysAgo = new Date(now.getTime() - 3 * 86400000);
-      const unconciliated = await prisma.bankTransaction.findMany({
-        where: {
-          bankAccount: { clientId: c.id },
-          reconciledType: null,
-          date: { lt: threeDaysAgo },
-        },
-        take: 20,
-      });
-      for (const t of unconciliated) {
-        const exists = await prisma.bpoTask.findFirst({
-          where: { clientId: c.id, type: 'unconciliated_tx', relatedId: t.id, status: 'open' },
-        });
+      const unconciliated = await db.select({ ...getTableColumns(t.bankTransaction) })
+        .from(t.bankTransaction)
+        .innerJoin(t.bankAccount, eq(t.bankTransaction.bankAccountId, t.bankAccount.id))
+        .where(and(eq(t.bankAccount.clientId, c.id), isNull(t.bankTransaction.reconciledType), lt(t.bankTransaction.date, threeDaysAgo)))
+        .limit(20);
+      for (const tx of unconciliated) {
+        const [exists] = await db.select().from(t.bpoTask)
+          .where(and(eq(t.bpoTask.clientId, c.id), eq(t.bpoTask.type, 'unconciliated_tx'), eq(t.bpoTask.relatedId, tx.id), eq(t.bpoTask.status, 'open')))
+          .limit(1);
         if (!exists) {
-          await prisma.bpoTask.create({
-            data: {
-              clientId: c.id, type: 'unconciliated_tx', severity: 'normal',
-              title: `Conciliar: ${t.description.slice(0, 60)}`,
-              description: `R$ ${t.amount} de ${t.date.toISOString().slice(0, 10)}`,
-              relatedType: 'bank_transaction', relatedId: t.id,
-            },
+          await db.insert(t.bpoTask).values({
+            id: crypto.randomUUID(),
+            clientId: c.id, type: 'unconciliated_tx', severity: 'normal',
+            title: `Conciliar: ${tx.description.slice(0, 60)}`,
+            description: `R$ ${tx.amount} de ${new Date(tx.date).toISOString().slice(0, 10)}`,
+            relatedType: 'bank_transaction', relatedId: tx.id,
+            updatedAt: new Date(),
           });
           created++;
         }

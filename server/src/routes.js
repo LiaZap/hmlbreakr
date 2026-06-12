@@ -1,8 +1,8 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const router = express.Router();
-const prisma = new PrismaClient();
+const { eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray, desc, asc, count, sum, sql, ilike, like } = require('drizzle-orm');
+const bpo = require('./db/schema-bpo');
 const { sendWelcomeEmail, sendCredentialResetEmail, sendPasswordResetEmail } = require('./services/emailService');
 const { calculateClientFinancials } = require('./services/financialCalc');
 const { syncOnboardingToBpo } = require('./services/onboardingSync');
@@ -15,6 +15,26 @@ const crypto = require('crypto');
 const { db: coreDb } = require('./db/client');
 const coreSchema = require('./db/schema');
 const { syncCoreTables } = require('./services/coreSync');
+
+// Shim de compat: o serviço coreSync ainda lê BpoEmployee/BpoPartner via uma
+// interface estilo Prisma (tabela.findMany({ where, select })). Após a migração
+// p/ Drizzle não há mais PrismaClient — este adaptador mínimo serve essas duas
+// leituras (id/cpf/name) usando coreDb, preservando o contrato do serviço.
+// syncOnboardingToBpo/diffOnboardingVsBpo ignoram o 1º arg (recebem `_prisma`).
+const prismaCompat = {
+  bpoEmployee: {
+    findMany: async ({ where = {} } = {}) =>
+      coreDb.select({ id: bpo.bpoEmployee.id, cpf: bpo.bpoEmployee.cpf, name: bpo.bpoEmployee.name })
+        .from(bpo.bpoEmployee)
+        .where(eq(bpo.bpoEmployee.clientId, where.clientId)),
+  },
+  bpoPartner: {
+    findMany: async ({ where = {} } = {}) =>
+      coreDb.select({ id: bpo.bpoPartner.id, cpf: bpo.bpoPartner.cpf, name: bpo.bpoPartner.name })
+        .from(bpo.bpoPartner)
+        .where(eq(bpo.bpoPartner.clientId, where.clientId)),
+  },
+};
 // F3 read — reconstrói {insumos,fichas,menu,faturamento,custos} das tabelas (atrás de flag por cliente).
 // F4 — reconstructClientData monta o `data` completo das tabelas p/ o cálculo server-side.
 const { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructResidue, reconstructClientData } = require('./services/coreRead');
@@ -95,16 +115,16 @@ router.post('/admin/login', async (req, res) => {
 
   // 1. AdminUser do banco (gerenciado via UI)
   try {
-    const user = await prisma.adminUser.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const [user] = await coreDb.select().from(bpo.adminUser).where(eq(bpo.adminUser.email, email.toLowerCase().trim())).limit(1);
     if (user && user.active && user.password) {
       const ok = await bcrypt.compare(password, user.password);
       if (ok) {
         // Atualiza lastLoginAt (best-effort)
-        prisma.adminUser.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() },
-        }).catch(e => console.error('lastLoginAt update', e));
-        logAudit(prisma, {
+        coreDb.update(bpo.adminUser)
+          .set({ lastLoginAt: new Date(), updatedAt: new Date() })
+          .where(eq(bpo.adminUser.id, user.id))
+          .catch(e => console.error('lastLoginAt update', e));
+        logAudit({
           action: 'admin.login',
           category: 'security',
           entityType: 'admin_user',
@@ -132,7 +152,7 @@ router.post('/admin/login', async (req, res) => {
   // 2. Legado: ADMIN_ACCOUNTS hardcoded (compat enquanto migra)
   const admin = ADMIN_ACCOUNTS.find(a => a.email === email && a.password === password);
   if (admin) {
-    logAudit(prisma, {
+    logAudit({
       action: 'admin.login',
       category: 'security',
       entityType: 'admin_user',
@@ -146,7 +166,7 @@ router.post('/admin/login', async (req, res) => {
     return res.json({ success: true, token: process.env.ADMIN_TOKEN, name: admin.name, role: admin.role });
   }
   // Login FALHOU — evento de segurança (tentativa de acesso indevido).
-  logAudit(prisma, {
+  logAudit({
     action: 'admin.login.failed',
     category: 'security',
     entityType: 'admin_user',
@@ -185,7 +205,7 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
 
     // Guarda contra duplicacao por email (Clerk tambem rejeita, mas erro
     // aqui antes evita ter cliente orfao no banco).
-    const existing = await prisma.client.findUnique({ where: { email: clientEmail } });
+    const [existing] = await coreDb.select().from(bpo.client).where(eq(bpo.client.email, clientEmail)).limit(1);
     if (existing) {
       return res.status(409).json({ error: 'Já existe um cliente com esse email' });
     }
@@ -207,15 +227,15 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
         operational: { fichas: [], insumos: [] }
     };
 
-    const client = await prisma.client.create({
-      data: {
-        name,
-        hash,
-        email: clientEmail,
-        password: passwordHash,
-        data: JSON.stringify(initialData),
-      },
-    });
+    const [client] = await coreDb.insert(bpo.client).values({
+      id: crypto.randomUUID(),
+      name,
+      hash,
+      email: clientEmail,
+      password: passwordHash,
+      data: JSON.stringify(initialData),
+      updatedAt: new Date(),
+    }).returning();
 
     // Cria no Clerk em paralelo (best-effort, nao bloqueia o response)
     const clerkResult = await ensureClerkUserForClient({
@@ -224,10 +244,9 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
       passwordHash,
     });
     if (clerkResult.clerkUserId) {
-      await prisma.client.update({
-        where: { id: client.id },
-        data: { clerkUserId: clerkResult.clerkUserId },
-      });
+      await coreDb.update(bpo.client)
+        .set({ clerkUserId: clerkResult.clerkUserId, updatedAt: new Date() })
+        .where(eq(bpo.client.id, client.id));
     }
 
     // Welcome email com credenciais — best-effort
@@ -238,7 +257,7 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
       tempPassword,
     }).catch(err => console.error('Welcome email error:', err.message));
 
-    logAudit(prisma, {
+    logAudit({
       action: 'client.create',
       category: 'admin',
       entityType: 'client',
@@ -286,13 +305,20 @@ router.post('/admin/clients', requireAdmin, async (req, res) => {
 router.get('/admin/clients', requireAdmin, async (req, res) => {
   try {
     // Por padrão só clientes ativos (soft delete). `?showInactive=1` traz também os excluídos.
-    const clients = await prisma.client.findMany({
-      where: req.query.showInactive === '1' ? {} : { active: true },
-      // stripeCustomerId/stripeSubscriptionId: usados pelo funil comercial (BAH-091)
-      // pra excluir clientes que ja pagaram do pipeline de leads.
-      select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true, stripeCustomerId: true, stripeSubscriptionId: true,
-        readInsumosFromTables: true, readFichasFromTables: true, readMenuFromTables: true, readFaturamentoFromTables: true, readCustosFromTables: true }
-    });
+    // stripeCustomerId/stripeSubscriptionId: usados pelo funil comercial (BAH-091)
+    // pra excluir clientes que ja pagaram do pipeline de leads.
+    const clientsQuery = coreDb.select({
+      id: bpo.client.id, name: bpo.client.name, hash: bpo.client.hash, email: bpo.client.email,
+      createdAt: bpo.client.createdAt, data: bpo.client.data, bpoEnabled: bpo.client.bpoEnabled,
+      bpoActivatedAt: bpo.client.bpoActivatedAt, stripeCustomerId: bpo.client.stripeCustomerId,
+      stripeSubscriptionId: bpo.client.stripeSubscriptionId,
+      readInsumosFromTables: bpo.client.readInsumosFromTables, readFichasFromTables: bpo.client.readFichasFromTables,
+      readMenuFromTables: bpo.client.readMenuFromTables, readFaturamentoFromTables: bpo.client.readFaturamentoFromTables,
+      readCustosFromTables: bpo.client.readCustosFromTables,
+    }).from(bpo.client);
+    const clients = req.query.showInactive === '1'
+      ? await clientsQuery
+      : await clientsQuery.where(eq(bpo.client.active, true));
 
     // Modo FULL: devolve os clientes com `data` cru (JSON string completo do banco).
     if (req.query.full === '1') {
@@ -357,7 +383,7 @@ router.get('/admin/clients', requireAdmin, async (req, res) => {
 // Inspect single client — summary mode (sem raw, mais legível) — admin only
 router.get('/admin/inspect/:hash', requireAdmin, async (req, res) => {
   try {
-    const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, req.params.hash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
 
     const raw = typeof client.data === 'string' ? client.data : JSON.stringify(client.data || {});
@@ -446,7 +472,7 @@ router.get('/admin/inspect/:hash', requireAdmin, async (req, res) => {
 // Inspect raw data (com o JSON inteiro) — pra download de backup manual — super_admin only
 router.get('/admin/inspect/:hash/raw', requireSuperAdmin, async (req, res) => {
   try {
-    const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, req.params.hash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     const raw = typeof client.data === 'string' ? client.data : JSON.stringify(client.data || {});
     let parsed = {};
@@ -472,13 +498,13 @@ router.get('/admin/inspect/:hash/raw', requireSuperAdmin, async (req, res) => {
 // Útil pra verificar se o sync rodou após deploy ou ediçao do cliente.
 router.get('/admin/sync-status/:hash', requireAdmin, async (req, res) => {
   try {
-    const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, req.params.hash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     const raw = typeof client.data === 'string' ? client.data : JSON.stringify(client.data || {});
     let parsed = {};
     try { parsed = JSON.parse(raw); } catch { /* invalid json */ }
     const { diffOnboardingVsBpo } = require('./services/onboardingSync');
-    const diff = await diffOnboardingVsBpo(prisma, client.id, parsed.formData || {});
+    const diff = await diffOnboardingVsBpo(null, client.id, parsed.formData || {});
     res.json({
       clientId: client.id,
       clientName: client.name,
@@ -501,7 +527,7 @@ router.post('/admin/restore-client-data', requireSuperAdmin, async (req, res) =>
       return res.status(400).json({ error: 'clientHash e newData são obrigatórios' });
     }
 
-    const client = await prisma.client.findUnique({ where: { hash: clientHash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, clientHash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado no banco atual' });
 
     // newData pode ser string JSON ou objeto
@@ -545,10 +571,9 @@ router.post('/admin/restore-client-data', requireSuperAdmin, async (req, res) =>
     }
 
     // Executar atualização
-    await prisma.client.update({
-      where: { id: client.id },
-      data: { data: dataString },
-    });
+    await coreDb.update(bpo.client)
+      .set({ data: dataString, updatedAt: new Date() })
+      .where(eq(bpo.client.id, client.id));
 
     res.json({
       success: true,
@@ -583,7 +608,7 @@ router.post('/admin/bulk-restore', requireSuperAdmin, async (req, res) => {
         }
 
         // Verificar se cliente existe no banco atual
-        const current = await prisma.client.findUnique({ where: { hash: backupClient.hash } });
+        const [current] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, backupClient.hash)).limit(1);
         if (!current) {
           results.skipped.push({ hash: backupClient.hash, name: backupClient.name, reason: 'not in current DB' });
           continue;
@@ -596,10 +621,9 @@ router.post('/admin/bulk-restore', requireSuperAdmin, async (req, res) => {
         }
 
         if (!dryRun) {
-          await prisma.client.update({
-            where: { id: current.id },
-            data: { data: newDataString },
-          });
+          await coreDb.update(bpo.client)
+            .set({ data: newDataString, updatedAt: new Date() })
+            .where(eq(bpo.client.id, current.id));
         }
 
         results.updated.push({
@@ -631,7 +655,7 @@ router.post('/admin/bulk-restore', requireSuperAdmin, async (req, res) => {
 // Critério: dataSize grande (>200KB) mas fichas=0 e insumos=0
 router.get('/admin/affected-clients', requireAdmin, async (req, res) => {
   try {
-    const clients = await prisma.client.findMany();
+    const clients = await coreDb.select().from(bpo.client);
     const affected = [];
     const ok = [];
 
@@ -680,7 +704,7 @@ router.get('/admin/affected-clients', requireAdmin, async (req, res) => {
 // super_admin only — dump completo de TODA a base.
 router.get('/admin/emergency-backup', requireSuperAdmin, async (req, res) => {
   try {
-    const clients = await prisma.client.findMany();
+    const clients = await coreDb.select().from(bpo.client);
     const payload = {
       _meta: {
         version: '1.2-emergency',
@@ -780,7 +804,7 @@ router.post('/admin/restore-operational', requireSuperAdmin, async (req, res) =>
     const insumosFromBackup = backupData?.operational?.insumos || [];
 
     // Cliente atual no banco
-    const currentClient = await prisma.client.findUnique({ where: { hash: clientHash } });
+    const [currentClient] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, clientHash)).limit(1);
     if (!currentClient) {
       return res.status(404).json({ error: 'Cliente atual não encontrado no banco' });
     }
@@ -825,10 +849,9 @@ router.post('/admin/restore-operational', requireSuperAdmin, async (req, res) =>
       },
     };
 
-    await prisma.client.update({
-      where: { id: currentClient.id },
-      data: { data: JSON.stringify(newData) },
-    });
+    await coreDb.update(bpo.client)
+      .set({ data: JSON.stringify(newData), updatedAt: new Date() })
+      .where(eq(bpo.client.id, currentClient.id));
 
     res.json({
       success: true,
@@ -852,7 +875,9 @@ router.post('/admin/restore-operational', requireSuperAdmin, async (req, res) =>
 // clerkUserId, TeamMember.password, Agency.password / resetToken em texto puro.
 // Combinado com o gap do requireSuperAdmin (corrigido na F3), qualquer um
 // dumpava hashes pra brute-force offline. Strip aplicado abaixo.
-const SENSITIVE_FIELDS = ['password', 'resetToken', 'resetTokenExpiry', 'clerkUserId'];
+// 'resetTokenExpiry' é o nome legado (Prisma); a coluna real no schema é
+// 'resetTokenAt' — mantemos ambos para que o strip funcione em qualquer caminho.
+const SENSITIVE_FIELDS = ['password', 'resetToken', 'resetTokenExpiry', 'resetTokenAt', 'clerkUserId'];
 const stripSensitive = (rows) => rows.map(row => {
   const cleaned = { ...row };
   for (const f of SENSITIVE_FIELDS) delete cleaned[f];
@@ -862,7 +887,8 @@ const stripSensitive = (rows) => rows.map(row => {
 router.get('/admin/export', requireSuperAdmin, async (req, res) => {
   const result = { _meta: { version: '1.3', exportedAt: new Date().toISOString(), counts: {}, errors: [], stripped: SENSITIVE_FIELDS }, clients: [], agencies: [], teamMembers: [], broadcasts: [] };
 
-  // Use $queryRawUnsafe as a fallback for tables with schema drift
+  // Raw SQL como fallback p/ tabelas com schema drift. fallbackSql é estático
+  // (sem input do usuário) — sql.raw é seguro aqui.
   const safeFetch = async (label, fetcher, fallbackSql, sensitive = true) => {
     try {
       const rows = await fetcher();
@@ -871,7 +897,8 @@ router.get('/admin/export', requireSuperAdmin, async (req, res) => {
     } catch (err) {
       console.warn(`[export] ${label} findMany failed: ${err.message}. Trying raw SQL fallback...`);
       try {
-        const rows = await prisma.$queryRawUnsafe(fallbackSql);
+        const raw = await coreDb.execute(sql.raw(fallbackSql));
+        const rows = raw.rows || raw;
         result[label] = sensitive ? stripSensitive(rows) : rows;
         result._meta.counts[label] = rows.length;
         result._meta.errors.push(`${label}: used raw SQL fallback due to schema drift`);
@@ -884,10 +911,10 @@ router.get('/admin/export', requireSuperAdmin, async (req, res) => {
   };
 
   await Promise.all([
-    safeFetch('clients', () => prisma.client.findMany(), 'SELECT * FROM "Client"'),
-    safeFetch('agencies', () => prisma.agency.findMany(), 'SELECT * FROM "Agency"'),
-    safeFetch('teamMembers', () => prisma.teamMember.findMany(), 'SELECT * FROM "TeamMember"'),
-    safeFetch('broadcasts', () => prisma.broadcast.findMany(), 'SELECT * FROM "Broadcast"', false),
+    safeFetch('clients', () => coreDb.select().from(bpo.client), 'SELECT * FROM "Client"'),
+    safeFetch('agencies', () => coreDb.select().from(bpo.agency), 'SELECT * FROM "Agency"'),
+    safeFetch('teamMembers', () => coreDb.select().from(bpo.teamMember), 'SELECT * FROM "TeamMember"'),
+    safeFetch('broadcasts', () => coreDb.select().from(bpo.broadcast), 'SELECT * FROM "Broadcast"', false),
   ]);
 
   res.json(result);
@@ -899,11 +926,10 @@ router.delete('/admin/clients/:id', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     // Soft delete: DELETE físico é PROIBIDO (regra do projeto). Marca active=false.
-    await prisma.client.update({
-      where: { id },
-      data: { active: false }
-    });
-    logAudit(prisma, {
+    await coreDb.update(bpo.client)
+      .set({ active: false, updatedAt: new Date() })
+      .where(eq(bpo.client.id, id));
+    logAudit({
       action: 'client.delete',
       category: 'security',
       entityType: 'client',
@@ -926,7 +952,7 @@ router.post('/admin/clients/:id/mark-complete', requireAdmin, async (req, res) =
   try {
     const { id } = req.params;
     const { completed } = req.body; // true or false
-    const client = await prisma.client.findUnique({ where: { id } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.id, id)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     const clientData = JSON.parse(client.data || '{}');
     if (!clientData.formData) clientData.formData = {};
@@ -935,7 +961,7 @@ router.post('/admin/clients/:id/mark-complete', requireAdmin, async (req, res) =
     } else {
       delete clientData.formData.onboarding_completed;
     }
-    await prisma.client.update({ where: { id }, data: { data: JSON.stringify(clientData) } });
+    await coreDb.update(bpo.client).set({ data: JSON.stringify(clientData), updatedAt: new Date() }).where(eq(bpo.client.id, id));
     res.json({ success: true });
   } catch (err) {
     logError('admin mark-complete', err);
@@ -956,14 +982,14 @@ router.post('/admin/clients/:id/reset-password', requireSuperAdmin, async (req, 
       return res.status(400).json({ error: 'Informe email ou senha para redefinir.' });
     }
 
-    const updateData = {};
+    const updateData = { updatedAt: new Date() };
     if (password) updateData.password = await bcrypt.hash(password, 10);
     if (email) updateData.email = email;
 
-    const updatedClient = await prisma.client.update({
-      where: { id },
-      data: updateData
-    });
+    const [updatedClient] = await coreDb.update(bpo.client)
+      .set(updateData)
+      .where(eq(bpo.client.id, id))
+      .returning();
 
     // Send notification email with new password if provided
     const targetEmail = email || updatedClient.email;
@@ -988,7 +1014,7 @@ router.post('/admin/clients/:id/resend-welcome', requireSuperAdmin, async (req, 
   try {
     const { id } = req.params;
 
-    const client = await prisma.client.findUnique({ where: { id } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.id, id)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     if (!client.email) return res.status(400).json({ error: 'Cliente não possui email cadastrado.' });
 
@@ -1020,10 +1046,8 @@ router.post('/client/register', async (req, res) => {
     }
 
     // Anti-takeover: idempotência. Se o cliente já tem senha, recusar.
-    const target = await prisma.client.findUnique({
-      where: { hash },
-      select: { id: true, password: true },
-    });
+    const [target] = await coreDb.select({ id: bpo.client.id, password: bpo.client.password })
+      .from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (!target) return res.status(404).json({ error: 'Hash de cliente inválido' });
     if (target.password) {
       return res.status(409).json({
@@ -1031,16 +1055,15 @@ router.post('/client/register', async (req, res) => {
       });
     }
 
-    const existing = await prisma.client.findUnique({ where: { email } });
+    const [existing] = await coreDb.select().from(bpo.client).where(eq(bpo.client.email, email)).limit(1);
     if (existing) {
       return res.status(409).json({ error: 'Este email já está em uso' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await prisma.client.update({
-      where: { hash },
-      data: { email, password: hashedPassword }
-    });
+    await coreDb.update(bpo.client)
+      .set({ email, password: hashedPassword, updatedAt: new Date() })
+      .where(eq(bpo.client.hash, hash));
 
     // Also create Clerk user so the client can sign in via Clerk login page
     if (process.env.CLERK_SECRET_KEY) {
@@ -1051,7 +1074,7 @@ router.post('/client/register', async (req, res) => {
           emailAddress: [email],
           password
         });
-        await prisma.client.update({ where: { hash }, data: { clerkUserId: clerkUser.id } });
+        await coreDb.update(bpo.client).set({ clerkUserId: clerkUser.id, updatedAt: new Date() }).where(eq(bpo.client.hash, hash));
       } catch (clerkErr) {
         // If user already exists in Clerk, try to find and link them
         console.error('Clerk create user error (non-fatal):', clerkErr.message);
@@ -1098,7 +1121,7 @@ router.post('/client/:hash/checkout', async (req, res) => {
     const { planSlug } = req.body || {};
     if (!planSlug) return res.status(400).json({ error: 'planSlug obrigatório' });
 
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     if (!client.active) return res.status(410).json({ error: 'Conta encerrada' });
 
@@ -1120,10 +1143,10 @@ router.post('/client/:hash/checkout', async (req, res) => {
 router.post('/client/:hash/billing-portal', async (req, res) => {
   try {
     const { hash } = req.params;
-    let client = await prisma.client.findUnique({ where: { hash } });
+    let [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (!client) {
-      const tm = await prisma.teamMember.findUnique({ where: { hash } });
-      if (tm) client = await prisma.client.findUnique({ where: { id: tm.clientId } });
+      const [tm] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.hash, hash)).limit(1);
+      if (tm) [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.id, tm.clientId)).limit(1);
     }
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     if (!client.stripeCustomerId) {
@@ -1150,14 +1173,14 @@ router.post('/client/login', async (req, res) => {
 
     // Check if it's an AdminUser do banco (gerenciado via UI)
     try {
-      const dbAdmin = await prisma.adminUser.findUnique({ where: { email: email.toLowerCase().trim() } });
+      const [dbAdmin] = await coreDb.select().from(bpo.adminUser).where(eq(bpo.adminUser.email, email.toLowerCase().trim())).limit(1);
       if (dbAdmin && dbAdmin.active && dbAdmin.password) {
         const ok = await bcrypt.compare(password, dbAdmin.password);
         if (ok) {
-          prisma.adminUser.update({
-            where: { id: dbAdmin.id },
-            data: { lastLoginAt: new Date() },
-          }).catch(e => console.error('lastLoginAt update', e));
+          coreDb.update(bpo.adminUser)
+            .set({ lastLoginAt: new Date(), updatedAt: new Date() })
+            .where(eq(bpo.adminUser.id, dbAdmin.id))
+            .catch(e => console.error('lastLoginAt update', e));
           return res.json({
             success: true,
             role: 'admin',
@@ -1185,12 +1208,12 @@ router.post('/client/login', async (req, res) => {
     }
 
     // Checking if the user is a Client (Owner)
-    let user = await prisma.client.findUnique({ where: { email } });
+    let [user] = await coreDb.select().from(bpo.client).where(eq(bpo.client.email, email)).limit(1);
     let isOwner = true;
 
     // If not a Client, check if it's a TeamMember (Manager)
     if (!user) {
-      user = await prisma.teamMember.findUnique({ where: { email } });
+      [user] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.email, email)).limit(1);
       isOwner = false;
     }
 
@@ -1225,14 +1248,14 @@ router.post('/auth/signup', async (req, res) => {
     if (password.length < 6) {
       return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
     }
-    const existing = await prisma.client.findUnique({ where: { email } });
+    const [existing] = await coreDb.select().from(bpo.client).where(eq(bpo.client.email, email)).limit(1);
     if (existing) {
       return res.status(409).json({ error: 'Este email já está cadastrado' });
     }
     const hash = crypto.randomBytes(16).toString('hex');
     const hashedPassword = await bcrypt.hash(password, 10);
-    await prisma.client.create({
-      data: { name, hash, email, password: hashedPassword, data: '{}' }
+    await coreDb.insert(bpo.client).values({
+      id: crypto.randomUUID(), name, hash, email, password: hashedPassword, data: '{}', updatedAt: new Date(),
     });
     try {
       await sendWelcomeEmail({ to: email, clientName: name, hash });
@@ -1252,17 +1275,16 @@ router.post('/auth/forgot-password', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email é obrigatório' });
 
-    const client = await prisma.client.findUnique({ where: { email } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.email, email)).limit(1);
     // Always return success to avoid email enumeration
     if (!client || !client.password) {
       return res.json({ success: true });
     }
     const token = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
     const expiry = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-    await prisma.client.update({
-      where: { email },
-      data: { resetToken: token, resetTokenAt: expiry }
-    });
+    await coreDb.update(bpo.client)
+      .set({ resetToken: token, resetTokenAt: expiry.toISOString(), updatedAt: new Date() })
+      .where(eq(bpo.client.email, email));
     try {
       await sendPasswordResetEmail({ to: email, clientName: client.name, token });
     } catch (err) {
@@ -1285,7 +1307,7 @@ router.post('/auth/reset-password', async (req, res) => {
     if (newPassword.length < 6) {
       return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
     }
-    const client = await prisma.client.findUnique({ where: { email } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.email, email)).limit(1);
     if (!client || client.resetToken !== token) {
       return res.status(400).json({ error: 'Código inválido ou expirado' });
     }
@@ -1293,10 +1315,9 @@ router.post('/auth/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Código expirado. Solicite um novo.' });
     }
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.client.update({
-      where: { email },
-      data: { password: hashedPassword, resetToken: null, resetTokenAt: null }
-    });
+    await coreDb.update(bpo.client)
+      .set({ password: hashedPassword, resetToken: null, resetTokenAt: null, updatedAt: new Date() })
+      .where(eq(bpo.client.email, email));
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -1314,16 +1335,17 @@ router.get('/client/:hash', async (req, res) => {
     const { hash } = req.params;
     
     // Check if the hash matches a Client (Owner)
-    let client = await prisma.client.findUnique({ where: { hash } });
+    let [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     let isOwner = true;
     let teamMember = null;
 
     // Check if the hash matches a TeamMember (Manager)
     if (!client) {
-      teamMember = await prisma.teamMember.findUnique({ 
-        where: { hash },
-        include: { client: true }
-      });
+      [teamMember] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.hash, hash)).limit(1);
+      if (teamMember) {
+        const [cli] = await coreDb.select().from(bpo.client).where(eq(bpo.client.id, teamMember.clientId)).limit(1);
+        teamMember.client = cli || null;
+      }
       // Soft delete: membro inativo não acessa o dashboard.
       if (teamMember && teamMember.active !== false) {
         client = teamMember.client;
@@ -1454,17 +1476,15 @@ router.get('/client/:hash', async (req, res) => {
     let bpoLoansMonthly = 0;
     let bpoLoansOutstanding = 0;
     try {
-      const advances = await prisma.receivableAdvance.findMany({
-        where: { clientId: client.id, active: true },
-        select: { totalDiscount: true },
-      });
+      const advances = await coreDb.select({ totalDiscount: bpo.receivableAdvance.totalDiscount })
+        .from(bpo.receivableAdvance)
+        .where(and(eq(bpo.receivableAdvance.clientId, client.id), eq(bpo.receivableAdvance.active, true)));
       bpoAdvancesTotal = advances.reduce((acc, a) => acc + parseFloat(a.totalDiscount), 0);
     } catch (e) { /* tabela pode nao existir antes da migration */ }
     try {
-      const loans = await prisma.loan.findMany({
-        where: { clientId: client.id, active: true, status: 'active' },
-        select: { installmentValue: true, currentBalance: true },
-      });
+      const loans = await coreDb.select({ installmentValue: bpo.loan.installmentValue, currentBalance: bpo.loan.currentBalance })
+        .from(bpo.loan)
+        .where(and(eq(bpo.loan.clientId, client.id), eq(bpo.loan.active, true), eq(bpo.loan.status, 'active')));
       bpoLoansMonthly = loans.reduce((acc, l) => acc + parseFloat(l.installmentValue), 0);
       bpoLoansOutstanding = loans.reduce((acc, l) => acc + parseFloat(l.currentBalance), 0);
     } catch (e) { /* */ }
@@ -1476,24 +1496,23 @@ router.get('/client/:hash', async (req, res) => {
     // cai no CMV teórico das fichas técnicas.
     let bpoCmvRealizadoMes = 0;
     try {
-      const cmvCats = await prisma.financialCategory.findMany({
-        where: { clientId: client.id, dreGroup: 'cmv' },
-        select: { id: true },
-      });
+      const cmvCats = await coreDb.select({ id: bpo.financialCategory.id })
+        .from(bpo.financialCategory)
+        .where(and(eq(bpo.financialCategory.clientId, client.id), eq(bpo.financialCategory.dreGroup, 'cmv')));
       if (cmvCats.length > 0) {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        const agg = await prisma.payable.aggregate({
-          where: {
-            clientId: client.id,
-            categoryId: { in: cmvCats.map((c) => c.id) },
-            status: { not: 'cancelled' },
-            dueDate: { gte: monthStart, lt: monthEnd },
-          },
-          _sum: { amount: true },
-        });
-        bpoCmvRealizadoMes = parseFloat(agg._sum.amount || 0);
+        const [aggRow] = await coreDb.select({ amount: sum(bpo.payable.amount) })
+          .from(bpo.payable)
+          .where(and(
+            eq(bpo.payable.clientId, client.id),
+            inArray(bpo.payable.categoryId, cmvCats.map((c) => c.id)),
+            ne(bpo.payable.status, 'cancelled'),
+            gte(bpo.payable.dueDate, monthStart.toISOString()),
+            lt(bpo.payable.dueDate, monthEnd.toISOString()),
+          ));
+        bpoCmvRealizadoMes = parseFloat(aggRow?.amount || 0);
       }
     } catch (e) { /* tabelas BPO podem não existir antes da migration */ }
 
@@ -1543,20 +1562,14 @@ router.get('/client/:hash', async (req, res) => {
 router.get('/client/:hash/version', async (req, res) => {
   try {
     const { hash } = req.params;
-    let client = await prisma.client.findUnique({
-      where: { hash },
-      select: { id: true, updatedAt: true, data: true },
-    });
+    let [client] = await coreDb.select({ id: bpo.client.id, updatedAt: bpo.client.updatedAt, data: bpo.client.data })
+      .from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (!client) {
-      const tm = await prisma.teamMember.findUnique({
-        where: { hash },
-        select: { clientId: true },
-      });
+      const [tm] = await coreDb.select({ clientId: bpo.teamMember.clientId })
+        .from(bpo.teamMember).where(eq(bpo.teamMember.hash, hash)).limit(1);
       if (!tm) return res.status(404).json({ error: 'Hash invalido' });
-      client = await prisma.client.findUnique({
-        where: { id: tm.clientId },
-        select: { id: true, updatedAt: true, data: true },
-      });
+      [client] = await coreDb.select({ id: bpo.client.id, updatedAt: bpo.client.updatedAt, data: bpo.client.data })
+        .from(bpo.client).where(eq(bpo.client.id, tm.clientId)).limit(1);
     }
     if (!client) return res.status(404).json({ error: 'Cliente nao encontrado' });
 
@@ -1567,15 +1580,15 @@ router.get('/client/:hash/version', async (req, res) => {
     } catch { /* ignore */ }
 
     // Ultimo audit log de save pra ver QUEM salvou por ultimo
-    const lastSync = await prisma.auditLog.findFirst({
-      where: {
-        entityType: 'client',
-        entityId: client.id,
-        action: 'client.data_sync',
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { actorLabel: true, actorType: true, createdAt: true },
-    });
+    const [lastSync] = await coreDb.select({ actorLabel: bpo.auditLog.actorLabel, actorType: bpo.auditLog.actorType, createdAt: bpo.auditLog.createdAt })
+      .from(bpo.auditLog)
+      .where(and(
+        eq(bpo.auditLog.entityType, 'client'),
+        eq(bpo.auditLog.entityId, client.id),
+        eq(bpo.auditLog.action, 'client.data_sync'),
+      ))
+      .orderBy(desc(bpo.auditLog.createdAt))
+      .limit(1);
 
     // Enriquecimento do nome do editor:
     // - actorType='client' → actorLabel vem como hash. Resolve buscando o
@@ -1593,10 +1606,8 @@ router.get('/client/:hash/version', async (req, res) => {
           editorName = parsed.user?.name || parsed.restaurant?.name || null;
         } catch { /* fallback abaixo */ }
         if (!editorName) {
-          const fullClient = await prisma.client.findUnique({
-            where: { id: client.id },
-            select: { name: true },
-          });
+          const [fullClient] = await coreDb.select({ name: bpo.client.name })
+            .from(bpo.client).where(eq(bpo.client.id, client.id)).limit(1);
           editorName = fullClient?.name || null;
         }
       } else {
@@ -1629,12 +1640,12 @@ router.post('/client/:hash/sync', async (req, res) => {
     // Resolve who is saving
     let clientIdToUpdate = null;
     let savingTeamMember = null;
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
 
     if (client) {
       clientIdToUpdate = client.id;
     } else {
-      const teamMember = await prisma.teamMember.findUnique({ where: { hash } });
+      const [teamMember] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.hash, hash)).limit(1);
       if (teamMember) {
         clientIdToUpdate = teamMember.clientId;
         savingTeamMember = teamMember;
@@ -1646,7 +1657,7 @@ router.post('/client/:hash/sync', async (req, res) => {
     // Stripe F3 — bloqueia o save quando assinatura inadimplente/expirada
     // ou bloqueio manual do admin. Past_due/trial/active/legacy passam normal.
     {
-      const ownerForGuard = client || (await prisma.client.findUnique({ where: { id: clientIdToUpdate } }));
+      const ownerForGuard = client || (await coreDb.select().from(bpo.client).where(eq(bpo.client.id, clientIdToUpdate)).limit(1))[0];
       if (blockIfNotAllowed(ownerForGuard, res)) return;
     }
 
@@ -1659,7 +1670,7 @@ router.post('/client/:hash/sync', async (req, res) => {
     // save e devolve no response; o frontend manda a versão que carregou.
     let currentVersion = 0;
 
-    const currentSavedClient = await prisma.client.findUnique({ where: { id: clientIdToUpdate } });
+    const [currentSavedClient] = await coreDb.select().from(bpo.client).where(eq(bpo.client.id, clientIdToUpdate)).limit(1);
     if (currentSavedClient && currentSavedClient.data) {
       try {
         const parsedData = JSON.parse(currentSavedClient.data);
@@ -1749,12 +1760,9 @@ router.post('/client/:hash/sync', async (req, res) => {
       }
     }
 
-    await prisma.client.update({
-      where: { id: clientIdToUpdate },
-      data: {
-        data: newDataStr
-      }
-    });
+    await coreDb.update(bpo.client)
+      .set({ data: newDataStr, updatedAt: new Date() })
+      .where(eq(bpo.client.id, clientIdToUpdate));
 
     // Best-effort cleanup — mantém os 50 snapshots mais recentes
     // (aumentado 20→50 em 29/05/2026 — Pampa Entreveiro teve 56 saves em
@@ -1765,20 +1773,20 @@ router.post('/client/:hash/sync', async (req, res) => {
     // Espelha sócios/funcionários/payment methods do onboarding pro BPO
     // (best-effort — não bloqueia o save se falhar) + F2 dual-write do núcleo.
     if (newData.formData) {
-      syncOnboardingToBpo(prisma, clientIdToUpdate, newData.formData)
+      syncOnboardingToBpo(null, clientIdToUpdate, newData.formData)
         .catch(err => console.error('[onboardingSync] hook failed:', err))
         // coreSync DEPOIS do BPO sync: o vínculo Employee→BpoEmployee acha as
         // linhas recém-criadas. Blob é a fonte da verdade; isto é projeção.
-        .finally(() => syncCoreTables(prisma, coreDb, coreSchema, clientIdToUpdate, newData)
+        .finally(() => syncCoreTables(prismaCompat, coreDb, coreSchema, clientIdToUpdate, newData)
           .catch(err => console.error('[coreSync] hook failed:', err?.message || err)));
     } else {
       // Sem formData o blob ainda muda (insumos/fichas/menu) → reprojeta mesmo assim.
-      syncCoreTables(prisma, coreDb, coreSchema, clientIdToUpdate, newData)
+      syncCoreTables(prismaCompat, coreDb, coreSchema, clientIdToUpdate, newData)
         .catch(err => console.error('[coreSync] hook failed:', err?.message || err));
     }
 
     // Auditoria — registra o save do Client.data (best-effort, não bloqueia)
-    logAudit(prisma, {
+    logAudit({
       action: 'client.data_sync',
       category: 'data',
       entityType: 'client',
@@ -1822,12 +1830,12 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
     // Resolve who is saving (Client or TeamMember)
     let clientIdToUpdate = null;
     let savingTeamMember = null;
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
 
     if (client) {
       clientIdToUpdate = client.id;
     } else {
-      const teamMember = await prisma.teamMember.findUnique({ where: { hash } });
+      const [teamMember] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.hash, hash)).limit(1);
       if (teamMember) {
         clientIdToUpdate = teamMember.clientId;
         savingTeamMember = teamMember;
@@ -1838,12 +1846,12 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
 
     // Stripe F3 — mesma guarda do /sync.
     {
-      const ownerForGuard = client || (await prisma.client.findUnique({ where: { id: clientIdToUpdate } }));
+      const ownerForGuard = client || (await coreDb.select().from(bpo.client).where(eq(bpo.client.id, clientIdToUpdate)).limit(1))[0];
       if (blockIfNotAllowed(ownerForGuard, res)) return;
     }
 
     // Load current saved state to merge against
-    const currentSavedClient = await prisma.client.findUnique({ where: { id: clientIdToUpdate } });
+    const [currentSavedClient] = await coreDb.select().from(bpo.client).where(eq(bpo.client.id, clientIdToUpdate)).limit(1);
     let currentData = {};
     if (currentSavedClient && currentSavedClient.data) {
       try {
@@ -1873,21 +1881,18 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
     delete merged._profile;
 
     const mergedStr = JSON.stringify(merged);
-    await prisma.client.update({
-      where: { id: clientIdToUpdate },
-      data: {
-        data: mergedStr
-      }
-    });
+    await coreDb.update(bpo.client)
+      .set({ data: mergedStr, updatedAt: new Date() })
+      .where(eq(bpo.client.id, clientIdToUpdate));
 
     // BPO hook (best-effort, non-blocking) + F2 dual-write do núcleo.
     if (merged.formData && Object.keys(merged.formData).length > 0) {
-      syncOnboardingToBpo(prisma, clientIdToUpdate, merged.formData)
+      syncOnboardingToBpo(null, clientIdToUpdate, merged.formData)
         .catch(err => console.error('[onboardingSync] hook failed:', err))
-        .finally(() => syncCoreTables(prisma, coreDb, coreSchema, clientIdToUpdate, merged)
+        .finally(() => syncCoreTables(prismaCompat, coreDb, coreSchema, clientIdToUpdate, merged)
           .catch(err => console.error('[coreSync] hook failed:', err?.message || err)));
     } else {
-      syncCoreTables(prisma, coreDb, coreSchema, clientIdToUpdate, merged)
+      syncCoreTables(prismaCompat, coreDb, coreSchema, clientIdToUpdate, merged)
         .catch(err => console.error('[coreSync] hook failed:', err?.message || err));
     }
 
@@ -1897,7 +1902,7 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
       'utf8'
     );
     const partialSizeAfter = Buffer.byteLength(mergedStr, 'utf8');
-    logAudit(prisma, {
+    logAudit({
       action: 'client.data_sync_partial',
       category: 'data',
       entityType: 'client',
@@ -1937,11 +1942,11 @@ router.put('/client/:hash/profile', async (req, res) => {
     let userToUpdate = null;
     let isClient = true;
 
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (client) {
       userToUpdate = client;
     } else {
-      const teamMember = await prisma.teamMember.findUnique({ where: { hash } });
+      const [teamMember] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.hash, hash)).limit(1);
       if (teamMember) {
         userToUpdate = teamMember;
         isClient = false;
@@ -2021,9 +2026,9 @@ router.put('/client/:hash/profile', async (req, res) => {
 
     if (Object.keys(updateData).length > 0) {
       if (isClient) {
-        await prisma.client.update({ where: { hash }, data: updateData });
+        await coreDb.update(bpo.client).set({ ...updateData, updatedAt: new Date() }).where(eq(bpo.client.hash, hash));
       } else {
-        await prisma.teamMember.update({ where: { hash }, data: updateData });
+        await coreDb.update(bpo.teamMember).set({ ...updateData, updatedAt: new Date() }).where(eq(bpo.teamMember.hash, hash));
       }
     }
 
@@ -2047,7 +2052,7 @@ router.put('/client/:hash/profile', async (req, res) => {
 router.get('/client/:hash/export-my-data', async (req, res) => {
   try {
     const { hash } = req.params;
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     if (!client.active) return res.status(410).json({ error: 'Conta encerrada' });
 
@@ -2076,7 +2081,7 @@ router.get('/client/:hash/export-my-data', async (req, res) => {
       data: parsedData,
     };
 
-    logAudit(prisma, {
+    logAudit({
       action: 'client.data.export',
       category: 'data',
       entityType: 'client',
@@ -2114,7 +2119,7 @@ router.post('/client/:hash/request-delete-account', async (req, res) => {
       return res.status(400).json({ error: 'Digite EXCLUIR (em maiúsculas) para confirmar.' });
     }
 
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     if (!client.active) return res.status(410).json({ error: 'Conta já está encerrada.' });
     if (!client.password) {
@@ -2146,19 +2151,20 @@ router.post('/client/:hash/request-delete-account', async (req, res) => {
     //    Note: Client.data permanece (snapshot histórico). Para apagamento
     //    completo o titular precisa contatar suporte que faz prune via
     //    operação manual auditada.
-    await prisma.client.update({
-      where: { id: client.id },
-      data: {
+    await coreDb.update(bpo.client)
+      .set({
         active: false,
         canceledAt: new Date(),
+        updatedAt: new Date(),
         // Limpa credenciais — não pode mais logar
         password: null,
         resetToken: null,
-        resetTokenExpiry: null,
-      },
-    });
+        // coluna real no schema é resetTokenAt (o legado Prisma usava resetTokenExpiry).
+        resetTokenAt: null,
+      })
+      .where(eq(bpo.client.id, client.id));
 
-    logAudit(prisma, {
+    logAudit({
       action: 'client.account.delete-requested',
       category: 'security',
       entityType: 'client',
@@ -2190,14 +2196,14 @@ router.post('/client/:hash/request-delete-account', async (req, res) => {
 router.get('/client/:hash/team', async (req, res) => {
   try {
     const { hash } = req.params;
-    const client = await prisma.client.findUnique({
-      where: { hash },
-      // Soft delete: só membros ativos aparecem na listagem da equipe.
-      include: { teamMembers: { where: { active: true } } }
-    });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
 
     // Only the owner can list team members
     if (!client) return res.status(403).json({ error: 'Acesso negado' });
+
+    // Soft delete: só membros ativos aparecem na listagem da equipe.
+    client.teamMembers = await coreDb.select().from(bpo.teamMember)
+      .where(and(eq(bpo.teamMember.clientId, client.id), eq(bpo.teamMember.active, true)));
 
     // Exclude passwords from response
     const safeMembers = client.teamMembers.map(tm => {
@@ -2222,14 +2228,14 @@ router.post('/client/:hash/team', async (req, res) => {
       return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
     }
 
-    const client = await prisma.client.findUnique({
-      where: { hash },
-      // Conta só membros ativos pro limite (soft delete não ocupa slot).
-      include: { teamMembers: { where: { active: true } } }
-    });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
 
     // Only owner can create
     if (!client) return res.status(403).json({ error: 'Acesso negado' });
+
+    // Conta só membros ativos pro limite (soft delete não ocupa slot).
+    client.teamMembers = await coreDb.select().from(bpo.teamMember)
+      .where(and(eq(bpo.teamMember.clientId, client.id), eq(bpo.teamMember.active, true)));
 
     // Enforce logic rule: max 3 sub-accounts
     if (client.teamMembers.length >= 3) {
@@ -2237,8 +2243,8 @@ router.post('/client/:hash/team', async (req, res) => {
     }
 
     // Check if email already in use globally across both tables
-    const existingClient = await prisma.client.findUnique({ where: { email } });
-    const existingMember = await prisma.teamMember.findUnique({ where: { email } });
+    const [existingClient] = await coreDb.select().from(bpo.client).where(eq(bpo.client.email, email)).limit(1);
+    const [existingMember] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.email, email)).limit(1);
     
     if (existingClient || existingMember) {
       return res.status(409).json({ error: 'Este email já está em uso' });
@@ -2289,16 +2295,16 @@ router.post('/client/:hash/team', async (req, res) => {
       });
     }
 
-    const newMember = await prisma.teamMember.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        hash: newHash,
-        clerkUserId,
-        clientId: client.id
-      }
-    });
+    const [newMember] = await coreDb.insert(bpo.teamMember).values({
+      id: crypto.randomUUID(),
+      name,
+      email,
+      password: hashedPassword,
+      hash: newHash,
+      clerkUserId,
+      clientId: client.id,
+      updatedAt: new Date(),
+    }).returning();
 
     const { password: _, ...safeMember } = newMember;
     res.json({ success: true, member: safeMember, clerkSynced: !!clerkUserId });
@@ -2314,13 +2320,13 @@ router.delete('/client/:hash/team/:memberId', async (req, res) => {
   try {
     const { hash, memberId } = req.params;
 
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (!client) return res.status(403).json({ error: 'Acesso negado' });
 
     // Ensure the member belongs to this client
-    const member = await prisma.teamMember.findFirst({
-      where: { id: memberId, clientId: client.id }
-    });
+    const [member] = await coreDb.select().from(bpo.teamMember)
+      .where(and(eq(bpo.teamMember.id, memberId), eq(bpo.teamMember.clientId, client.id)))
+      .limit(1);
 
     if (!member) {
       return res.status(404).json({ error: 'Membro não encontrado' });
@@ -2339,10 +2345,9 @@ router.delete('/client/:hash/team/:memberId', async (req, res) => {
 
     // Soft delete: DELETE físico é PROIBIDO (regra do projeto).
     // Campo `active` adicionado ao model TeamMember via migration (contrato com agente de schema).
-    await prisma.teamMember.update({
-      where: { id: memberId },
-      data: { active: false }
-    });
+    await coreDb.update(bpo.teamMember)
+      .set({ active: false, updatedAt: new Date() })
+      .where(eq(bpo.teamMember.id, memberId));
 
     res.json({ success: true, message: 'Membro removido' });
   } catch (error) {
@@ -2383,13 +2388,14 @@ router.post('/agency/signup', async (req, res) => {
     const { name, email, password, plan } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
     if (password.length < 6) return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
-    const existing = await prisma.agency.findUnique({ where: { email } });
+    const [existing] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.email, email)).limit(1);
     if (existing) return res.status(409).json({ error: 'Este email já está cadastrado' });
     const hash = crypto.randomBytes(16).toString('hex');
     const hashedPassword = await bcrypt.hash(password, 10);
-    const agency = await prisma.agency.create({
-      data: { name, hash, email, password: hashedPassword, plan: plan || 'basic', active: false }
-    });
+    // Agency.id é serial (auto-incremento) e a tabela NÃO tem updatedAt.
+    const [agency] = await coreDb.insert(bpo.agency).values({
+      name, hash, email, password: hashedPassword, plan: plan || 'basic', active: false,
+    }).returning();
     res.json({ success: true, hash: agency.hash, agencyId: agency.id });
   } catch (error) {
     console.error(error);
@@ -2402,7 +2408,7 @@ router.post('/agency/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email e senha são obrigatórios' });
-    const agency = await prisma.agency.findUnique({ where: { email } });
+    const [agency] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.email, email)).limit(1);
     if (!agency) return res.status(401).json({ error: 'Email ou senha incorretos' });
     const valid = await bcrypt.compare(password, agency.password);
     if (!valid) return res.status(401).json({ error: 'Email ou senha incorretos' });
@@ -2418,11 +2424,12 @@ router.post('/agency/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email é obrigatório' });
-    const agency = await prisma.agency.findUnique({ where: { email } });
+    const [agency] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.email, email)).limit(1);
     if (!agency) return res.json({ success: true });
     const token = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = new Date(Date.now() + 30 * 60 * 1000);
-    await prisma.agency.update({ where: { email }, data: { resetToken: token, resetTokenAt: expiry } });
+    // Agency não tem updatedAt — não setar.
+    await coreDb.update(bpo.agency).set({ resetToken: token, resetTokenAt: expiry.toISOString() }).where(eq(bpo.agency.email, email));
     try {
       const { sendPasswordResetEmail } = require('./services/emailService');
       await sendPasswordResetEmail({ to: email, clientName: agency.name, token });
@@ -2440,11 +2447,12 @@ router.post('/agency/reset-password', async (req, res) => {
     const { email, token, newPassword } = req.body;
     if (!email || !token || !newPassword) return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
     if (newPassword.length < 6) return res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
-    const agency = await prisma.agency.findUnique({ where: { email } });
+    const [agency] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.email, email)).limit(1);
     if (!agency || agency.resetToken !== token) return res.status(400).json({ error: 'Código inválido ou expirado' });
     if (!agency.resetTokenAt || new Date() > new Date(agency.resetTokenAt)) return res.status(400).json({ error: 'Código expirado. Solicite um novo.' });
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.agency.update({ where: { email }, data: { password: hashedPassword, resetToken: null, resetTokenAt: null } });
+    // Agency não tem updatedAt — não setar.
+    await coreDb.update(bpo.agency).set({ password: hashedPassword, resetToken: null, resetTokenAt: null }).where(eq(bpo.agency.email, email));
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -2455,15 +2463,13 @@ router.post('/agency/reset-password', async (req, res) => {
 // Load Agency data + clients
 router.get('/agency/:hash', async (req, res) => {
   try {
-    const agency = await prisma.agency.findUnique({
-      where: { hash: req.params.hash },
-      include: {
-        clients: {
-          select: { id: true, name: true, hash: true, email: true, active: true, stripeSubscriptionId: true, data: true, createdAt: true, updatedAt: true }
-        }
-      }
-    });
+    const [agency] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.hash, req.params.hash)).limit(1);
     if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
+    agency.clients = await coreDb.select({
+      id: bpo.client.id, name: bpo.client.name, hash: bpo.client.hash, email: bpo.client.email,
+      active: bpo.client.active, stripeSubscriptionId: bpo.client.stripeSubscriptionId, data: bpo.client.data,
+      createdAt: bpo.client.createdAt, updatedAt: bpo.client.updatedAt,
+    }).from(bpo.client).where(eq(bpo.client.agencyId, agency.id));
     const { password: _, resetToken: __, resetTokenAt: ___, ...safeAgency } = agency;
     res.json(safeAgency);
   } catch (error) {
@@ -2475,22 +2481,23 @@ router.get('/agency/:hash', async (req, res) => {
 // Add client to agency
 router.post('/agency/:hash/clients', async (req, res) => {
   try {
-    const agency = await prisma.agency.findUnique({ where: { hash: req.params.hash } });
+    const [agency] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.hash, req.params.hash)).limit(1);
     if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
 
     // Check client limit for basic plan
     if (agency.plan === 'basic') {
-      const count = await prisma.client.count({ where: { agencyId: agency.id } });
-      if (count >= 10) return res.status(403).json({ error: 'Limite de 10 clientes atingido no plano Basic. Faça upgrade para Ilimitado.' });
+      const [{ value: clientCount }] = await coreDb.select({ value: count() })
+        .from(bpo.client).where(eq(bpo.client.agencyId, agency.id));
+      if (Number(clientCount) >= 10) return res.status(403).json({ error: 'Limite de 10 clientes atingido no plano Basic. Faça upgrade para Ilimitado.' });
     }
 
     const { name, email } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
 
     const clientHash = crypto.randomBytes(16).toString('hex');
-    const client = await prisma.client.create({
-      data: { name, hash: clientHash, email: email || null, data: '{}', agencyId: agency.id }
-    });
+    const [client] = await coreDb.insert(bpo.client).values({
+      id: crypto.randomUUID(), name, hash: clientHash, email: email || null, data: '{}', agencyId: agency.id, updatedAt: new Date(),
+    }).returning();
 
     if (email) {
       try {
@@ -2509,11 +2516,12 @@ router.post('/agency/:hash/clients', async (req, res) => {
 // Remove client from agency
 router.delete('/agency/:hash/clients/:clientId', async (req, res) => {
   try {
-    const agency = await prisma.agency.findUnique({ where: { hash: req.params.hash } });
+    const [agency] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.hash, req.params.hash)).limit(1);
     if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
-    const client = await prisma.client.findFirst({ where: { id: req.params.clientId, agencyId: agency.id } });
+    const [client] = await coreDb.select().from(bpo.client)
+      .where(and(eq(bpo.client.id, req.params.clientId), eq(bpo.client.agencyId, agency.id))).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
-    await prisma.client.update({ where: { id: client.id }, data: { agencyId: null } });
+    await coreDb.update(bpo.client).set({ agencyId: null, updatedAt: new Date() }).where(eq(bpo.client.id, client.id));
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -2530,7 +2538,7 @@ router.post('/asaas/client-checkout', async (req, res) => {
   try {
     const { hash } = req.body;
     if (!hash) return res.status(400).json({ error: 'Hash é obrigatório' });
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
     const result = await createClientCheckout({ clientHash: hash, email: client.email || '', name: client.name });
     res.json({ url: result.url });
@@ -2545,7 +2553,7 @@ router.post('/asaas/agency-checkout', async (req, res) => {
   try {
     const { hash, plan } = req.body;
     if (!hash) return res.status(400).json({ error: 'Hash é obrigatório' });
-    const agency = await prisma.agency.findUnique({ where: { hash } });
+    const [agency] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.hash, hash)).limit(1);
     if (!agency) return res.status(404).json({ error: 'Agência não encontrada' });
     const result = await createAgencyCheckout({ agencyHash: hash, email: agency.email, plan: plan || agency.plan, name: agency.name });
     res.json({ url: result.url });
@@ -2561,10 +2569,10 @@ router.post('/asaas/portal', async (req, res) => {
     const { hash, type } = req.body;
     let asaasCustomerId;
     if (type === 'agency') {
-      const agency = await prisma.agency.findUnique({ where: { hash } });
+      const [agency] = await coreDb.select().from(bpo.agency).where(eq(bpo.agency.hash, hash)).limit(1);
       asaasCustomerId = agency?.stripeCustomerId; // reusing field for Asaas customer id
     } else {
-      const client = await prisma.client.findUnique({ where: { hash } });
+      const [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.hash, hash)).limit(1);
       asaasCustomerId = client?.stripeCustomerId;
     }
     const url = asaasCustomerId ? await getPortalUrl({ asaasCustomerId }) : null;
@@ -2590,26 +2598,25 @@ router.post('/asaas/webhook', express.json(), async (req, res) => {
     if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
       if (ref.startsWith('client:')) {
         const clientHash = ref.split(':')[1];
-        await prisma.client.update({
-          where: { hash: clientHash },
-          data: { active: true, stripeCustomerId: payment.customer }
-        });
+        await coreDb.update(bpo.client)
+          .set({ active: true, stripeCustomerId: payment.customer, updatedAt: new Date() })
+          .where(eq(bpo.client.hash, clientHash));
       } else if (ref.startsWith('agency:')) {
         const parts = ref.split(':');
         const agencyHash = parts[1];
         const plan = parts[2] || 'basic';
-        await prisma.agency.update({
-          where: { hash: agencyHash },
-          data: { active: true, plan, stripeCustomerId: payment.customer }
-        });
+        // Agency não tem updatedAt — não setar.
+        await coreDb.update(bpo.agency)
+          .set({ active: true, plan, stripeCustomerId: payment.customer })
+          .where(eq(bpo.agency.hash, agencyHash));
       }
     } else if (event === 'PAYMENT_OVERDUE' || event === 'PAYMENT_DELETED') {
       if (ref.startsWith('client:')) {
         const clientHash = ref.split(':')[1];
-        await prisma.client.update({ where: { hash: clientHash }, data: { active: false } });
+        await coreDb.update(bpo.client).set({ active: false, updatedAt: new Date() }).where(eq(bpo.client.hash, clientHash));
       } else if (ref.startsWith('agency:')) {
         const agencyHash = ref.split(':')[1];
-        await prisma.agency.update({ where: { hash: agencyHash }, data: { active: false } });
+        await coreDb.update(bpo.agency).set({ active: false }).where(eq(bpo.agency.hash, agencyHash));
       }
     }
 
@@ -2648,23 +2655,23 @@ router.get('/clerk/me', async (req, res) => {
     const fullName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || email?.split('@')[0] || 'Novo Cliente';
 
     // 1. Look up by clerkUserId (already linked as Client/Owner)
-    let client = await prisma.client.findUnique({ where: { clerkUserId } });
+    let [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.clerkUserId, clerkUserId)).limit(1);
 
     // 2. Check if this Clerk user is a TeamMember (Gerente) — they access the owner's client
     if (!client) {
-      let teamMember = await prisma.teamMember.findUnique({
-        where: { clerkUserId },
-        include: { client: true }
-      });
+      let [teamMember] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.clerkUserId, clerkUserId)).limit(1);
+      if (teamMember) {
+        const [cli] = await coreDb.select().from(bpo.client).where(eq(bpo.client.id, teamMember.clientId)).limit(1);
+        teamMember.client = cli || null;
+      }
 
       // Fallback: match TeamMember by email if not linked yet
       if (!teamMember && email) {
-        teamMember = await prisma.teamMember.findUnique({
-          where: { email },
-          include: { client: true }
-        });
+        [teamMember] = await coreDb.select().from(bpo.teamMember).where(eq(bpo.teamMember.email, email)).limit(1);
         if (teamMember) {
-          await prisma.teamMember.update({ where: { id: teamMember.id }, data: { clerkUserId } });
+          const [cli] = await coreDb.select().from(bpo.client).where(eq(bpo.client.id, teamMember.clientId)).limit(1);
+          teamMember.client = cli || null;
+          await coreDb.update(bpo.teamMember).set({ clerkUserId, updatedAt: new Date() }).where(eq(bpo.teamMember.id, teamMember.id));
         }
       }
 
@@ -2682,9 +2689,9 @@ router.get('/clerk/me', async (req, res) => {
 
     // 3. Migration: match Client by email and auto-link
     if (!client && email) {
-      client = await prisma.client.findUnique({ where: { email } });
+      [client] = await coreDb.select().from(bpo.client).where(eq(bpo.client.email, email)).limit(1);
       if (client) {
-        await prisma.client.update({ where: { id: client.id }, data: { clerkUserId } });
+        await coreDb.update(bpo.client).set({ clerkUserId, updatedAt: new Date() }).where(eq(bpo.client.id, client.id));
       }
     }
 
@@ -2696,15 +2703,15 @@ router.get('/clerk/me', async (req, res) => {
         user: { name: 'Proprietário', role: 'Proprietário da Conta' },
         operational: { fichas: [], insumos: [] }
       };
-      client = await prisma.client.create({
-        data: {
-          name: fullName,
-          hash,
-          email,
-          clerkUserId,
-          data: JSON.stringify(initialData)
-        }
-      });
+      [client] = await coreDb.insert(bpo.client).values({
+        id: crypto.randomUUID(),
+        name: fullName,
+        hash,
+        email,
+        clerkUserId,
+        data: JSON.stringify(initialData),
+        updatedAt: new Date(),
+      }).returning();
     }
 
     // Save Clerk profile photo to client data if available
@@ -2714,7 +2721,7 @@ router.get('/clerk/me', async (req, res) => {
         if (!clientData.user) clientData.user = {};
         clientData.user.photo = clerkUser.imageUrl;
         clientData._clerkPhoto = clerkUser.imageUrl;
-        await prisma.client.update({ where: { id: client.id }, data: { data: JSON.stringify(clientData) } });
+        await coreDb.update(bpo.client).set({ data: JSON.stringify(clientData), updatedAt: new Date() }).where(eq(bpo.client.id, client.id));
       } catch (photoErr) {
         console.error('Failed to save Clerk photo (non-fatal):', photoErr.message);
       }
@@ -2735,16 +2742,15 @@ router.get('/clerk/me', async (req, res) => {
 router.get('/broadcasts/active', async (req, res) => {
   try {
     const now = new Date();
-    const broadcasts = await prisma.broadcast.findMany({
-      where: {
-        active: true,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: now } }
-        ]
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const broadcasts = await coreDb.select().from(bpo.broadcast)
+      .where(and(
+        eq(bpo.broadcast.active, true),
+        or(
+          sql`${bpo.broadcast.expiresAt} is null`,
+          gt(bpo.broadcast.expiresAt, now.toISOString()),
+        ),
+      ))
+      .orderBy(desc(bpo.broadcast.createdAt));
     res.json(broadcasts);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar comunicados' });
@@ -2754,9 +2760,7 @@ router.get('/broadcasts/active', async (req, res) => {
 // Admin: List all broadcasts — admin only
 router.get('/admin/broadcasts', requireAdmin, async (req, res) => {
   try {
-    const broadcasts = await prisma.broadcast.findMany({
-      orderBy: { createdAt: 'desc' }
-    });
+    const broadcasts = await coreDb.select().from(bpo.broadcast).orderBy(desc(bpo.broadcast.createdAt));
     res.json(broadcasts);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar comunicados' });
@@ -2769,17 +2773,17 @@ router.post('/admin/broadcasts', requireSuperAdmin, async (req, res) => {
     const { title, message, imageUrl, type, targetCategory, expiresAt } = req.body;
     if (!title || !message) return res.status(400).json({ error: 'Título e mensagem são obrigatórios' });
 
-    const broadcast = await prisma.broadcast.create({
-      data: {
-        title,
-        message,
-        imageUrl: imageUrl || null,
-        type: type || 'popup',
-        active: true,
-        targetCategory: targetCategory || null,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
-      }
-    });
+    const [broadcast] = await coreDb.insert(bpo.broadcast).values({
+      id: crypto.randomUUID(),
+      title,
+      message,
+      imageUrl: imageUrl || null,
+      type: type || 'popup',
+      active: true,
+      targetCategory: targetCategory || null,
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      updatedAt: new Date(),
+    }).returning();
     res.json(broadcast);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao criar comunicado' });
@@ -2792,18 +2796,19 @@ router.put('/admin/broadcasts/:id', requireSuperAdmin, async (req, res) => {
     const { id } = req.params;
     const { title, message, imageUrl, type, active, targetCategory, expiresAt } = req.body;
 
-    const broadcast = await prisma.broadcast.update({
-      where: { id },
-      data: {
+    const [broadcast] = await coreDb.update(bpo.broadcast)
+      .set({
         ...(title !== undefined && { title }),
         ...(message !== undefined && { message }),
         ...(imageUrl !== undefined && { imageUrl }),
         ...(type !== undefined && { type }),
         ...(active !== undefined && { active }),
         ...(targetCategory !== undefined && { targetCategory }),
-        ...(expiresAt !== undefined && { expiresAt: expiresAt ? new Date(expiresAt) : null }),
-      }
-    });
+        ...(expiresAt !== undefined && { expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null }),
+        updatedAt: new Date(),
+      })
+      .where(eq(bpo.broadcast.id, id))
+      .returning();
     res.json(broadcast);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao atualizar comunicado' });
@@ -2815,7 +2820,7 @@ router.delete('/admin/broadcasts/:id', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     // Soft delete: DELETE físico é PROIBIDO (regra do projeto). Marca active=false.
-    await prisma.broadcast.update({ where: { id }, data: { active: false } });
+    await coreDb.update(bpo.broadcast).set({ active: false, updatedAt: new Date() }).where(eq(bpo.broadcast.id, id));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao deletar comunicado' });

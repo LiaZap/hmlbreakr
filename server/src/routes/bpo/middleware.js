@@ -6,9 +6,10 @@
  * Adicionado em 2026-04-27. Doc: [[Breakr V2.0 - Plano de Acao BPO Financeiro]]
  */
 
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq } = require('drizzle-orm');
 const { blockIfNotAllowed } = require('../../middleware/subscriptionGuard');
-const prisma = new PrismaClient();
 
 /**
  * Carrega Client pelo hash (path param :clientHash) e adiciona em req.bpoClient.
@@ -20,7 +21,7 @@ const requireBpoClient = async (req, res, next) => {
     if (!hash) {
       return res.status(400).json({ error: 'clientHash obrigatório (path param ou header x-client-hash)' });
     }
-    const client = await prisma.client.findUnique({ where: { hash } });
+    const [client] = await db.select().from(t.client).where(eq(t.client.hash, hash)).limit(1);
     if (!client) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }

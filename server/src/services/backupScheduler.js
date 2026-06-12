@@ -20,7 +20,8 @@
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../db/client');
+const t = require('../db/schema-bpo');
 
 const BACKUPS_DIR = path.resolve(__dirname, '..', '..', 'backups');
 const MAX_BACKUPS = 30;
@@ -71,17 +72,16 @@ function pruneOldBackups() {
  * @returns {Promise<{ filename: string, filepath: string, sizeBytes: number, counts: object }>}
  */
 async function runBackup(reason = 'unknown') {
-  const prisma = new PrismaClient();
   const startedAt = Date.now();
 
   try {
     ensureBackupsDir();
 
     const [clients, agencies, teamMembers, broadcasts] = await Promise.all([
-      prisma.client.findMany(),
-      prisma.agency.findMany(),
-      prisma.teamMember.findMany(),
-      prisma.broadcast.findMany(),
+      db.select().from(t.client),
+      db.select().from(t.agency),
+      db.select().from(t.teamMember),
+      db.select().from(t.broadcast),
     ]);
 
     const counts = {
@@ -127,8 +127,6 @@ async function runBackup(reason = 'unknown') {
   } catch (err) {
     console.error(`${LOG_PREFIX} erro (${reason}): ${err.message}`);
     throw err;
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

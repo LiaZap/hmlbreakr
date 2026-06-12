@@ -4,11 +4,16 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const {
+  eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray, isNull, isNotNull,
+  desc, asc, sql, count, getTableColumns,
+} = require('drizzle-orm');
+const crypto = require('crypto');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
@@ -29,49 +34,59 @@ const advanceDate = (date, frequency, count = 1) => {
 router.get('/', async (req, res) => {
   try {
     const { status, paymentMethodId, categoryId, dueFrom, dueTo, search, page = 1, pageSize = 50 } = req.query;
-    const where = {
-      clientId: req.bpoClient.id,
-      ...(status ? { status } : {}),
-      ...(paymentMethodId ? { paymentMethodId } : {}),
-      ...(categoryId ? { categoryId } : {}),
-      ...(dueFrom || dueTo ? {
-        dueDate: {
-          ...(dueFrom ? { gte: new Date(dueFrom) } : {}),
-          ...(dueTo ? { lte: new Date(dueTo) } : {}),
-        }
-      } : {}),
-      ...(search ? {
-        OR: [
-          { description: { contains: search, mode: 'insensitive' } },
-          { invoiceNumber: { contains: search, mode: 'insensitive' } },
-          { payerName: { contains: search, mode: 'insensitive' } },
-        ]
-      } : {}),
-    };
-    const [items, total, summary] = await Promise.all([
-      prisma.receivable.findMany({
-        where,
-        skip: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
-        take: parseInt(pageSize, 10),
-        orderBy: { dueDate: 'asc' },
-        include: {
-          paymentMethod: { select: { id: true, name: true, type: true } },
-          category: { select: { id: true, name: true, color: true } },
-          _count: { select: { payments: true, installments: true } },
-        },
-      }),
-      prisma.receivable.count({ where }),
-      prisma.receivable.aggregate({
-        where: { ...where, status: { in: ['pending', 'received_partial'] } },
-        _sum: { remainingAmount: true },
-      }),
+    const conds = [eq(t.receivable.clientId, req.bpoClient.id)];
+    if (status) conds.push(eq(t.receivable.status, status));
+    if (paymentMethodId) conds.push(eq(t.receivable.paymentMethodId, paymentMethodId));
+    if (categoryId) conds.push(eq(t.receivable.categoryId, categoryId));
+    if (dueFrom) conds.push(gte(t.receivable.dueDate, new Date(dueFrom)));
+    if (dueTo) conds.push(lte(t.receivable.dueDate, new Date(dueTo)));
+    if (search) {
+      const like = `%${search}%`;
+      conds.push(or(
+        sql`${t.receivable.description} ILIKE ${like}`,
+        sql`${t.receivable.invoiceNumber} ILIKE ${like}`,
+        sql`${t.receivable.payerName} ILIKE ${like}`,
+      ));
+    }
+    const where = and(...conds);
+    const take = parseInt(pageSize, 10);
+    const skip = (parseInt(page, 10) - 1) * take;
+
+    const summaryWhere = and(where, inArray(t.receivable.status, ['pending', 'received_partial']));
+
+    const [itemsRaw, [{ n: total }], [{ s: pendingSum }]] = await Promise.all([
+      db.select({
+        ...getTableColumns(t.receivable),
+        paymentMethod: { id: t.paymentMethod.id, name: t.paymentMethod.name, type: t.paymentMethod.type },
+        category: { id: t.financialCategory.id, name: t.financialCategory.name, color: t.financialCategory.color },
+      })
+        .from(t.receivable)
+        .leftJoin(t.paymentMethod, eq(t.receivable.paymentMethodId, t.paymentMethod.id))
+        .leftJoin(t.financialCategory, eq(t.receivable.categoryId, t.financialCategory.id))
+        .where(where)
+        .orderBy(asc(t.receivable.dueDate))
+        .limit(take)
+        .offset(skip),
+      db.select({ n: count() }).from(t.receivable).where(where),
+      db.select({ s: sql`coalesce(sum(${t.receivable.remainingAmount}),0)` }).from(t.receivable).where(summaryWhere),
     ]);
+
+    // _count: { payments, installments } — contagens por id (mantém shape do Prisma)
+    const items = await Promise.all(itemsRaw.map(async (it) => {
+      const [[{ n: payments }], [{ n: installments }]] = await Promise.all([
+        db.select({ n: count() }).from(t.paymentTransaction).where(eq(t.paymentTransaction.receivableId, it.id)),
+        db.select({ n: count() }).from(t.receivable).where(eq(t.receivable.parentId, it.id)),
+      ]);
+      // Prisma retorna null em relações ausentes; leftJoin sem match já vem com campos null
+      return { ...it, _count: { payments, installments } };
+    }));
+
     res.json({
       items,
       total,
       page: parseInt(page, 10),
       pageSize: parseInt(pageSize, 10),
-      pendingTotal: summary._sum.remainingAmount || 0,
+      pendingTotal: pendingSum || 0,
     });
   } catch (err) {
     console.error('[bpo receivables list]', err);
@@ -81,18 +96,43 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const item = await prisma.receivable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: {
-        paymentMethod: true,
-        category: true,
-        payments: { orderBy: { paidAt: 'desc' }, include: { bankAccount: { select: { bankName: true, account: true } } } },
-        installments: { orderBy: { installmentNumber: 'asc' } },
-        recurrence: true,
-      },
-    });
+    const [item] = await db.select()
+      .from(t.receivable)
+      .where(and(eq(t.receivable.id, req.params.id), eq(t.receivable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!item) return res.status(404).json({ error: 'Conta a receber não encontrada' });
-    res.json(item);
+
+    const [paymentMethod, category, paymentsRaw, installments, recurrenceRows] = await Promise.all([
+      item.paymentMethodId
+        ? db.select().from(t.paymentMethod).where(eq(t.paymentMethod.id, item.paymentMethodId)).limit(1)
+        : Promise.resolve([]),
+      item.categoryId
+        ? db.select().from(t.financialCategory).where(eq(t.financialCategory.id, item.categoryId)).limit(1)
+        : Promise.resolve([]),
+      db.select({
+        ...getTableColumns(t.paymentTransaction),
+        bankAccount: { bankName: t.bankAccount.bankName, account: t.bankAccount.account },
+      })
+        .from(t.paymentTransaction)
+        .leftJoin(t.bankAccount, eq(t.paymentTransaction.bankAccountId, t.bankAccount.id))
+        .where(eq(t.paymentTransaction.receivableId, item.id))
+        .orderBy(desc(t.paymentTransaction.paidAt)),
+      db.select().from(t.receivable)
+        .where(eq(t.receivable.parentId, item.id))
+        .orderBy(asc(t.receivable.installmentNumber)),
+      item.recurrenceId
+        ? db.select().from(t.recurrence).where(eq(t.recurrence.id, item.recurrenceId)).limit(1)
+        : Promise.resolve([]),
+    ]);
+
+    res.json({
+      ...item,
+      paymentMethod: paymentMethod[0] || null,
+      category: category[0] || null,
+      payments: paymentsRaw,
+      installments,
+      recurrence: recurrenceRows[0] || null,
+    });
   } catch (err) {
     console.error('[bpo receivables get]', err);
     res.status(500).json({ error: 'Erro ao buscar' });
@@ -126,21 +166,25 @@ router.post('/', async (req, res) => {
     };
 
     if (recurrence?.frequency) {
-      const rec = await prisma.recurrence.create({
-        data: {
-          frequency: recurrence.frequency,
-          intervalCount: recurrence.intervalCount || 1,
-          startDate: new Date(dueDate),
-          occurrencesCount: recurrence.occurrencesCount || null,
-        },
-      });
+      const [rec] = await db.insert(t.recurrence).values({
+        id: crypto.randomUUID(),
+        frequency: recurrence.frequency,
+        intervalCount: recurrence.intervalCount || 1,
+        startDate: new Date(dueDate),
+        occurrencesCount: recurrence.occurrencesCount || null,
+      }).returning();
       const count = recurrence.occurrencesCount || 12;
       const created = [];
       for (let i = 0; i < count; i++) {
         const dueDateI = i === 0 ? new Date(dueDate) : advanceDate(dueDate, recurrence.frequency, i * (recurrence.intervalCount || 1));
-        const item = await prisma.receivable.create({
-          data: { ...baseData, dueDate: dueDateI, receiptForecast: dueDateI, recurrenceId: rec.id },
-        });
+        const [item] = await db.insert(t.receivable).values({
+          id: crypto.randomUUID(),
+          ...baseData,
+          dueDate: dueDateI,
+          receiptForecast: dueDateI,
+          recurrenceId: rec.id,
+          updatedAt: new Date(),
+        }).returning();
         created.push(item);
       }
       return res.status(201).json({ recurrence: rec, items: created });
@@ -150,22 +194,53 @@ router.post('/', async (req, res) => {
       const count = installments.count;
       const installmentAmount = +(amountNum / count).toFixed(2);
       const interval = installments.intervalCount || 1;
-      const parent = await prisma.receivable.create({
-        data: { ...baseData, amount: installmentAmount, remainingAmount: installmentAmount, installmentNumber: 1 },
-      });
+      const [parent] = await db.insert(t.receivable).values({
+        id: crypto.randomUUID(),
+        ...baseData,
+        amount: installmentAmount,
+        remainingAmount: installmentAmount,
+        installmentNumber: 1,
+        updatedAt: new Date(),
+      }).returning();
       const created = [parent];
       for (let i = 1; i < count; i++) {
         const dueDateI = advanceDate(dueDate, 'monthly', i * interval);
-        const item = await prisma.receivable.create({
-          data: { ...baseData, amount: installmentAmount, remainingAmount: installmentAmount, dueDate: dueDateI, receiptForecast: dueDateI, parentId: parent.id, installmentNumber: i + 1 },
-        });
+        const [item] = await db.insert(t.receivable).values({
+          id: crypto.randomUUID(),
+          ...baseData,
+          amount: installmentAmount,
+          remainingAmount: installmentAmount,
+          dueDate: dueDateI,
+          receiptForecast: dueDateI,
+          parentId: parent.id,
+          installmentNumber: i + 1,
+          updatedAt: new Date(),
+        }).returning();
         created.push(item);
       }
       return res.status(201).json({ installments: created.length, items: created });
     }
 
-    const item = await prisma.receivable.create({ data: baseData, include: { paymentMethod: true, category: true } });
-    res.status(201).json(item);
+    const [created] = await db.insert(t.receivable).values({
+      id: crypto.randomUUID(),
+      ...baseData,
+      updatedAt: new Date(),
+    }).returning();
+
+    const [paymentMethod, category] = await Promise.all([
+      created.paymentMethodId
+        ? db.select().from(t.paymentMethod).where(eq(t.paymentMethod.id, created.paymentMethodId)).limit(1)
+        : Promise.resolve([]),
+      created.categoryId
+        ? db.select().from(t.financialCategory).where(eq(t.financialCategory.id, created.categoryId)).limit(1)
+        : Promise.resolve([]),
+    ]);
+
+    res.status(201).json({
+      ...created,
+      paymentMethod: paymentMethod[0] || null,
+      category: category[0] || null,
+    });
   } catch (err) {
     console.error('[bpo receivables create]', err);
     res.status(500).json({ error: 'Erro ao criar conta a receber' });
@@ -174,9 +249,10 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const existing = await prisma.receivable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select()
+      .from(t.receivable)
+      .where(and(eq(t.receivable.id, req.params.id), eq(t.receivable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Conta a receber não encontrada' });
     if (existing.status === 'received') return res.status(400).json({ error: 'Não é possível alterar conta já recebida' });
 
@@ -193,7 +269,10 @@ router.put('/:id', async (req, res) => {
     if (req.body.receiptForecast !== undefined) data.receiptForecast = new Date(req.body.receiptForecast);
     if (req.body.attachments !== undefined) data.attachments = JSON.stringify(req.body.attachments);
 
-    const item = await prisma.receivable.update({ where: { id: req.params.id }, data });
+    const [item] = await db.update(t.receivable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(t.receivable.id, req.params.id))
+      .returning();
     res.json(item);
   } catch (err) {
     console.error('[bpo receivables update]', err);
@@ -207,9 +286,10 @@ router.post('/:id/receive', async (req, res) => {
     const { amount, bankAccountId, paidAt, notes } = req.body;
     if (!amount || !bankAccountId) return res.status(400).json({ error: 'amount e bankAccountId obrigatórios' });
 
-    const receivable = await prisma.receivable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [receivable] = await db.select()
+      .from(t.receivable)
+      .where(and(eq(t.receivable.id, req.params.id), eq(t.receivable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!receivable) return res.status(404).json({ error: 'Conta a receber não encontrada' });
     if (receivable.status === 'received') return res.status(400).json({ error: 'Conta já está recebida' });
 
@@ -223,34 +303,37 @@ router.post('/:id/receive', async (req, res) => {
     const isPartial = newRemaining >= 0.01;  // BUG #2 FIX: threshold consistente
 
     // Valida que o banco existe e pertence ao cliente
-    const bank = await prisma.bankAccount.findFirst({
-      where: { id: bankAccountId, clientId: req.bpoClient.id },
-    });
+    const [bank] = await db.select()
+      .from(t.bankAccount)
+      .where(and(eq(t.bankAccount.id, bankAccountId), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!bank) return res.status(404).json({ error: 'Conta bancária não encontrada' });
 
-    const result = await prisma.$transaction(async (tx) => {
-      const txn = await tx.paymentTransaction.create({
-        data: {
-          receivableId: receivable.id,
-          amount: amountNum,
-          paidAt: paidAt ? new Date(paidAt) : new Date(),
-          bankAccountId,
-          isPartial,
-          notes: notes?.trim() || null,
-        },
-      });
-      const updated = await tx.receivable.update({
-        where: { id: receivable.id },
-        data: {
+    const result = await db.transaction(async (tx) => {
+      const [txn] = await tx.insert(t.paymentTransaction).values({
+        id: crypto.randomUUID(),
+        receivableId: receivable.id,
+        amount: amountNum,
+        paidAt: paidAt ? new Date(paidAt) : new Date(),
+        bankAccountId,
+        isPartial,
+        notes: notes?.trim() || null,
+      }).returning();
+      const [updated] = await tx.update(t.receivable)
+        .set({
           remainingAmount: newRemaining,
           status: isPartial ? 'received_partial' : 'received',
-        },
-      });
+          updatedAt: new Date(),
+        })
+        .where(eq(t.receivable.id, receivable.id))
+        .returning();
       // BUG FIX: incrementar saldo do banco quando recebe
-      await tx.bankAccount.update({
-        where: { id: bankAccountId },
-        data: { currentBalance: { increment: amountNum } },
-      });
+      await tx.update(t.bankAccount)
+        .set({
+          currentBalance: sql`${t.bankAccount.currentBalance} + ${amountNum}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(t.bankAccount.id, bankAccountId));
       return { transaction: txn, receivable: updated };
     });
     res.json(result);
@@ -263,9 +346,10 @@ router.post('/:id/receive', async (req, res) => {
 // DELETE (soft delete: regra do projeto — delete físico é proibido. Marca status=cancelled)
 router.delete('/:id', async (req, res) => {
   try {
-    const receivable = await prisma.receivable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [receivable] = await db.select()
+      .from(t.receivable)
+      .where(and(eq(t.receivable.id, req.params.id), eq(t.receivable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!receivable) return res.status(404).json({ error: 'Conta a receber não encontrada' });
     if (receivable.status === 'received') {
       return res.status(409).json({ error: 'Não é possível cancelar: conta já foi recebida.' });
@@ -273,10 +357,9 @@ router.delete('/:id', async (req, res) => {
     if (receivable.status === 'cancelled') {
       return res.json({ success: true, alreadyCancelled: true });
     }
-    await prisma.receivable.update({
-      where: { id: req.params.id },
-      data: { status: 'cancelled' },
-    });
+    await db.update(t.receivable)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(eq(t.receivable.id, req.params.id));
     res.json({ success: true, cancelled: true });
   } catch (err) {
     console.error('[bpo receivables delete]', err);

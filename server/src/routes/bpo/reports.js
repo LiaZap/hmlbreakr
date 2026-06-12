@@ -16,12 +16,17 @@
 
 const express = require('express');
 const XLSX = require('xlsx');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const {
+  eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray,
+  isNull, isNotNull, desc, asc, sql, count, getTableColumns,
+} = require('drizzle-orm');
+const { alias } = require('drizzle-orm/pg-core');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 const { stripOnbTag } = require('../../services/onboardingSync');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
@@ -38,32 +43,36 @@ const parseDateRange = (req, defaultDays = 30) => {
 const fmtBRL = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '';
 
-// Constrói filtros where pra Payable/Receivable
+// Constrói filtros where (array de condições Drizzle) pra Payable/Receivable
+// timestamp colunas usam mode:'string' — comparamos com ISO string das datas
 const buildWhere = (req, type = 'payable') => {
   const { from, to } = parseDateRange(req, 90);
-  const where = {
-    clientId: req.bpoClient.id,
-    dueDate: { gte: from, lte: to },
-  };
-  if (req.query.status) where.status = req.query.status;
-  if (req.query.categoryId) where.categoryId = req.query.categoryId;
-  if (type === 'payable' && req.query.supplierId) where.supplierId = req.query.supplierId;
-  if (type === 'receivable' && req.query.paymentMethodId) where.paymentMethodId = req.query.paymentMethodId;
-  return where;
+  const tbl = type === 'receivable' ? t.receivable : t.payable;
+  const conds = [
+    eq(tbl.clientId, req.bpoClient.id),
+    gte(tbl.dueDate, from.toISOString()),
+    lte(tbl.dueDate, to.toISOString()),
+  ];
+  if (req.query.status) conds.push(eq(tbl.status, req.query.status));
+  if (req.query.categoryId) conds.push(eq(tbl.categoryId, req.query.categoryId));
+  if (type === 'payable' && req.query.supplierId) conds.push(eq(tbl.supplierId, req.query.supplierId));
+  if (type === 'receivable' && req.query.paymentMethodId) conds.push(eq(tbl.paymentMethodId, req.query.paymentMethodId));
+  return conds;
 };
 
 // === 1. RELATÓRIO CONTAS A PAGAR ===
 router.get('/payables', async (req, res) => {
   try {
-    const where = buildWhere(req, 'payable');
-    const items = await prisma.payable.findMany({
-      where,
-      orderBy: { dueDate: 'asc' },
-      include: {
-        supplier: { select: { id: true, name: true, cnpj: true } },
-        category: { select: { id: true, name: true, dreGroup: true } },
-      },
-    });
+    const conds = buildWhere(req, 'payable');
+    const items = await db.select({
+      ...getTableColumns(t.payable),
+      supplier: { id: t.supplier.id, name: t.supplier.name, cnpj: t.supplier.cnpj },
+      category: { id: t.financialCategory.id, name: t.financialCategory.name, dreGroup: t.financialCategory.dreGroup },
+    }).from(t.payable)
+      .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+      .leftJoin(t.financialCategory, eq(t.payable.categoryId, t.financialCategory.id))
+      .where(and(...conds))
+      .orderBy(asc(t.payable.dueDate));
     const summary = items.reduce((acc, p) => {
       acc.total += Number(p.amount);
       acc.remaining += Number(p.remainingAmount);
@@ -83,15 +92,16 @@ router.get('/payables', async (req, res) => {
 // === 2. RELATÓRIO CONTAS A RECEBER ===
 router.get('/receivables', async (req, res) => {
   try {
-    const where = buildWhere(req, 'receivable');
-    const items = await prisma.receivable.findMany({
-      where,
-      orderBy: { dueDate: 'asc' },
-      include: {
-        paymentMethod: { select: { id: true, name: true, type: true, feePercent: true } },
-        category: { select: { id: true, name: true, dreGroup: true } },
-      },
-    });
+    const conds = buildWhere(req, 'receivable');
+    const items = await db.select({
+      ...getTableColumns(t.receivable),
+      paymentMethod: { id: t.paymentMethod.id, name: t.paymentMethod.name, type: t.paymentMethod.type, feePercent: t.paymentMethod.feePercent },
+      category: { id: t.financialCategory.id, name: t.financialCategory.name, dreGroup: t.financialCategory.dreGroup },
+    }).from(t.receivable)
+      .leftJoin(t.paymentMethod, eq(t.receivable.paymentMethodId, t.paymentMethod.id))
+      .leftJoin(t.financialCategory, eq(t.receivable.categoryId, t.financialCategory.id))
+      .where(and(...conds))
+      .orderBy(asc(t.receivable.dueDate));
     const summary = items.reduce((acc, r) => {
       acc.total += Number(r.amount);
       acc.remaining += Number(r.remainingAmount);
@@ -111,20 +121,39 @@ router.get('/receivables', async (req, res) => {
 router.get('/transactions', async (req, res) => {
   try {
     const { from, to } = parseDateRange(req, 30);
-    const items = await prisma.paymentTransaction.findMany({
-      where: {
-        paidAt: { gte: from, lte: to },
-        OR: [
-          { payable: { clientId: req.bpoClient.id } },
-          { receivable: { clientId: req.bpoClient.id } },
-        ],
-      },
-      orderBy: { paidAt: 'desc' },
-      include: {
-        bankAccount: { select: { bankName: true, account: true } },
-        payable: { include: { supplier: { select: { name: true } }, category: { select: { name: true } } } },
-        receivable: { include: { paymentMethod: { select: { name: true } }, category: { select: { name: true } } } },
-      },
+    const payCat = alias(t.financialCategory, 'payCat');
+    const recCat = alias(t.financialCategory, 'recCat');
+    const rows = await db.select({
+      ...getTableColumns(t.paymentTransaction),
+      bankAccount: { bankName: t.bankAccount.bankName, account: t.bankAccount.account },
+      payable: getTableColumns(t.payable),
+      payableSupplierName: t.supplier.name,
+      payableCategoryName: payCat.name,
+      receivable: getTableColumns(t.receivable),
+      receivablePaymentMethodName: t.paymentMethod.name,
+      receivableCategoryName: recCat.name,
+    }).from(t.paymentTransaction)
+      .leftJoin(t.bankAccount, eq(t.paymentTransaction.bankAccountId, t.bankAccount.id))
+      .leftJoin(t.payable, eq(t.paymentTransaction.payableId, t.payable.id))
+      .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+      .leftJoin(payCat, eq(t.payable.categoryId, payCat.id))
+      .leftJoin(t.receivable, eq(t.paymentTransaction.receivableId, t.receivable.id))
+      .leftJoin(t.paymentMethod, eq(t.receivable.paymentMethodId, t.paymentMethod.id))
+      .leftJoin(recCat, eq(t.receivable.categoryId, recCat.id))
+      .where(and(
+        gte(t.paymentTransaction.paidAt, from.toISOString()),
+        lte(t.paymentTransaction.paidAt, to.toISOString()),
+        or(eq(t.payable.clientId, req.bpoClient.id), eq(t.receivable.clientId, req.bpoClient.id)),
+      ))
+      .orderBy(desc(t.paymentTransaction.paidAt));
+    // Reconstrói a forma aninhada que o include do Prisma retornava
+    const items = rows.map((row) => {
+      const { payable, payableSupplierName, payableCategoryName, receivable, receivablePaymentMethodName, receivableCategoryName, ...txn } = row;
+      return {
+        ...txn,
+        payable: row.payableId ? { ...payable, supplier: payableSupplierName != null ? { name: payableSupplierName } : null, category: payableCategoryName != null ? { name: payableCategoryName } : null } : null,
+        receivable: row.receivableId ? { ...receivable, paymentMethod: receivablePaymentMethodName != null ? { name: receivablePaymentMethodName } : null, category: receivableCategoryName != null ? { name: receivableCategoryName } : null } : null,
+      };
     });
     const summary = items.reduce((acc, t) => {
       const amt = Number(t.amount);
@@ -147,22 +176,30 @@ router.get('/dre', async (req, res) => {
     const { from, to } = parseDateRange(req, 30);
 
     // Receivables RECEBIDAS no período
-    const receivedTxns = await prisma.paymentTransaction.findMany({
-      where: {
-        paidAt: { gte: from, lte: to },
-        receivable: { clientId: req.bpoClient.id },
-      },
-      include: { receivable: { include: { paymentMethod: true, category: true } } },
-    });
+    const receivedTxns = await db.select({
+      amount: t.paymentTransaction.amount,
+      feePercent: t.paymentMethod.feePercent,
+    }).from(t.paymentTransaction)
+      .innerJoin(t.receivable, eq(t.paymentTransaction.receivableId, t.receivable.id))
+      .leftJoin(t.paymentMethod, eq(t.receivable.paymentMethodId, t.paymentMethod.id))
+      .where(and(
+        gte(t.paymentTransaction.paidAt, from.toISOString()),
+        lte(t.paymentTransaction.paidAt, to.toISOString()),
+        eq(t.receivable.clientId, req.bpoClient.id),
+      ));
 
     // Payables PAGAS no período
-    const paidTxns = await prisma.paymentTransaction.findMany({
-      where: {
-        paidAt: { gte: from, lte: to },
-        payable: { clientId: req.bpoClient.id },
-      },
-      include: { payable: { include: { category: true } } },
-    });
+    const paidTxns = await db.select({
+      amount: t.paymentTransaction.amount,
+      dreGroup: t.financialCategory.dreGroup,
+    }).from(t.paymentTransaction)
+      .innerJoin(t.payable, eq(t.paymentTransaction.payableId, t.payable.id))
+      .leftJoin(t.financialCategory, eq(t.payable.categoryId, t.financialCategory.id))
+      .where(and(
+        gte(t.paymentTransaction.paidAt, from.toISOString()),
+        lte(t.paymentTransaction.paidAt, to.toISOString()),
+        eq(t.payable.clientId, req.bpoClient.id),
+      ));
 
     // Receita bruta
     const receitaBruta = receivedTxns.reduce((s, t) => s + Number(t.amount), 0);
@@ -170,14 +207,14 @@ router.get('/dre', async (req, res) => {
     // Taxas de venda (calculadas a partir do paymentMethod.feePercent)
     let taxasVenda = 0;
     receivedTxns.forEach((t) => {
-      const feePct = t.receivable?.paymentMethod?.feePercent;
+      const feePct = t.feePercent;
       if (feePct) taxasVenda += Number(t.amount) * (Number(feePct) / 100);
     });
 
     // Agrupar despesas por dreGroup
     const despesasPorGrupo = {};
     paidTxns.forEach((t) => {
-      const group = t.payable?.category?.dreGroup || 'outros';
+      const group = t.dreGroup || 'outros';
       despesasPorGrupo[group] = (despesasPorGrupo[group] || 0) + Number(t.amount);
     });
 
@@ -225,35 +262,46 @@ router.get('/cashflow', async (req, res) => {
     const groupBy = req.query.groupBy || 'day'; // day | week | month
 
     // Realizado: PaymentTransactions
-    const txns = await prisma.paymentTransaction.findMany({
-      where: {
-        paidAt: { gte: from, lte: to },
-        OR: [
-          { payable: { clientId: req.bpoClient.id } },
-          { receivable: { clientId: req.bpoClient.id } },
-        ],
-      },
-      orderBy: { paidAt: 'asc' },
-      include: { bankAccount: { select: { id: true, bankName: true } } },
-    });
+    const txns = await db.select({
+      paidAt: t.paymentTransaction.paidAt,
+      payableId: t.paymentTransaction.payableId,
+      amount: t.paymentTransaction.amount,
+      bankAccount: { id: t.bankAccount.id, bankName: t.bankAccount.bankName },
+    }).from(t.paymentTransaction)
+      .leftJoin(t.bankAccount, eq(t.paymentTransaction.bankAccountId, t.bankAccount.id))
+      .leftJoin(t.payable, eq(t.paymentTransaction.payableId, t.payable.id))
+      .leftJoin(t.receivable, eq(t.paymentTransaction.receivableId, t.receivable.id))
+      .where(and(
+        gte(t.paymentTransaction.paidAt, from.toISOString()),
+        lte(t.paymentTransaction.paidAt, to.toISOString()),
+        or(eq(t.payable.clientId, req.bpoClient.id), eq(t.receivable.clientId, req.bpoClient.id)),
+      ))
+      .orderBy(asc(t.paymentTransaction.paidAt));
 
     // Projetado: Payables/Receivables PENDENTES
-    const futureP = await prisma.payable.findMany({
-      where: {
-        clientId: req.bpoClient.id,
-        dueDate: { gte: from, lte: to },
-        status: { in: ['pending', 'scheduled', 'paid_partial'] },
-      },
-      select: { dueDate: true, remainingAmount: true, supplier: { select: { name: true } } },
-    });
-    const futureR = await prisma.receivable.findMany({
-      where: {
-        clientId: req.bpoClient.id,
-        dueDate: { gte: from, lte: to },
-        status: { in: ['pending', 'received_partial'] },
-      },
-      select: { dueDate: true, remainingAmount: true, payerName: true },
-    });
+    const futureP = await db.select({
+      dueDate: t.payable.dueDate,
+      remainingAmount: t.payable.remainingAmount,
+      supplier: { name: t.supplier.name },
+    }).from(t.payable)
+      .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+      .where(and(
+        eq(t.payable.clientId, req.bpoClient.id),
+        gte(t.payable.dueDate, from.toISOString()),
+        lte(t.payable.dueDate, to.toISOString()),
+        inArray(t.payable.status, ['pending', 'scheduled', 'paid_partial']),
+      ));
+    const futureR = await db.select({
+      dueDate: t.receivable.dueDate,
+      remainingAmount: t.receivable.remainingAmount,
+      payerName: t.receivable.payerName,
+    }).from(t.receivable)
+      .where(and(
+        eq(t.receivable.clientId, req.bpoClient.id),
+        gte(t.receivable.dueDate, from.toISOString()),
+        lte(t.receivable.dueDate, to.toISOString()),
+        inArray(t.receivable.status, ['pending', 'received_partial']),
+      ));
 
     // Agrupa por dia/semana/mês
     const groupKey = (date) => {
@@ -282,10 +330,9 @@ router.get('/cashflow', async (req, res) => {
     const series = Array.from(buckets.values()).sort((a, b) => a.period.localeCompare(b.period));
 
     // Saldo acumulado (assume saldo atual = soma dos bankAccounts)
-    const banks = await prisma.bankAccount.findMany({
-      where: { clientId: req.bpoClient.id, active: true },
-      select: { currentBalance: true },
-    });
+    const banks = await db.select({ currentBalance: t.bankAccount.currentBalance })
+      .from(t.bankAccount)
+      .where(and(eq(t.bankAccount.clientId, req.bpoClient.id), eq(t.bankAccount.active, true)));
     const startingBalance = banks.reduce((s, b) => s + Number(b.currentBalance), 0);
     let balance = startingBalance;
     const cumulative = series.map((s) => {
@@ -318,12 +365,16 @@ router.get('/:type/export', async (req, res) => {
     let sheetName;
 
     if (type === 'payables') {
-      const where = buildWhere(req, 'payable');
-      const items = await prisma.payable.findMany({
-        where,
-        orderBy: { dueDate: 'asc' },
-        include: { supplier: true, category: true },
-      });
+      const conds = buildWhere(req, 'payable');
+      const items = await db.select({
+        ...getTableColumns(t.payable),
+        supplier: getTableColumns(t.supplier),
+        category: getTableColumns(t.financialCategory),
+      }).from(t.payable)
+        .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+        .leftJoin(t.financialCategory, eq(t.payable.categoryId, t.financialCategory.id))
+        .where(and(...conds))
+        .orderBy(asc(t.payable.dueDate));
       sheetName = 'Contas a Pagar';
       data = items.map((p) => ({
         Vencimento: fmtDate(p.dueDate),
@@ -337,11 +388,16 @@ router.get('/:type/export', async (req, res) => {
         Status: p.status,
       }));
     } else if (type === 'receivables') {
-      const where = buildWhere(req, 'receivable');
-      const items = await prisma.receivable.findMany({
-        where, orderBy: { dueDate: 'asc' },
-        include: { paymentMethod: true, category: true },
-      });
+      const conds = buildWhere(req, 'receivable');
+      const items = await db.select({
+        ...getTableColumns(t.receivable),
+        paymentMethod: getTableColumns(t.paymentMethod),
+        category: getTableColumns(t.financialCategory),
+      }).from(t.receivable)
+        .leftJoin(t.paymentMethod, eq(t.receivable.paymentMethodId, t.paymentMethod.id))
+        .leftJoin(t.financialCategory, eq(t.receivable.categoryId, t.financialCategory.id))
+        .where(and(...conds))
+        .orderBy(asc(t.receivable.dueDate));
       sheetName = 'Contas a Receber';
       data = items.map((r) => ({
         Vencimento: fmtDate(r.dueDate),
@@ -356,17 +412,32 @@ router.get('/:type/export', async (req, res) => {
       }));
     } else if (type === 'transactions') {
       const { from, to } = parseDateRange(req, 30);
-      const items = await prisma.paymentTransaction.findMany({
-        where: {
-          paidAt: { gte: from, lte: to },
-          OR: [{ payable: { clientId: req.bpoClient.id } }, { receivable: { clientId: req.bpoClient.id } }],
-        },
-        orderBy: { paidAt: 'desc' },
-        include: {
-          bankAccount: true,
-          payable: { include: { supplier: true } },
-          receivable: { include: { paymentMethod: true } },
-        },
+      const rows = await db.select({
+        ...getTableColumns(t.paymentTransaction),
+        bankAccount: getTableColumns(t.bankAccount),
+        payable: getTableColumns(t.payable),
+        payableSupplier: getTableColumns(t.supplier),
+        receivable: getTableColumns(t.receivable),
+        receivablePaymentMethod: getTableColumns(t.paymentMethod),
+      }).from(t.paymentTransaction)
+        .leftJoin(t.bankAccount, eq(t.paymentTransaction.bankAccountId, t.bankAccount.id))
+        .leftJoin(t.payable, eq(t.paymentTransaction.payableId, t.payable.id))
+        .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+        .leftJoin(t.receivable, eq(t.paymentTransaction.receivableId, t.receivable.id))
+        .leftJoin(t.paymentMethod, eq(t.receivable.paymentMethodId, t.paymentMethod.id))
+        .where(and(
+          gte(t.paymentTransaction.paidAt, from.toISOString()),
+          lte(t.paymentTransaction.paidAt, to.toISOString()),
+          or(eq(t.payable.clientId, req.bpoClient.id), eq(t.receivable.clientId, req.bpoClient.id)),
+        ))
+        .orderBy(desc(t.paymentTransaction.paidAt));
+      const items = rows.map((row) => {
+        const { payableSupplier, receivablePaymentMethod, ...rest } = row;
+        return {
+          ...rest,
+          payable: row.payableId ? { ...row.payable, supplier: payableSupplier && payableSupplier.id != null ? payableSupplier : null } : null,
+          receivable: row.receivableId ? { ...row.receivable, paymentMethod: receivablePaymentMethod && receivablePaymentMethod.id != null ? receivablePaymentMethod : null } : null,
+        };
       });
       sheetName = 'Movimentações';
       data = items.map((t) => ({
@@ -383,23 +454,37 @@ router.get('/:type/export', async (req, res) => {
       // Reusa a logica do GET /dre via fetch interno seria complicado;
       // re-monta inline (mesma logica). Em refactor futuro, extrair helper.
       const { from, to } = parseDateRange(req, 30);
-      const receivedTxns = await prisma.paymentTransaction.findMany({
-        where: { paidAt: { gte: from, lte: to }, receivable: { clientId: req.bpoClient.id } },
-        include: { receivable: { include: { paymentMethod: true, category: true } } },
-      });
-      const paidTxns = await prisma.paymentTransaction.findMany({
-        where: { paidAt: { gte: from, lte: to }, payable: { clientId: req.bpoClient.id } },
-        include: { payable: { include: { category: true } } },
-      });
+      const receivedTxns = await db.select({
+        amount: t.paymentTransaction.amount,
+        feePercent: t.paymentMethod.feePercent,
+      }).from(t.paymentTransaction)
+        .innerJoin(t.receivable, eq(t.paymentTransaction.receivableId, t.receivable.id))
+        .leftJoin(t.paymentMethod, eq(t.receivable.paymentMethodId, t.paymentMethod.id))
+        .where(and(
+          gte(t.paymentTransaction.paidAt, from.toISOString()),
+          lte(t.paymentTransaction.paidAt, to.toISOString()),
+          eq(t.receivable.clientId, req.bpoClient.id),
+        ));
+      const paidTxns = await db.select({
+        amount: t.paymentTransaction.amount,
+        dreGroup: t.financialCategory.dreGroup,
+      }).from(t.paymentTransaction)
+        .innerJoin(t.payable, eq(t.paymentTransaction.payableId, t.payable.id))
+        .leftJoin(t.financialCategory, eq(t.payable.categoryId, t.financialCategory.id))
+        .where(and(
+          gte(t.paymentTransaction.paidAt, from.toISOString()),
+          lte(t.paymentTransaction.paidAt, to.toISOString()),
+          eq(t.payable.clientId, req.bpoClient.id),
+        ));
       const receitaBruta = receivedTxns.reduce((s, t) => s + Number(t.amount), 0);
       let taxasVenda = 0;
       receivedTxns.forEach((t) => {
-        const feePct = t.receivable?.paymentMethod?.feePercent;
+        const feePct = t.feePercent;
         if (feePct) taxasVenda += Number(t.amount) * (Number(feePct) / 100);
       });
       const despesas = {};
       paidTxns.forEach((t) => {
-        const g = t.payable?.category?.dreGroup || 'outros';
+        const g = t.dreGroup || 'outros';
         despesas[g] = (despesas[g] || 0) + Number(t.amount);
       });
       const cmv = despesas.cmv || 0;
@@ -431,19 +516,44 @@ router.get('/:type/export', async (req, res) => {
     } else if (type === 'cashflow') {
       const { from, to } = parseDateRange(req, 90);
       const groupBy = req.query.groupBy || 'day';
-      const txns = await prisma.paymentTransaction.findMany({
-        where: { paidAt: { gte: from, lte: to }, OR: [{ payable: { clientId: req.bpoClient.id } }, { receivable: { clientId: req.bpoClient.id } }] },
-        orderBy: { paidAt: 'asc' },
-        include: { bankAccount: { select: { bankName: true } } },
-      });
-      const futureP = await prisma.payable.findMany({
-        where: { clientId: req.bpoClient.id, dueDate: { gte: from, lte: to }, status: { in: ['pending', 'scheduled', 'paid_partial'] } },
-        select: { dueDate: true, remainingAmount: true, supplier: { select: { name: true } } },
-      });
-      const futureR = await prisma.receivable.findMany({
-        where: { clientId: req.bpoClient.id, dueDate: { gte: from, lte: to }, status: { in: ['pending', 'received_partial'] } },
-        select: { dueDate: true, remainingAmount: true, payerName: true },
-      });
+      const txns = await db.select({
+        paidAt: t.paymentTransaction.paidAt,
+        payableId: t.paymentTransaction.payableId,
+        amount: t.paymentTransaction.amount,
+        bankAccount: { bankName: t.bankAccount.bankName },
+      }).from(t.paymentTransaction)
+        .leftJoin(t.bankAccount, eq(t.paymentTransaction.bankAccountId, t.bankAccount.id))
+        .leftJoin(t.payable, eq(t.paymentTransaction.payableId, t.payable.id))
+        .leftJoin(t.receivable, eq(t.paymentTransaction.receivableId, t.receivable.id))
+        .where(and(
+          gte(t.paymentTransaction.paidAt, from.toISOString()),
+          lte(t.paymentTransaction.paidAt, to.toISOString()),
+          or(eq(t.payable.clientId, req.bpoClient.id), eq(t.receivable.clientId, req.bpoClient.id)),
+        ))
+        .orderBy(asc(t.paymentTransaction.paidAt));
+      const futureP = await db.select({
+        dueDate: t.payable.dueDate,
+        remainingAmount: t.payable.remainingAmount,
+        supplier: { name: t.supplier.name },
+      }).from(t.payable)
+        .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+        .where(and(
+          eq(t.payable.clientId, req.bpoClient.id),
+          gte(t.payable.dueDate, from.toISOString()),
+          lte(t.payable.dueDate, to.toISOString()),
+          inArray(t.payable.status, ['pending', 'scheduled', 'paid_partial']),
+        ));
+      const futureR = await db.select({
+        dueDate: t.receivable.dueDate,
+        remainingAmount: t.receivable.remainingAmount,
+        payerName: t.receivable.payerName,
+      }).from(t.receivable)
+        .where(and(
+          eq(t.receivable.clientId, req.bpoClient.id),
+          gte(t.receivable.dueDate, from.toISOString()),
+          lte(t.receivable.dueDate, to.toISOString()),
+          inArray(t.receivable.status, ['pending', 'received_partial']),
+        ));
       const groupKey = (date) => {
         const d = new Date(date);
         if (groupBy === 'month') return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -455,7 +565,9 @@ router.get('/:type/export', async (req, res) => {
       txns.forEach((t) => add(t.paidAt, t.payableId ? 'realOutflow' : 'realInflow', t.amount));
       futureP.forEach((p) => add(p.dueDate, 'projOutflow', p.remainingAmount));
       futureR.forEach((r) => add(r.dueDate, 'projInflow', r.remainingAmount));
-      const banks = await prisma.bankAccount.findMany({ where: { clientId: req.bpoClient.id, active: true }, select: { currentBalance: true } });
+      const banks = await db.select({ currentBalance: t.bankAccount.currentBalance })
+        .from(t.bankAccount)
+        .where(and(eq(t.bankAccount.clientId, req.bpoClient.id), eq(t.bankAccount.active, true)));
       let bal = banks.reduce((s, b) => s + Number(b.currentBalance), 0);
       const series = Array.from(buckets.values()).sort((a, b) => a.period.localeCompare(b.period));
 

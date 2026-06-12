@@ -13,43 +13,59 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const {
+  eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray,
+  isNull, isNotNull, desc, asc, sql, count,
+} = require('drizzle-orm');
 const { logAudit } = require('../../services/auditService');
 const { createPortalSession, getStripe } = require('../../services/stripeService');
 
 const router = express.Router();
-const prisma = new PrismaClient();
+
+// Shim p/ o auditService (que espera um client com `.auditLog.create({ data })`).
+// O AuditLog não tem default de id no banco — o app gera o uuid (como o Prisma fazia).
+const auditClient = {
+  auditLog: {
+    create: async ({ data }) =>
+      db.insert(t.auditLog).values({ id: crypto.randomUUID(), ...data }),
+  },
+};
 
 // ─── GET / — lista + KPIs ──────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
     const { status, q } = req.query;
-    const where = { active: true };
-    if (status) where.subscriptionStatus = status;
+    const conds = [eq(t.client.active, true)];
+    if (status) conds.push(eq(t.client.subscriptionStatus, status));
     if (q) {
-      where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { email: { contains: q, mode: 'insensitive' } },
-      ];
+      conds.push(or(
+        sql`${t.client.name} ILIKE ${'%' + q + '%'}`,
+        sql`${t.client.email} ILIKE ${'%' + q + '%'}`,
+      ));
     }
-    const items = await prisma.client.findMany({
-      where,
-      select: {
-        id: true, name: true, hash: true, email: true,
-        subscriptionStatus: true, subscriptionPlan: true,
-        trialEndsAt: true, currentPeriodEnd: true,
-        pastDueSince: true, canceledAt: true,
-        blockedByAdmin: true, blockedAt: true, blockedReason: true,
-        stripeCustomerId: true, stripeSubscriptionId: true,
-        createdAt: true,
-      },
-      orderBy: [{ subscriptionStatus: 'asc' }, { name: 'asc' }],
-    });
+    const items = await db.select({
+      id: t.client.id, name: t.client.name, hash: t.client.hash, email: t.client.email,
+      subscriptionStatus: t.client.subscriptionStatus, subscriptionPlan: t.client.subscriptionPlan,
+      trialEndsAt: t.client.trialEndsAt, currentPeriodEnd: t.client.currentPeriodEnd,
+      pastDueSince: t.client.pastDueSince, canceledAt: t.client.canceledAt,
+      blockedByAdmin: t.client.blockedByAdmin, blockedAt: t.client.blockedAt,
+      blockedReason: t.client.blockedReason,
+      stripeCustomerId: t.client.stripeCustomerId, stripeSubscriptionId: t.client.stripeSubscriptionId,
+      createdAt: t.client.createdAt,
+    })
+      .from(t.client)
+      .where(and(...conds))
+      .orderBy(asc(t.client.subscriptionStatus), asc(t.client.name));
     // KPIs sobre toda a base ativa (independente do filtro)
-    const all = await prisma.client.findMany({
-      where: { active: true },
-      select: { subscriptionStatus: true, blockedByAdmin: true },
-    });
+    const all = await db.select({
+      subscriptionStatus: t.client.subscriptionStatus,
+      blockedByAdmin: t.client.blockedByAdmin,
+    })
+      .from(t.client)
+      .where(eq(t.client.active, true));
     const kpis = {
       total: all.length,
       active: 0,
@@ -76,14 +92,16 @@ router.get('/', async (req, res) => {
 // ─── GET /:clientId — detalhe + eventos ────────────────────────────
 router.get('/:clientId', async (req, res) => {
   try {
-    const client = await prisma.client.findUnique({ where: { id: req.params.clientId } });
+    const [client] = await db.select().from(t.client)
+      .where(eq(t.client.id, req.params.clientId)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
-    const events = await prisma.stripeEvent.findMany({
-      where: { clientId: client.id },
-      orderBy: { processedAt: 'desc' },
-      take: 50,
-      select: { id: true, type: true, processedAt: true },
-    });
+    const events = await db.select({
+      id: t.stripeEvent.id, type: t.stripeEvent.type, processedAt: t.stripeEvent.processedAt,
+    })
+      .from(t.stripeEvent)
+      .where(eq(t.stripeEvent.clientId, client.id))
+      .orderBy(desc(t.stripeEvent.processedAt))
+      .limit(50);
     // Strip o Client.data (grande) — não precisa nessa tela.
     const { data: _omit, password: _p, ...lite } = client;
     res.json({ client: lite, events });
@@ -100,21 +118,23 @@ router.post('/:clientId/block', async (req, res) => {
     if (!reason || !String(reason).trim()) {
       return res.status(400).json({ error: 'Motivo do bloqueio é obrigatório.' });
     }
-    const existing = await prisma.client.findUnique({ where: { id: req.params.clientId } });
+    const [existing] = await db.select().from(t.client)
+      .where(eq(t.client.id, req.params.clientId)).limit(1);
     if (!existing) return res.status(404).json({ error: 'Cliente não encontrado' });
-    const item = await prisma.client.update({
-      where: { id: req.params.clientId },
-      data: {
+    const [item] = await db.update(t.client)
+      .set({
         blockedByAdmin: true,
         blockedAt: new Date(),
         blockedReason: String(reason).trim(),
         blockedByUserId: req.adminUser ? req.adminUser.id : null,
-      },
-      select: {
-        id: true, name: true, blockedByAdmin: true, blockedAt: true, blockedReason: true,
-      },
-    });
-    logAudit(prisma, {
+        updatedAt: new Date(),
+      })
+      .where(eq(t.client.id, req.params.clientId))
+      .returning({
+        id: t.client.id, name: t.client.name, blockedByAdmin: t.client.blockedByAdmin,
+        blockedAt: t.client.blockedAt, blockedReason: t.client.blockedReason,
+      });
+    logAudit(auditClient, {
       action: 'client.block',
       category: 'security',
       entityType: 'client',
@@ -135,19 +155,22 @@ router.post('/:clientId/block', async (req, res) => {
 // ─── POST /:clientId/unblock ───────────────────────────────────────
 router.post('/:clientId/unblock', async (req, res) => {
   try {
-    const existing = await prisma.client.findUnique({ where: { id: req.params.clientId } });
+    const [existing] = await db.select().from(t.client)
+      .where(eq(t.client.id, req.params.clientId)).limit(1);
     if (!existing) return res.status(404).json({ error: 'Cliente não encontrado' });
-    const item = await prisma.client.update({
-      where: { id: req.params.clientId },
-      data: {
+    const [item] = await db.update(t.client)
+      .set({
         blockedByAdmin: false,
         blockedAt: null,
         blockedReason: null,
         blockedByUserId: null,
-      },
-      select: { id: true, name: true, blockedByAdmin: true },
-    });
-    logAudit(prisma, {
+        updatedAt: new Date(),
+      })
+      .where(eq(t.client.id, req.params.clientId))
+      .returning({
+        id: t.client.id, name: t.client.name, blockedByAdmin: t.client.blockedByAdmin,
+      });
+    logAudit(auditClient, {
       action: 'client.unblock',
       category: 'security',
       entityType: 'client',
@@ -167,7 +190,8 @@ router.post('/:clientId/unblock', async (req, res) => {
 // ─── POST /:clientId/billing-portal ────────────────────────────────
 router.post('/:clientId/billing-portal', async (req, res) => {
   try {
-    const c = await prisma.client.findUnique({ where: { id: req.params.clientId } });
+    const [c] = await db.select().from(t.client)
+      .where(eq(t.client.id, req.params.clientId)).limit(1);
     if (!c) return res.status(404).json({ error: 'Cliente não encontrado' });
     if (!c.stripeCustomerId) {
       return res.status(400).json({ error: 'Cliente ainda não tem Customer no Stripe.' });
@@ -184,7 +208,8 @@ router.post('/:clientId/billing-portal', async (req, res) => {
 // ─── POST /:clientId/cancel — cancela no fim do período ────────────
 router.post('/:clientId/cancel', async (req, res) => {
   try {
-    const c = await prisma.client.findUnique({ where: { id: req.params.clientId } });
+    const [c] = await db.select().from(t.client)
+      .where(eq(t.client.id, req.params.clientId)).limit(1);
     if (!c) return res.status(404).json({ error: 'Cliente não encontrado' });
     if (!c.stripeSubscriptionId) {
       return res.status(400).json({ error: 'Cliente não tem assinatura ativa no Stripe.' });
@@ -195,7 +220,7 @@ router.post('/:clientId/cancel', async (req, res) => {
     const updated = await stripe.subscriptions.update(c.stripeSubscriptionId, {
       cancel_at_period_end: true,
     });
-    logAudit(prisma, {
+    logAudit(auditClient, {
       action: 'client.subscription.cancel',
       category: 'security',
       entityType: 'client',

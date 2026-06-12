@@ -16,10 +16,11 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, asc } = require('drizzle-orm');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Auth admin — pra gating de /admin/bpo-clients e /admin/clients/:hash/bpo-toggle
 const { requireAdmin } = require('../../middleware/adminAuth');
@@ -47,16 +48,17 @@ const alertsRoutes = require('./alerts');
 router.post('/admin/clients/:hash/bpo-toggle', requireAdmin, async (req, res) => {
   try {
     const { enabled } = req.body;
-    const client = await prisma.client.findUnique({ where: { hash: req.params.hash } });
+    const [client] = await db.select().from(t.client).where(eq(t.client.hash, req.params.hash)).limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-    const updated = await prisma.client.update({
-      where: { id: client.id },
-      data: {
+    const [updated] = await db.update(t.client)
+      .set({
         bpoEnabled: !!enabled,
         bpoActivatedAt: enabled ? (client.bpoActivatedAt || new Date()) : client.bpoActivatedAt,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(t.client.id, client.id))
+      .returning();
     res.json({ id: updated.id, hash: updated.hash, bpoEnabled: updated.bpoEnabled });
   } catch (err) {
     console.error('[bpo toggle]', err);
@@ -67,11 +69,10 @@ router.post('/admin/clients/:hash/bpo-toggle', requireAdmin, async (req, res) =>
 // Lista clientes com BPO ativo (pra seletor do operador) — admin only
 router.get('/admin/bpo-clients', requireAdmin, async (req, res) => {
   try {
-    const clients = await prisma.client.findMany({
-      where: { bpoEnabled: true, active: true },
-      select: { id: true, hash: true, name: true, bpoActivatedAt: true },
-      orderBy: { name: 'asc' },
-    });
+    const clients = await db.select({ id: t.client.id, hash: t.client.hash, name: t.client.name, bpoActivatedAt: t.client.bpoActivatedAt })
+      .from(t.client)
+      .where(and(eq(t.client.bpoEnabled, true), eq(t.client.active, true)))
+      .orderBy(asc(t.client.name));
     res.json(clients);
   } catch (err) {
     console.error('[bpo list clients]', err);

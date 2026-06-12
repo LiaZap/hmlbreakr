@@ -24,10 +24,10 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const { client: clientTable } = require('../../db/schema-bpo');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Pool de insights mockados — variação determinística por dia
 const MOCK_INSIGHTS = [
@@ -200,15 +200,15 @@ router.get('/daily-insights', async (req, res) => {
     // Carrega clientes pra computar resumo de ontem (best-effort)
     let clients = [];
     try {
-      clients = await prisma.client.findMany({
-        select: {
-          id: true,
-          name: true,
-          createdAt: true,
-          bpoActivatedAt: true,
-          data: true,
-        },
-      });
+      clients = await db
+        .select({
+          id: clientTable.id,
+          name: clientTable.name,
+          createdAt: clientTable.createdAt,
+          bpoActivatedAt: clientTable.bpoActivatedAt,
+          data: clientTable.data,
+        })
+        .from(clientTable);
     } catch (err) {
       console.warn('[daily-insights] erro ao buscar clientes:', err.message);
     }

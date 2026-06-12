@@ -26,11 +26,9 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
 const { listAudit } = require('../../services/auditService');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * GET /admin/audit
@@ -67,7 +65,7 @@ router.get('/', async (req, res) => {
       offset: Number.isFinite(parsedOffset) && parsedOffset >= 0 ? parsedOffset : undefined,
     };
 
-    const { items, total } = await listAudit(prisma, filters);
+    const { items, total } = await listAudit(filters);
 
     return res.json({ items, total });
   } catch (err) {

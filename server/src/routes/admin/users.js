@@ -12,14 +12,15 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, count } = require('drizzle-orm');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { VALID_ROLES, sanitizePermissions, ROLE_TEMPLATES } = require('../../utils/permissions');
 const { logAudit } = require('../../services/auditService');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e || '');
 
@@ -59,8 +60,8 @@ const LEGACY_MARKER = 'system-legacy';
 async function seedLegacyAdmins() {
   // Bootstrap-only: se já existe QUALQUER admin, não materializa nada.
   try {
-    const count = await prisma.adminUser.count();
-    if (count > 0) return;
+    const [r] = await db.select({ n: count() }).from(t.adminUser);
+    if (Number(r.n) > 0) return;
   } catch (e) {
     console.error('[seedLegacyAdmins] count falhou — pulando seed', e);
     return;
@@ -82,27 +83,28 @@ async function seedLegacyAdmins() {
 
       // Idempotência: se já existe (foi criado pela UI ou por seed anterior),
       // não mexe — preserva senha trocada, role e permissões atuais.
-      const existing = await prisma.adminUser.findUnique({ where: { email } });
+      const [existing] = await db.select().from(t.adminUser).where(eq(t.adminUser.email, email)).limit(1);
       if (existing) continue;
 
       const role = VALID_ROLES.includes(acc.role) ? acc.role : 'admin';
       const hashedPassword = await bcrypt.hash(acc.password, 10);
 
-      await prisma.adminUser.create({
-        data: {
-          name: (acc.name || email).trim(),
-          email,
-          password: hashedPassword,
-          role,
-          permissions: [...(ROLE_TEMPLATES[role] || [])],
-          invitedBy: LEGACY_MARKER,
-          invitedAt: new Date(),
-        },
+      await db.insert(t.adminUser).values({
+        id: crypto.randomUUID(),
+        name: (acc.name || email).trim(),
+        email,
+        password: hashedPassword,
+        role,
+        permissions: [...(ROLE_TEMPLATES[role] || [])],
+        invitedBy: LEGACY_MARKER,
+        invitedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
     } catch (e) {
-      // Corrida (duas requisições simultâneas → P2002 unique) ou qualquer outro
+      // Corrida (duas requisições simultâneas → unique violation) ou qualquer outro
       // erro: ignora. Idempotente — a próxima passada já vê o registro existente.
-      if (e && e.code === 'P2002') continue;
+      // No driver pg/Postgres o código de unique violation é 23505 (era P2002 no Prisma).
+      if (e && e.code === '23505') continue;
       console.error('[seedLegacyAdmins] falha ao materializar', acc && acc.email, e);
     }
   }
@@ -116,11 +118,11 @@ router.get('/', async (req, res) => {
     await seedLegacyAdmins();
 
     const showInactive = req.query.showInactive === '1';
-    const where = showInactive ? {} : { active: true };
-    const items = await prisma.adminUser.findMany({
-      where,
-      orderBy: [{ role: 'asc' }, { name: 'asc' }],
-    });
+    const baseQuery = db.select().from(t.adminUser);
+    const items = await (showInactive
+      ? baseQuery
+      : baseQuery.where(eq(t.adminUser.active, true))
+    ).orderBy(t.adminUser.role, t.adminUser.name);
     res.json({ items: items.map(safeAdmin), total: items.length });
   } catch (err) {
     console.error('[admin users list]', err);
@@ -137,7 +139,8 @@ router.post('/', async (req, res) => {
     if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: `role inválido — use ${VALID_ROLES.join(' | ')}` });
 
     // Email duplicado?
-    const existing = await prisma.adminUser.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const [existing] = await db.select().from(t.adminUser)
+      .where(eq(t.adminUser.email, email.toLowerCase().trim())).limit(1);
     if (existing) return res.status(409).json({ error: 'Já existe admin com esse email' });
 
     // Se senha fornecida, hasheia. Caso contrário gera senha temporária (pra invite por email).
@@ -159,22 +162,22 @@ router.post('/', async (req, res) => {
       finalPermissions = [...(ROLE_TEMPLATES[role] || [])];
     }
 
-    const item = await prisma.adminUser.create({
-      data: {
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        password: hashedPassword,
-        role,
-        permissions: finalPermissions,
-        invitedBy: invitedBy || null,
-        invitedAt: new Date(),
-      },
-    });
+    const [item] = await db.insert(t.adminUser).values({
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password: hashedPassword,
+      role,
+      permissions: finalPermissions,
+      invitedBy: invitedBy || null,
+      invitedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }).returning();
 
     // TODO: enviar email de boas-vindas com tempPassword via emailService
     // Por ora retorna a temp password no response pra super_admin copiar manualmente
 
-    logAudit(prisma, {
+    logAudit({
       action: 'admin_user.create',
       category: 'security',
       entityType: 'admin_user',
@@ -197,7 +200,8 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { name, email, role, active, photo, permissions, password } = req.body;
-    const existing = await prisma.adminUser.findUnique({ where: { id: req.params.id } });
+    const [existing] = await db.select().from(t.adminUser)
+      .where(eq(t.adminUser.id, req.params.id)).limit(1);
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
     if (role && !VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: `role inválido — use ${VALID_ROLES.join(' | ')}` });
@@ -211,7 +215,8 @@ router.put('/:id', async (req, res) => {
         return res.status(400).json({ error: 'email inválido' });
       }
       if (normalized !== existing.email) {
-        const dup = await prisma.adminUser.findUnique({ where: { email: normalized } });
+        const [dup] = await db.select().from(t.adminUser)
+          .where(eq(t.adminUser.email, normalized)).limit(1);
         if (dup) return res.status(409).json({ error: 'Já existe admin com esse email' });
         emailUpdate = { email: normalized };
       }
@@ -226,19 +231,19 @@ router.put('/:id', async (req, res) => {
       passwordUpdate = { password: await bcrypt.hash(String(password), 10) };
     }
 
-    const item = await prisma.adminUser.update({
-      where: { id: req.params.id },
-      data: {
-        ...(name != null ? { name: String(name).trim() } : {}),
-        ...emailUpdate,
-        ...passwordUpdate,
-        ...(role ? { role } : {}),
-        ...(active != null ? { active: !!active } : {}),
-        ...(photo !== undefined ? { photo: photo || null } : {}),
-        ...(Array.isArray(permissions) ? { permissions: sanitizePermissions(permissions) } : {}),
-      },
-    });
-    logAudit(prisma, {
+    const [item] = await db.update(t.adminUser).set({
+      ...(name != null ? { name: String(name).trim() } : {}),
+      ...emailUpdate,
+      ...passwordUpdate,
+      ...(role ? { role } : {}),
+      ...(active != null ? { active: !!active } : {}),
+      ...(photo !== undefined ? { photo: photo || null } : {}),
+      ...(Array.isArray(permissions) ? { permissions: sanitizePermissions(permissions) } : {}),
+      // Prisma bumpava updatedAt automaticamente; Drizzle não — replicamos aqui
+      // (coluna NOT NULL, sem default de UPDATE no banco).
+      updatedAt: new Date().toISOString(),
+    }).where(eq(t.adminUser.id, req.params.id)).returning();
+    logAudit({
       action: 'admin_user.update',
       category: 'security',
       entityType: 'admin_user',
@@ -266,7 +271,8 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/reset-password', async (req, res) => {
   try {
     const { newPassword } = req.body;
-    const existing = await prisma.adminUser.findUnique({ where: { id: req.params.id } });
+    const [existing] = await db.select().from(t.adminUser)
+      .where(eq(t.adminUser.id, req.params.id)).limit(1);
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
 
     let pwd = newPassword;
@@ -274,10 +280,9 @@ router.post('/:id/reset-password', async (req, res) => {
       pwd = crypto.randomBytes(8).toString('hex');
     }
     const hashed = await bcrypt.hash(pwd, 10);
-    await prisma.adminUser.update({
-      where: { id: req.params.id },
-      data: { password: hashed },
-    });
+    await db.update(t.adminUser)
+      .set({ password: hashed, updatedAt: new Date().toISOString() })
+      .where(eq(t.adminUser.id, req.params.id));
     res.json({ success: true, tempPassword: pwd });
   } catch (err) {
     console.error('[admin users reset-pwd]', err);
@@ -288,20 +293,21 @@ router.post('/:id/reset-password', async (req, res) => {
 // DELETE — soft delete (active=false)
 router.delete('/:id', async (req, res) => {
   try {
-    const existing = await prisma.adminUser.findUnique({ where: { id: req.params.id } });
+    const [existing] = await db.select().from(t.adminUser)
+      .where(eq(t.adminUser.id, req.params.id)).limit(1);
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
     // Não permite excluir o último super_admin
     if (existing.role === 'super_admin') {
-      const count = await prisma.adminUser.count({ where: { role: 'super_admin', active: true } });
-      if (count <= 1) {
+      const [r] = await db.select({ n: count() }).from(t.adminUser)
+        .where(and(eq(t.adminUser.role, 'super_admin'), eq(t.adminUser.active, true)));
+      if (Number(r.n) <= 1) {
         return res.status(409).json({ error: 'Não é possível excluir o último super admin' });
       }
     }
-    await prisma.adminUser.update({
-      where: { id: req.params.id },
-      data: { active: false },
-    });
-    logAudit(prisma, {
+    await db.update(t.adminUser)
+      .set({ active: false, updatedAt: new Date().toISOString() })
+      .where(eq(t.adminUser.id, req.params.id));
+    logAudit({
       action: 'admin_user.delete',
       category: 'security',
       entityType: 'admin_user',

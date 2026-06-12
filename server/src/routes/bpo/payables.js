@@ -9,12 +9,17 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const {
+  eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray,
+  isNull, isNotNull, desc, asc, sql, count, getTableColumns,
+} = require('drizzle-orm');
+const crypto = require('crypto');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 const { stripOnbTag } = require('../../services/onboardingSync');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 // Limpa a tag interna [onb:*] da descrição de um payable para exibição.
 const cleanPayable = (p) => (p ? { ...p, description: stripOnbTag(p.description) } : p);
@@ -40,50 +45,83 @@ const advanceDate = (date, frequency, count = 1) => {
 router.get('/', async (req, res) => {
   try {
     const { status, supplierId, categoryId, dueFrom, dueTo, search, page = 1, pageSize = 50 } = req.query;
-    const where = {
-      clientId: req.bpoClient.id,
-      ...(status ? { status } : {}),
-      ...(supplierId ? { supplierId } : {}),
-      ...(categoryId ? { categoryId } : {}),
-      ...(dueFrom || dueTo ? {
-        dueDate: {
-          ...(dueFrom ? { gte: new Date(dueFrom) } : {}),
-          ...(dueTo ? { lte: new Date(dueTo) } : {}),
-        }
-      } : {}),
-      ...(search ? {
-        OR: [
-          { description: { contains: search, mode: 'insensitive' } },
-          { invoiceNumber: { contains: search, mode: 'insensitive' } },
-          { supplier: { name: { contains: search, mode: 'insensitive' } } },
-        ]
-      } : {}),
-    };
-    const [items, total, summary] = await Promise.all([
-      prisma.payable.findMany({
-        where,
-        skip: (parseInt(page, 10) - 1) * parseInt(pageSize, 10),
-        take: parseInt(pageSize, 10),
-        orderBy: { dueDate: 'asc' },
-        include: {
-          supplier: { select: { id: true, name: true } },
-          category: { select: { id: true, name: true, color: true } },
-          recurrence: { select: { id: true, frequency: true, occurrencesCount: true } },
-          _count: { select: { payments: true, installments: true } },
-        },
-      }),
-      prisma.payable.count({ where }),
-      prisma.payable.aggregate({
-        where: { ...where, status: { in: ['pending', 'scheduled', 'paid_partial'] } },
-        _sum: { remainingAmount: true },
-      }),
-    ]);
+
+    const conds = [eq(t.payable.clientId, req.bpoClient.id)];
+    if (status) conds.push(eq(t.payable.status, status));
+    if (supplierId) conds.push(eq(t.payable.supplierId, supplierId));
+    if (categoryId) conds.push(eq(t.payable.categoryId, categoryId));
+    if (dueFrom) conds.push(gte(t.payable.dueDate, new Date(dueFrom)));
+    if (dueTo) conds.push(lte(t.payable.dueDate, new Date(dueTo)));
+    if (search) {
+      const like = `%${search}%`;
+      conds.push(or(
+        sql`${t.payable.description} ILIKE ${like}`,
+        sql`${t.payable.invoiceNumber} ILIKE ${like}`,
+        sql`${t.supplier.name} ILIKE ${like}`,
+      ));
+    }
+    const where = and(...conds);
+
+    const take = parseInt(pageSize, 10);
+    const skip = (parseInt(page, 10) - 1) * take;
+
+    // include: supplier + category + recurrence via leftJoin (objetos aninhados)
+    const rows = await db.select({
+      ...getTableColumns(t.payable),
+      supplier: { id: t.supplier.id, name: t.supplier.name },
+      category: { id: t.financialCategory.id, name: t.financialCategory.name, color: t.financialCategory.color },
+      recurrence: { id: t.recurrence.id, frequency: t.recurrence.frequency, occurrencesCount: t.recurrence.occurrencesCount },
+    }).from(t.payable)
+      .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+      .leftJoin(t.financialCategory, eq(t.payable.categoryId, t.financialCategory.id))
+      .leftJoin(t.recurrence, eq(t.payable.recurrenceId, t.recurrence.id))
+      .where(where)
+      .orderBy(asc(t.payable.dueDate))
+      .limit(take)
+      .offset(skip);
+
+    // _count: { payments, installments } — contagem por id
+    const items = await Promise.all(rows.map(async (row) => {
+      const [pc] = await db.select({ n: count() })
+        .from(t.paymentTransaction)
+        .where(eq(t.paymentTransaction.payableId, row.id));
+      const [ic] = await db.select({ n: count() })
+        .from(t.payable)
+        .where(eq(t.payable.parentId, row.id));
+      // Prisma retorna supplier/category/recurrence como null quando a FK é nula
+      // (leftJoin sem match já devolve { id: null, ... }; normaliza p/ null).
+      const supplier = row.supplier && row.supplier.id ? row.supplier : null;
+      const category = row.category && row.category.id ? row.category : null;
+      const recurrence = row.recurrence && row.recurrence.id ? row.recurrence : null;
+      return {
+        ...row,
+        supplier,
+        category,
+        recurrence,
+        _count: { payments: Number(pc.n), installments: Number(ic.n) },
+      };
+    }));
+
+    // total (count com mesmo where)
+    const [totalRow] = await db.select({ n: count() })
+      .from(t.payable)
+      .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+      .where(where);
+    const total = Number(totalRow.n);
+
+    // summary: _sum remainingAmount p/ status pendentes
+    const [summaryRow] = await db.select({ s: sql`coalesce(sum(${t.payable.remainingAmount}), 0)` })
+      .from(t.payable)
+      .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+      .where(and(where, inArray(t.payable.status, ['pending', 'scheduled', 'paid_partial'])));
+    const pendingTotal = Number(summaryRow.s) || 0;
+
     res.json({
       items: items.map(cleanPayable),
       total,
       page: parseInt(page, 10),
       pageSize: parseInt(pageSize, 10),
-      pendingTotal: summary._sum.remainingAmount || 0,
+      pendingTotal,
     });
   } catch (err) {
     console.error('[bpo payables list]', err);
@@ -97,31 +135,30 @@ router.post('/recurrence/:recurrenceId/cancel-future', async (req, res) => {
   try {
     const { recurrenceId } = req.params;
     // Confere que a recorrência pertence ao cliente (via uma payable filha)
-    const sample = await prisma.payable.findFirst({
-      where: { recurrenceId, clientId: req.bpoClient.id },
-    });
+    const [sample] = await db.select()
+      .from(t.payable)
+      .where(and(eq(t.payable.recurrenceId, recurrenceId), eq(t.payable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!sample) return res.status(404).json({ error: 'Recorrência não encontrada' });
 
     // Cancela só payables NÃO pagas e com vencimento >= hoje
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const result = await prisma.payable.updateMany({
-      where: {
-        recurrenceId,
-        clientId: req.bpoClient.id,
-        status: { in: ['pending', 'scheduled'] },
-        dueDate: { gte: today },
-      },
-      data: { status: 'cancelled' },
-    });
+    const result = await db.update(t.payable)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(and(
+        eq(t.payable.recurrenceId, recurrenceId),
+        eq(t.payable.clientId, req.bpoClient.id),
+        inArray(t.payable.status, ['pending', 'scheduled']),
+        gte(t.payable.dueDate, today),
+      ));
 
     // Marca o endDate da recorrência (não dá pra deletar, FKs)
-    await prisma.recurrence.update({
-      where: { id: recurrenceId },
-      data: { endDate: new Date() },
-    });
+    await db.update(t.recurrence)
+      .set({ endDate: new Date(), updatedAt: new Date() })
+      .where(eq(t.recurrence.id, recurrenceId));
 
-    res.json({ canceledCount: result.count });
+    res.json({ canceledCount: result.rowCount });
   } catch (err) {
     console.error('[bpo payables cancel-recurrence]', err);
     res.status(500).json({ error: err.message });
@@ -131,19 +168,25 @@ router.post('/recurrence/:recurrenceId/cancel-future', async (req, res) => {
 // === WORKFLOW DE APROVAÇÃO — DEVE vir antes de /:id (ordering Express) ===
 router.get('/pending-approval', async (req, res) => {
   try {
-    const items = await prisma.payable.findMany({
-      where: {
-        clientId: req.bpoClient.id,
-        requiresApproval: true,
-        approvedAt: null,
-        rejectedAt: null,
-      },
-      orderBy: { scheduledAt: 'asc' },
-      include: {
-        supplier: { select: { name: true, cnpj: true } },
-        category: { select: { name: true } },
-      },
-    });
+    const rows = await db.select({
+      ...getTableColumns(t.payable),
+      supplier: { name: t.supplier.name, cnpj: t.supplier.cnpj },
+      category: { name: t.financialCategory.name },
+    }).from(t.payable)
+      .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+      .leftJoin(t.financialCategory, eq(t.payable.categoryId, t.financialCategory.id))
+      .where(and(
+        eq(t.payable.clientId, req.bpoClient.id),
+        eq(t.payable.requiresApproval, true),
+        isNull(t.payable.approvedAt),
+        isNull(t.payable.rejectedAt),
+      ))
+      .orderBy(asc(t.payable.scheduledAt));
+    const items = rows.map((row) => ({
+      ...row,
+      supplier: row.supplier && row.supplier.name !== null ? row.supplier : null,
+      category: row.category && row.category.name !== null ? row.category : null,
+    }));
     res.json({ items: items.map(cleanPayable), total: items.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -152,17 +195,48 @@ router.get('/pending-approval', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const item = await prisma.payable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: {
-        supplier: true,
-        category: true,
-        payments: { orderBy: { paidAt: 'desc' }, include: { bankAccount: { select: { bankName: true, account: true } } } },
-        installments: { orderBy: { installmentNumber: 'asc' }, select: { id: true, installmentNumber: true, amount: true, dueDate: true, status: true } },
-        recurrence: true,
-      },
-    });
-    if (!item) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
+    // include: supplier + category + recurrence (objetos completos)
+    const [row] = await db.select({
+      ...getTableColumns(t.payable),
+      supplier: getTableColumns(t.supplier),
+      category: getTableColumns(t.financialCategory),
+      recurrence: getTableColumns(t.recurrence),
+    }).from(t.payable)
+      .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+      .leftJoin(t.financialCategory, eq(t.payable.categoryId, t.financialCategory.id))
+      .leftJoin(t.recurrence, eq(t.payable.recurrenceId, t.recurrence.id))
+      .where(and(eq(t.payable.id, req.params.id), eq(t.payable.clientId, req.bpoClient.id)))
+      .limit(1);
+    if (!row) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
+
+    // payments: PaymentTransaction (paidAt desc) + bankAccount { bankName, account }
+    const payments = await db.select({
+      ...getTableColumns(t.paymentTransaction),
+      bankAccount: { bankName: t.bankAccount.bankName, account: t.bankAccount.account },
+    }).from(t.paymentTransaction)
+      .leftJoin(t.bankAccount, eq(t.paymentTransaction.bankAccountId, t.bankAccount.id))
+      .where(eq(t.paymentTransaction.payableId, row.id))
+      .orderBy(desc(t.paymentTransaction.paidAt));
+
+    // installments: Payable filhas (parentId) ordenadas por installmentNumber
+    const installments = await db.select({
+      id: t.payable.id,
+      installmentNumber: t.payable.installmentNumber,
+      amount: t.payable.amount,
+      dueDate: t.payable.dueDate,
+      status: t.payable.status,
+    }).from(t.payable)
+      .where(eq(t.payable.parentId, row.id))
+      .orderBy(asc(t.payable.installmentNumber));
+
+    const item = {
+      ...row,
+      supplier: row.supplier && row.supplier.id ? row.supplier : null,
+      category: row.category && row.category.id ? row.category : null,
+      recurrence: row.recurrence && row.recurrence.id ? row.recurrence : null,
+      payments,
+      installments,
+    };
     res.json(cleanPayable(item));
   } catch (err) {
     console.error('[bpo payables get]', err);
@@ -213,21 +287,26 @@ router.post('/', async (req, res) => {
       if (requestedCount > 120) {
         return res.status(400).json({ error: 'Máximo 120 ocorrências por vez' });
       }
-      const rec = await prisma.recurrence.create({
-        data: {
-          frequency: recurrence.frequency,
-          intervalCount: recurrence.intervalCount || 1,
-          startDate: new Date(dueDate),
-          occurrencesCount: requestedCount || null,
-        },
-      });
+      const [rec] = await db.insert(t.recurrence).values({
+        id: crypto.randomUUID(),
+        frequency: recurrence.frequency,
+        intervalCount: recurrence.intervalCount || 1,
+        startDate: new Date(dueDate),
+        occurrencesCount: requestedCount || null,
+        updatedAt: new Date(),
+      }).returning();
       const count = requestedCount || 12;
       const created = [];
       for (let i = 0; i < count; i++) {
         const dueDateI = i === 0 ? new Date(dueDate) : advanceDate(dueDate, recurrence.frequency, i * (recurrence.intervalCount || 1));
-        const item = await prisma.payable.create({
-          data: { ...baseData, dueDate: dueDateI, paymentForecast: dueDateI, recurrenceId: rec.id },
-        });
+        const [item] = await db.insert(t.payable).values({
+          id: crypto.randomUUID(),
+          ...baseData,
+          dueDate: dueDateI,
+          paymentForecast: dueDateI,
+          recurrenceId: rec.id,
+          updatedAt: new Date(),
+        }).returning();
         created.push(item);
       }
       return res.status(201).json({ recurrence: rec, items: created });
@@ -239,35 +318,47 @@ router.post('/', async (req, res) => {
       const installmentAmount = +(amountNum / count).toFixed(2);
       const interval = installments.intervalCount || 1;
       // Cria parcela 1 (parent)
-      const parent = await prisma.payable.create({
-        data: {
-          ...baseData,
-          amount: installmentAmount,
-          remainingAmount: installmentAmount,
-          installmentNumber: 1,
-        },
-      });
+      const [parent] = await db.insert(t.payable).values({
+        id: crypto.randomUUID(),
+        ...baseData,
+        amount: installmentAmount,
+        remainingAmount: installmentAmount,
+        installmentNumber: 1,
+        updatedAt: new Date(),
+      }).returning();
       const created = [parent];
       for (let i = 1; i < count; i++) {
         const dueDateI = advanceDate(dueDate, 'monthly', i * interval);
-        const item = await prisma.payable.create({
-          data: {
-            ...baseData,
-            amount: installmentAmount,
-            remainingAmount: installmentAmount,
-            dueDate: dueDateI,
-            paymentForecast: dueDateI,
-            parentId: parent.id,
-            installmentNumber: i + 1,
-          },
-        });
+        const [item] = await db.insert(t.payable).values({
+          id: crypto.randomUUID(),
+          ...baseData,
+          amount: installmentAmount,
+          remainingAmount: installmentAmount,
+          dueDate: dueDateI,
+          paymentForecast: dueDateI,
+          parentId: parent.id,
+          installmentNumber: i + 1,
+          updatedAt: new Date(),
+        }).returning();
         created.push(item);
       }
       return res.status(201).json({ installments: created.length, items: created });
     }
 
     // === SIMPLES ===
-    const item = await prisma.payable.create({ data: baseData, include: { supplier: true, category: true } });
+    const [created] = await db.insert(t.payable).values({
+      id: crypto.randomUUID(),
+      ...baseData,
+      updatedAt: new Date(),
+    }).returning();
+    // include: { supplier: true, category: true }
+    const [supplier] = created.supplierId
+      ? await db.select().from(t.supplier).where(eq(t.supplier.id, created.supplierId)).limit(1)
+      : [];
+    const [category] = created.categoryId
+      ? await db.select().from(t.financialCategory).where(eq(t.financialCategory.id, created.categoryId)).limit(1)
+      : [];
+    const item = { ...created, supplier: supplier || null, category: category || null };
     res.status(201).json(item);
   } catch (err) {
     console.error('[bpo payables create]', err);
@@ -278,9 +369,10 @@ router.post('/', async (req, res) => {
 // UPDATE
 router.put('/:id', async (req, res) => {
   try {
-    const existing = await prisma.payable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select()
+      .from(t.payable)
+      .where(and(eq(t.payable.id, req.params.id), eq(t.payable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
     if (existing.status === 'paid') return res.status(400).json({ error: 'Não é possível alterar conta já paga' });
 
@@ -306,7 +398,10 @@ router.put('/:id', async (req, res) => {
     if (req.body.paymentForecast !== undefined) data.paymentForecast = new Date(req.body.paymentForecast);
     if (req.body.attachments !== undefined) data.attachments = JSON.stringify(req.body.attachments);
 
-    const item = await prisma.payable.update({ where: { id: req.params.id }, data });
+    const [item] = await db.update(t.payable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(t.payable.id, req.params.id))
+      .returning();
     res.json(cleanPayable(item));
   } catch (err) {
     console.error('[bpo payables update]', err);
@@ -320,9 +415,10 @@ router.post('/:id/pay', async (req, res) => {
     const { amount, bankAccountId, paidAt, notes } = req.body;
     if (!amount || !bankAccountId) return res.status(400).json({ error: 'amount e bankAccountId obrigatórios' });
 
-    const payable = await prisma.payable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [payable] = await db.select()
+      .from(t.payable)
+      .where(and(eq(t.payable.id, req.params.id), eq(t.payable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!payable) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
     if (payable.status === 'paid') return res.status(400).json({ error: 'Conta já está paga' });
 
@@ -336,35 +432,38 @@ router.post('/:id/pay', async (req, res) => {
     const isPartial = newRemaining >= 0.01;  // BUG #2 FIX: threshold consistente (1 centavo)
 
     // Valida que o banco existe e pertence ao cliente
-    const bank = await prisma.bankAccount.findFirst({
-      where: { id: bankAccountId, clientId: req.bpoClient.id },
-    });
+    const [bank] = await db.select()
+      .from(t.bankAccount)
+      .where(and(eq(t.bankAccount.id, bankAccountId), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!bank) return res.status(404).json({ error: 'Conta bancária não encontrada' });
 
     // Transação: cria PaymentTransaction + atualiza Payable + decrementa saldo do banco
-    const result = await prisma.$transaction(async (tx) => {
-      const txn = await tx.paymentTransaction.create({
-        data: {
-          payableId: payable.id,
-          amount: amountNum,
-          paidAt: paidAt ? new Date(paidAt) : new Date(),
-          bankAccountId,
-          isPartial,
-          notes: notes?.trim() || null,
-        },
-      });
-      const updated = await tx.payable.update({
-        where: { id: payable.id },
-        data: {
+    const result = await db.transaction(async (tx) => {
+      const [txn] = await tx.insert(t.paymentTransaction).values({
+        id: crypto.randomUUID(),
+        payableId: payable.id,
+        amount: amountNum,
+        paidAt: paidAt ? new Date(paidAt) : new Date(),
+        bankAccountId,
+        isPartial,
+        notes: notes?.trim() || null,
+      }).returning();
+      const [updated] = await tx.update(t.payable)
+        .set({
           remainingAmount: newRemaining,
           status: isPartial ? 'paid_partial' : 'paid',
-        },
-      });
+          updatedAt: new Date(),
+        })
+        .where(eq(t.payable.id, payable.id))
+        .returning();
       // BUG FIX: atualizar saldo do banco (estava ficando intacto após pagamento)
-      await tx.bankAccount.update({
-        where: { id: bankAccountId },
-        data: { currentBalance: { decrement: amountNum } },
-      });
+      await tx.update(t.bankAccount)
+        .set({
+          currentBalance: sql`${t.bankAccount.currentBalance} - ${amountNum}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(t.bankAccount.id, bankAccountId));
       return { transaction: txn, payable: updated };
     });
     res.json(result);
@@ -380,21 +479,23 @@ router.post('/:id/schedule', async (req, res) => {
     const { scheduledAt, bankAccountId, requiresApproval } = req.body;
     if (!scheduledAt || !bankAccountId) return res.status(400).json({ error: 'scheduledAt e bankAccountId obrigatórios' });
 
-    const payable = await prisma.payable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [payable] = await db.select()
+      .from(t.payable)
+      .where(and(eq(t.payable.id, req.params.id), eq(t.payable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!payable) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
 
-    const item = await prisma.payable.update({
-      where: { id: req.params.id },
-      data: {
+    const [item] = await db.update(t.payable)
+      .set({
         status: 'scheduled',
         scheduledAt: new Date(scheduledAt),
         scheduledBankId: bankAccountId,
         scheduledStatus: 'sent',
         requiresApproval: requiresApproval === true,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(t.payable.id, req.params.id))
+      .returning();
     res.json(item);
   } catch (err) {
     console.error('[bpo payables schedule]', err);
@@ -411,19 +512,20 @@ router.post('/:id/schedule', async (req, res) => {
 router.post('/:id/approve', async (req, res) => {
   try {
     const { approverEmail } = req.body;
-    const existing = await prisma.payable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-      select: { id: true },
-    });
+    const [existing] = await db.select({ id: t.payable.id })
+      .from(t.payable)
+      .where(and(eq(t.payable.id, req.params.id), eq(t.payable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
-    const item = await prisma.payable.update({
-      where: { id: existing.id },
-      data: {
+    const [item] = await db.update(t.payable)
+      .set({
         approvedAt: new Date(),
         approvedBy: approverEmail || 'dono',
         scheduledStatus: 'approved',
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(t.payable.id, existing.id))
+      .returning();
     res.json(item);
   } catch (err) {
     console.error('[bpo payables approve]', err?.message);
@@ -435,14 +537,13 @@ router.post('/:id/approve', async (req, res) => {
 router.post('/:id/reject', async (req, res) => {
   try {
     const { reason, approverEmail } = req.body;
-    const existing = await prisma.payable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-      select: { id: true },
-    });
+    const [existing] = await db.select({ id: t.payable.id })
+      .from(t.payable)
+      .where(and(eq(t.payable.id, req.params.id), eq(t.payable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
-    const item = await prisma.payable.update({
-      where: { id: existing.id },
-      data: {
+    const [item] = await db.update(t.payable)
+      .set({
         rejectedAt: new Date(),
         approvedBy: approverEmail || 'dono',
         rejectionReason: reason || 'Sem motivo informado',
@@ -450,8 +551,10 @@ router.post('/:id/reject', async (req, res) => {
         // Volta status pra pending pra dono ou BPO operador re-agendar
         status: 'pending',
         scheduledAt: null,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(t.payable.id, existing.id))
+      .returning();
     res.json(item);
   } catch (err) {
     console.error('[bpo payables reject]', err?.message);
@@ -462,9 +565,10 @@ router.post('/:id/reject', async (req, res) => {
 // DELETE (soft delete: regra do projeto — delete físico é proibido. Marca status=cancelled)
 router.delete('/:id', async (req, res) => {
   try {
-    const payable = await prisma.payable.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [payable] = await db.select()
+      .from(t.payable)
+      .where(and(eq(t.payable.id, req.params.id), eq(t.payable.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!payable) return res.status(404).json({ error: 'Conta a pagar não encontrada' });
     if (payable.status === 'paid') {
       return res.status(409).json({ error: 'Não é possível cancelar: conta já está paga.' });
@@ -472,10 +576,9 @@ router.delete('/:id', async (req, res) => {
     if (payable.status === 'cancelled') {
       return res.json({ success: true, alreadyCancelled: true });
     }
-    await prisma.payable.update({
-      where: { id: req.params.id },
-      data: { status: 'cancelled' },
-    });
+    await db.update(t.payable)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(eq(t.payable.id, req.params.id));
     res.json({ success: true, cancelled: true });
   } catch (err) {
     console.error('[bpo payables delete]', err);

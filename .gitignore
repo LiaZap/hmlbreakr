@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Env / segredos — NUNCA commitar valores reais. Use os .env.example como template.
+.env
+.env.*
+!.env.example
+server/.env
+!server/.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

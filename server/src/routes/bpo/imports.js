@@ -14,11 +14,13 @@ const express = require('express');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { PDFParse } = require('pdf-parse');
-const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count } = require('drizzle-orm');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 router.use(requireBpoOperator);
@@ -94,13 +96,13 @@ router.post('/nfe', upload.single('xml'), async (req, res) => {
     }
 
     // Cria/encontra Supplier
-    let supplier = await prisma.supplier.findUnique({
-      where: { clientId_cnpj: { clientId: req.bpoClient.id, cnpj: parsed.supplierCnpj } },
-    });
+    let [supplier] = await db.select().from(t.supplier)
+      .where(and(eq(t.supplier.clientId, req.bpoClient.id), eq(t.supplier.cnpj, parsed.supplierCnpj)))
+      .limit(1);
     if (!supplier) {
-      supplier = await prisma.supplier.create({
-        data: { clientId: req.bpoClient.id, cnpj: parsed.supplierCnpj, name: parsed.supplierName },
-      });
+      [supplier] = await db.insert(t.supplier)
+        .values({ id: crypto.randomUUID(), clientId: req.bpoClient.id, cnpj: parsed.supplierCnpj, name: parsed.supplierName, updatedAt: new Date() })
+        .returning();
     }
 
     // Cria Payable (se houver duplicatas, cria parcelas; senão, à vista)
@@ -110,14 +112,16 @@ router.post('/nfe', upload.single('xml'), async (req, res) => {
       invoiceNumber: parsed.invoiceNumber,
       emissionDate: parsed.emissionDate ? new Date(parsed.emissionDate) : null,
       description: parsed.description,
+      updatedAt: new Date(),
     };
 
     let created;
     if (parsed.installments.length > 0) {
       // Cria parcela 1 (parent)
       const first = parsed.installments[0];
-      const parent = await prisma.payable.create({
-        data: {
+      const [parent] = await db.insert(t.payable)
+        .values({
+          id: crypto.randomUUID(),
           ...baseData,
           amount: first.amount,
           remainingAmount: first.amount,
@@ -125,13 +129,14 @@ router.post('/nfe', upload.single('xml'), async (req, res) => {
           paymentForecast: new Date(first.dueDate),
           installmentNumber: 1,
           status: 'pending',
-        },
-      });
+        })
+        .returning();
       const items = [parent];
       for (let i = 1; i < parsed.installments.length; i++) {
         const inst = parsed.installments[i];
-        const item = await prisma.payable.create({
-          data: {
+        const [item] = await db.insert(t.payable)
+          .values({
+            id: crypto.randomUUID(),
             ...baseData,
             amount: inst.amount,
             remainingAmount: inst.amount,
@@ -140,22 +145,23 @@ router.post('/nfe', upload.single('xml'), async (req, res) => {
             parentId: parent.id,
             installmentNumber: i + 1,
             status: 'pending',
-          },
-        });
+          })
+          .returning();
         items.push(item);
       }
       created = { type: 'installments', count: items.length, items };
     } else {
-      const item = await prisma.payable.create({
-        data: {
+      const [item] = await db.insert(t.payable)
+        .values({
+          id: crypto.randomUUID(),
           ...baseData,
           amount: parsed.amount,
           remainingAmount: parsed.amount,
           dueDate: new Date(),  // à vista — vencimento hoje (ajustável)
           paymentForecast: new Date(),
           status: 'pending',
-        },
-      });
+        })
+        .returning();
       created = { type: 'single', items: [item] };
     }
 
@@ -249,8 +255,9 @@ router.post('/boleto', async (req, res) => {
       return res.status(400).json({ error: 'Tipo de boleto não suporta criação automática (provavelmente concessionária)', preview: parsed });
     }
 
-    const item = await prisma.payable.create({
-      data: {
+    const [item] = await db.insert(t.payable)
+      .values({
+        id: crypto.randomUUID(),
         clientId: req.bpoClient.id,
         supplierId: supplierId || null,
         categoryId: categoryId || null,
@@ -260,8 +267,9 @@ router.post('/boleto', async (req, res) => {
         paymentForecast: new Date(parsed.dueDate),
         description: description || `Boleto ${parsed.bankCode}`,
         status: 'pending',
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .returning();
     res.json({ payable: item, parsed });
   } catch (err) {
     console.error('[bpo imports boleto]', err);
@@ -353,9 +361,9 @@ router.post('/excel/:type', upload.single('file'), async (req, res) => {
 
     // Carrega lookup helpers (suppliers, categories) — pra resolver IDs por nome/cnpj
     const [suppliers, categories, paymentMethods] = await Promise.all([
-      prisma.supplier.findMany({ where: { clientId: req.bpoClient.id } }),
-      prisma.financialCategory.findMany({ where: { clientId: req.bpoClient.id } }),
-      prisma.paymentMethod.findMany({ where: { clientId: req.bpoClient.id } }),
+      db.select().from(t.supplier).where(eq(t.supplier.clientId, req.bpoClient.id)),
+      db.select().from(t.financialCategory).where(eq(t.financialCategory.clientId, req.bpoClient.id)),
+      db.select().from(t.paymentMethod).where(eq(t.paymentMethod.clientId, req.bpoClient.id)),
     ]);
     const supplierByCnpj = new Map(suppliers.map((s) => [s.cnpj, s.id]));
     const categoryByName = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
@@ -368,28 +376,34 @@ router.post('/excel/:type', upload.single('file'), async (req, res) => {
           const cnpj = String(row.cnpj || '').replace(/\D/g, '');
           if (cnpj.length !== 14) throw new Error('CNPJ inválido');
           if (!row.nome) throw new Error('Nome obrigatório');
-          const item = await prisma.supplier.upsert({
-            where: { clientId_cnpj: { clientId: req.bpoClient.id, cnpj } },
-            create: {
+          const [item] = await db.insert(t.supplier)
+            .values({
+              id: crypto.randomUUID(),
               clientId: req.bpoClient.id, cnpj, name: row.nome,
               email: row.email || null, phone: row.telefone || null, pixKey: row.pix || null,
-            },
-            update: { name: row.nome },
-          });
+              updatedAt: new Date(),
+            })
+            .onConflictDoUpdate({
+              target: [t.supplier.clientId, t.supplier.cnpj],
+              set: { name: row.nome, updatedAt: new Date() },
+            })
+            .returning();
           created.push(item);
         }
 
         else if (type === 'categories') {
           if (!row.nome || !row.tipo) throw new Error('nome e tipo obrigatórios');
           if (!['receita', 'despesa'].includes(row.tipo)) throw new Error('tipo deve ser receita ou despesa');
-          const item = await prisma.financialCategory.create({
-            data: {
+          const [item] = await db.insert(t.financialCategory)
+            .values({
+              id: crypto.randomUUID(),
               clientId: req.bpoClient.id,
               name: String(row.nome).trim(),
               type: row.tipo,
               dreGroup: row.grupo_dre || null,
-            },
-          });
+              updatedAt: new Date(),
+            })
+            .returning();
           created.push(item);
         }
 
@@ -399,17 +413,18 @@ router.post('/excel/:type', upload.single('file'), async (req, res) => {
           let supplierId = cnpj ? supplierByCnpj.get(cnpj) : null;
           // Se não achar fornecedor, cria automaticamente
           if (!supplierId && cnpj.length === 14 && row.fornecedor_nome) {
-            const newSup = await prisma.supplier.create({
-              data: { clientId: req.bpoClient.id, cnpj, name: String(row.fornecedor_nome) },
-            });
+            const [newSup] = await db.insert(t.supplier)
+              .values({ id: crypto.randomUUID(), clientId: req.bpoClient.id, cnpj, name: String(row.fornecedor_nome), updatedAt: new Date() })
+              .returning();
             supplierId = newSup.id;
             supplierByCnpj.set(cnpj, supplierId);
           }
           const categoryId = row.categoria ? categoryByName.get(String(row.categoria).toLowerCase()) || null : null;
           const amount = parseFloat(String(row.valor).replace(',', '.'));
           const dueDate = row.vencimento instanceof Date ? row.vencimento : new Date(row.vencimento);
-          const item = await prisma.payable.create({
-            data: {
+          const [item] = await db.insert(t.payable)
+            .values({
+              id: crypto.randomUUID(),
               clientId: req.bpoClient.id,
               supplierId, categoryId,
               amount, remainingAmount: amount,
@@ -417,8 +432,9 @@ router.post('/excel/:type', upload.single('file'), async (req, res) => {
               invoiceNumber: row.nota_fiscal ? String(row.nota_fiscal) : null,
               description: row.descricao || null,
               status: 'pending',
-            },
-          });
+              updatedAt: new Date(),
+            })
+            .returning();
           created.push(item);
         }
 
@@ -428,16 +444,18 @@ router.post('/excel/:type', upload.single('file'), async (req, res) => {
           const paymentMethodId = row.forma_pagto ? paymentMethodByName.get(String(row.forma_pagto).toLowerCase()) || null : null;
           const amount = parseFloat(String(row.valor).replace(',', '.'));
           const dueDate = row.vencimento instanceof Date ? row.vencimento : new Date(row.vencimento);
-          const item = await prisma.receivable.create({
-            data: {
+          const [item] = await db.insert(t.receivable)
+            .values({
+              id: crypto.randomUUID(),
               clientId: req.bpoClient.id,
               payerName: String(row.pagador), categoryId, paymentMethodId,
               amount, remainingAmount: amount,
               dueDate, receiptForecast: dueDate,
               description: row.descricao || null,
               status: 'pending',
-            },
-          });
+              updatedAt: new Date(),
+            })
+            .returning();
           created.push(item);
         }
       } catch (err) {
@@ -635,36 +653,40 @@ router.post('/pdf', upload.single('pdf'), async (req, res) => {
     // 6. Resolve / cria Supplier (stub se CNPJ desconhecido)
     let supplier = null;
     if (cnpj && cnpj.length === 14) {
-      supplier = await prisma.supplier.findUnique({
-        where: { clientId_cnpj: { clientId: req.bpoClient.id, cnpj } },
-      });
+      [supplier] = await db.select().from(t.supplier)
+        .where(and(eq(t.supplier.clientId, req.bpoClient.id), eq(t.supplier.cnpj, cnpj)))
+        .limit(1);
       if (!supplier) {
-        supplier = await prisma.supplier.create({
-          data: {
+        [supplier] = await db.insert(t.supplier)
+          .values({
+            id: crypto.randomUUID(),
             clientId: req.bpoClient.id,
             cnpj,
             name: descricao.substring(0, 80),
             notes: '[STUB] Criado automaticamente via import PDF — revisar dados',
-          },
-        });
+            updatedAt: new Date(),
+          })
+          .returning();
       }
     }
 
     // 7. Cria Payable (pending + requiresApproval pra cliente revisar)
-    const payable = await prisma.payable.create({
-      data: {
+    const [payable] = await db.insert(t.payable)
+      .values({
+        id: crypto.randomUUID(),
         clientId: req.bpoClient.id,
         supplierId: supplier ? supplier.id : null,
         amount: valor,
         remainingAmount: valor,
+        updatedAt: new Date(),
         dueDate: new Date(vencimento),
         paymentForecast: new Date(vencimento),
         invoiceNumber,
         description: descricao,
         status: 'pending',
         requiresApproval: true,
-      },
-    });
+      })
+      .returning();
 
     return res.json({ items: [payable], errors: [], extracted, supplier });
   } catch (err) {

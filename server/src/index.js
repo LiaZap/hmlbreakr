@@ -1,7 +1,11 @@
+// dotenv ANTES de qualquer require que leia env no carregamento (db/client cria o
+// Pool com DATABASE_URL; emailService lê SMTP_PASS; adminAuth lê ADMIN_TOKEN).
+const dotenv = require('dotenv');
+dotenv.config();
+
 const express = require('express');
 const cors = require('cors');
-const { PrismaClient } = require('@prisma/client');
-const dotenv = require('dotenv');
+const { pool } = require('./db/client');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const routes = require('./routes');
@@ -10,10 +14,7 @@ const stripeWebhookRouter = require('./routes/stripeWebhook');
 const { startBackupScheduler } = require('./services/backupScheduler');
 const { createAuditMiddleware } = require('./middleware/auditMiddleware');
 
-dotenv.config();
-
 const app = express();
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
 // Trust proxy (required behind Easypanel/Traefik reverse proxy)
@@ -126,7 +127,7 @@ app.use('/api/bpo', bpoRoutes); // BPO Financeiro V2.0
 // Health Check - actually test DB connection
 app.get('/health', async (req, res) => {
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await pool.query('SELECT 1');
     res.status(200).json({ status: 'ok', database: 'connected' });
   } catch (error) {
     res.status(503).json({ status: 'error', database: 'disconnected' });
@@ -170,7 +171,7 @@ app.use((err, req, res, next) => {
 // Graceful Shutdown
 const shutdown = async (signal) => {
   console.log(`${signal} received, shutting down...`);
-  await prisma.$disconnect();
+  await pool.end().catch(() => {});
   process.exit(0);
 };
 process.on('SIGINT', () => shutdown('SIGINT'));

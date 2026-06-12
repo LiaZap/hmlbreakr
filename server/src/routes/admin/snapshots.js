@@ -18,7 +18,9 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { eq } = require('drizzle-orm');
+const { db } = require('../../db/client');
+const { client: clientTable } = require('../../db/schema-bpo');
 const {
   listSnapshots,
   getSnapshot,
@@ -28,7 +30,6 @@ const {
 const { logAudit } = require('../../services/auditService');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 /**
  * GET /admin/clients/:clientId/snapshots
@@ -40,10 +41,11 @@ router.get('/clients/:clientId/snapshots', async (req, res) => {
     if (!clientId) return res.status(400).json({ error: 'clientId é obrigatório' });
 
     // Valida que o cliente existe (404 explícito ajuda UI)
-    const client = await prisma.client.findUnique({
-      where: { id: clientId },
-      select: { id: true, name: true, hash: true },
-    });
+    const [client] = await db
+      .select({ id: clientTable.id, name: clientTable.name, hash: clientTable.hash })
+      .from(clientTable)
+      .where(eq(clientTable.id, clientId))
+      .limit(1);
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
 
     const snapshots = await listSnapshots(clientId);
@@ -74,10 +76,11 @@ router.post(
       }
 
       // 1. Valida cliente
-      const client = await prisma.client.findUnique({
-        where: { id: clientId },
-        select: { id: true, data: true },
-      });
+      const [client] = await db
+        .select({ id: clientTable.id, data: clientTable.data })
+        .from(clientTable)
+        .where(eq(clientTable.id, clientId))
+        .limit(1);
       if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
 
       // 2. Valida snapshot e que ele pertence ao cliente (segurança: não
@@ -107,10 +110,10 @@ router.post(
       }
 
       // 4. Restore propriamente dito
-      await prisma.client.update({
-        where: { id: clientId },
-        data: { data: snap.data },
-      });
+      await db
+        .update(clientTable)
+        .set({ data: snap.data, updatedAt: new Date() })
+        .where(eq(clientTable.id, clientId));
 
       // 5. Cleanup best-effort
       pruneOldSnapshots(clientId, 20).catch((err) =>
@@ -122,7 +125,7 @@ router.post(
         `[admin snapshots restore] clientId=${clientId} snapshotId=${snapshotId} by=${adminEmail} preRestoreSnapshotId=${preRestoreSnapshotId}`
       );
 
-      logAudit(prisma, {
+      logAudit({
         action: 'snapshot.restore',
         category: 'security',
         entityType: 'client',

@@ -16,11 +16,13 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count } = require('drizzle-orm');
+const crypto = require('crypto');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
@@ -58,10 +60,10 @@ const computeLoan = ({ principal, interestRateMonthly, totalInstallments, paidIn
 
 router.get('/', async (req, res) => {
   try {
-    const items = await prisma.loan.findMany({
-      where: { clientId: req.bpoClient.id, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const items = await db.select()
+      .from(t.loan)
+      .where(and(eq(t.loan.clientId, req.bpoClient.id), eq(t.loan.active, true)))
+      .orderBy(desc(t.loan.createdAt));
     const totalOutstandingBalance = items.reduce((acc, l) => acc + parseFloat(l.currentBalance), 0);
     const totalMonthlyInstallments = items
       .filter(l => l.status === 'active')
@@ -88,22 +90,22 @@ router.post('/', async (req, res) => {
 
     const calc = computeLoan({ principal, interestRateMonthly, totalInstallments, paidInstallments });
 
-    const item = await prisma.loan.create({
-      data: {
-        clientId: req.bpoClient.id,
-        bankName: bankName.trim(),
-        contractNumber: contractNumber?.trim() || null,
-        description: description?.trim() || null,
-        principal: parseFloat(principal),
-        interestRateMonthly: parseFloat(interestRateMonthly),
-        totalInstallments: parseInt(totalInstallments, 10),
-        paidInstallments: parseInt(paidInstallments, 10) || 0,
-        startDate: startDate ? new Date(startDate) : new Date(),
-        notes: notes?.trim() || null,
-        ...calc,
-        status: (parseInt(paidInstallments, 10) || 0) >= parseInt(totalInstallments, 10) ? 'paid' : 'active',
-      },
-    });
+    const [item] = await db.insert(t.loan).values({
+      id: crypto.randomUUID(),
+      clientId: req.bpoClient.id,
+      bankName: bankName.trim(),
+      contractNumber: contractNumber?.trim() || null,
+      description: description?.trim() || null,
+      principal: parseFloat(principal),
+      interestRateMonthly: parseFloat(interestRateMonthly),
+      totalInstallments: parseInt(totalInstallments, 10),
+      paidInstallments: parseInt(paidInstallments, 10) || 0,
+      startDate: startDate ? new Date(startDate) : new Date(),
+      notes: notes?.trim() || null,
+      ...calc,
+      status: (parseInt(paidInstallments, 10) || 0) >= parseInt(totalInstallments, 10) ? 'paid' : 'active',
+      updatedAt: new Date(),
+    }).returning();
     res.status(201).json(item);
   } catch (err) {
     console.error('[bpo loans create]', err);
@@ -113,9 +115,9 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const existing = await prisma.loan.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select().from(t.loan)
+      .where(and(eq(t.loan.id, req.params.id), eq(t.loan.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
 
     const data = { ...req.body };
@@ -129,9 +131,8 @@ router.put('/:id', async (req, res) => {
     const paid = data.paidInstallments != null ? parseInt(data.paidInstallments, 10) : existing.paidInstallments;
     const calc = computeLoan({ principal, interestRateMonthly: rate, totalInstallments: total, paidInstallments: paid });
 
-    const item = await prisma.loan.update({
-      where: { id: req.params.id },
-      data: {
+    const [item] = await db.update(t.loan)
+      .set({
         ...(data.bankName != null ? { bankName: String(data.bankName).trim() } : {}),
         ...(data.contractNumber !== undefined ? { contractNumber: data.contractNumber?.trim() || null } : {}),
         ...(data.description !== undefined ? { description: data.description?.trim() || null } : {}),
@@ -143,8 +144,10 @@ router.put('/:id', async (req, res) => {
         paidInstallments: paid,
         ...calc,
         status: paid >= total ? 'paid' : (data.status || existing.status),
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(t.loan.id, req.params.id))
+      .returning();
     res.json(item);
   } catch (err) {
     console.error('[bpo loans update]', err);
@@ -155,9 +158,9 @@ router.put('/:id', async (req, res) => {
 // Marca uma parcela paga (incrementa paidInstallments + recalcula balance)
 router.post('/:id/pay', async (req, res) => {
   try {
-    const existing = await prisma.loan.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select().from(t.loan)
+      .where(and(eq(t.loan.id, req.params.id), eq(t.loan.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
     if (existing.paidInstallments >= existing.totalInstallments) {
       return res.status(400).json({ error: 'Empréstimo já quitado' });
@@ -169,14 +172,15 @@ router.post('/:id/pay', async (req, res) => {
       totalInstallments: existing.totalInstallments,
       paidInstallments: newPaid,
     });
-    const item = await prisma.loan.update({
-      where: { id: req.params.id },
-      data: {
+    const [item] = await db.update(t.loan)
+      .set({
         paidInstallments: newPaid,
         ...calc,
         status: newPaid >= existing.totalInstallments ? 'paid' : 'active',
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(t.loan.id, req.params.id))
+      .returning();
     res.json(item);
   } catch (err) {
     console.error('[bpo loans pay]', err);
@@ -186,14 +190,13 @@ router.post('/:id/pay', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const existing = await prisma.loan.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select().from(t.loan)
+      .where(and(eq(t.loan.id, req.params.id), eq(t.loan.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Não encontrado' });
-    await prisma.loan.update({
-      where: { id: req.params.id },
-      data: { active: false, status: 'cancelled' },
-    });
+    await db.update(t.loan)
+      .set({ active: false, status: 'cancelled', updatedAt: new Date() })
+      .where(eq(t.loan.id, req.params.id));
     res.json({ success: true });
   } catch (err) {
     console.error('[bpo loans delete]', err);

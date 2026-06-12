@@ -4,11 +4,13 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, asc, count } = require('drizzle-orm');
+const crypto = require('crypto');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
@@ -17,11 +19,22 @@ const VALID_TYPES = ['marketplace', 'card_credit', 'card_debit', 'pix', 'cash', 
 
 router.get('/', async (req, res) => {
   try {
-    const items = await prisma.paymentMethod.findMany({
-      where: { clientId: req.bpoClient.id, active: true },
-      orderBy: { name: 'asc' },
-      include: { _count: { select: { receivables: true } } },
-    });
+    const methods = await db.select()
+      .from(t.paymentMethod)
+      .where(and(
+        eq(t.paymentMethod.clientId, req.bpoClient.id),
+        eq(t.paymentMethod.active, true),
+      ))
+      .orderBy(asc(t.paymentMethod.name));
+
+    // _count: { receivables: true } — contagem por meio de pagamento
+    const items = await Promise.all(methods.map(async (m) => {
+      const [r] = await db.select({ n: count() })
+        .from(t.receivable)
+        .where(eq(t.receivable.paymentMethodId, m.id));
+      return { ...m, _count: { receivables: Number(r.n) } };
+    }));
+
     res.json({ items, total: items.length });
   } catch (err) {
     console.error('[bpo payment-methods list]', err);
@@ -35,15 +48,15 @@ router.post('/', async (req, res) => {
     if (!name || !type) return res.status(400).json({ error: 'name e type obrigatórios' });
     if (!VALID_TYPES.includes(type)) return res.status(400).json({ error: `type deve ser: ${VALID_TYPES.join(', ')}` });
 
-    const item = await prisma.paymentMethod.create({
-      data: {
-        clientId: req.bpoClient.id,
-        name: name.trim(),
-        type,
-        feePercent: feePercent ? parseFloat(feePercent) : 0,
-        settlementDays: settlementDays ? parseInt(settlementDays, 10) : 0,
-      },
-    });
+    const [item] = await db.insert(t.paymentMethod).values({
+      id: crypto.randomUUID(),
+      clientId: req.bpoClient.id,
+      name: name.trim(),
+      type,
+      feePercent: feePercent ? parseFloat(feePercent) : 0,
+      settlementDays: settlementDays ? parseInt(settlementDays, 10) : 0,
+      updatedAt: new Date().toISOString(),
+    }).returning();
     res.status(201).json(item);
   } catch (err) {
     console.error('[bpo payment-methods create]', err);
@@ -53,9 +66,13 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const existing = await prisma.paymentMethod.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select()
+      .from(t.paymentMethod)
+      .where(and(
+        eq(t.paymentMethod.id, req.params.id),
+        eq(t.paymentMethod.clientId, req.bpoClient.id),
+      ))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Meio de pagamento não encontrado' });
 
     const data = {};
@@ -64,8 +81,13 @@ router.put('/:id', async (req, res) => {
     if (req.body.feePercent !== undefined) data.feePercent = parseFloat(req.body.feePercent) || 0;
     if (req.body.settlementDays !== undefined) data.settlementDays = parseInt(req.body.settlementDays, 10) || 0;
     if (req.body.active !== undefined) data.active = !!req.body.active;
+    // Prisma @updatedAt: bump em todo update
+    data.updatedAt = new Date().toISOString();
 
-    const item = await prisma.paymentMethod.update({ where: { id: req.params.id }, data });
+    const [item] = await db.update(t.paymentMethod)
+      .set(data)
+      .where(eq(t.paymentMethod.id, req.params.id))
+      .returning();
     res.json(item);
   } catch (err) {
     console.error('[bpo payment-methods update]', err);
@@ -75,13 +97,19 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const existing = await prisma.paymentMethod.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select()
+      .from(t.paymentMethod)
+      .where(and(
+        eq(t.paymentMethod.id, req.params.id),
+        eq(t.paymentMethod.clientId, req.bpoClient.id),
+      ))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Meio de pagamento não encontrado' });
 
     // Soft delete sempre — regra do projeto: delete físico é proibido
-    await prisma.paymentMethod.update({ where: { id: req.params.id }, data: { active: false } });
+    await db.update(t.paymentMethod)
+      .set({ active: false, updatedAt: new Date().toISOString() })
+      .where(eq(t.paymentMethod.id, req.params.id));
     res.json({ success: true, softDeleted: true });
   } catch (err) {
     console.error('[bpo payment-methods delete]', err);

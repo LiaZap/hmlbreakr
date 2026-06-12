@@ -9,8 +9,9 @@
  * V2 (futuro): JWT por sessão (issuer/exp/role), Clerk SSO opcional.
  */
 
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { eq } = require('drizzle-orm');
+const { db } = require('../db/client');
+const { adminUser } = require('../db/schema-bpo');
 
 // ADMIN_TOKEN é obrigatório — sem fallback. Abortar startup se ausente
 // previne deploy acidental sem secret (sec-auditor #3).
@@ -39,7 +40,7 @@ async function requireAdmin(req, res, next) {
   const userId = req.headers['x-admin-user-id'];
   if (userId) {
     try {
-      const user = await prisma.adminUser.findUnique({ where: { id: String(userId) } });
+      const [user] = await db.select().from(adminUser).where(eq(adminUser.id, String(userId))).limit(1);
       if (user && user.active) {
         req.adminUser = user;
       }
@@ -67,7 +68,7 @@ async function requireSuperAdmin(req, res, next) {
     return res.status(403).json({ error: 'Sessão admin inválida — refaça login' });
   }
   try {
-    const user = await prisma.adminUser.findUnique({ where: { id: String(userId) } });
+    const [user] = await db.select().from(adminUser).where(eq(adminUser.id, String(userId))).limit(1);
     if (user && user.active && user.role === 'super_admin') {
       req.adminUser = user;
       return next();

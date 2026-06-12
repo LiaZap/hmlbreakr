@@ -14,10 +14,11 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count, getTableColumns } = require('drizzle-orm');
+const crypto = require('crypto');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
-
-const prisma = new PrismaClient();
 
 // ============================================================================
 // Helper: normaliza payloads de Z-API/Evolution/Meta
@@ -56,18 +57,18 @@ webhookRouter.post('/whatsapp', async (req, res) => {
     const normalized = normalizeWebhookPayload(payload);
     if (!normalized) return res.json({ ok: true, ignored: 'formato não reconhecido' });
 
-    const msg = await prisma.whatsappMessage.create({
-      data: {
-        fromNumber: normalized.fromNumber,
-        senderName: normalized.senderName,
-        messageType: normalized.messageType,
-        textContent: normalized.textContent,
-        mediaUrl: normalized.mediaUrl,
-        mediaCaption: normalized.mediaCaption,
-        rawJson: JSON.stringify(payload),
-        status: 'pending',
-      },
-    });
+    const [msg] = await db.insert(t.whatsappMessage).values({
+      id: crypto.randomUUID(),
+      fromNumber: normalized.fromNumber,
+      senderName: normalized.senderName,
+      messageType: normalized.messageType,
+      textContent: normalized.textContent,
+      mediaUrl: normalized.mediaUrl,
+      mediaCaption: normalized.mediaCaption,
+      rawJson: JSON.stringify(payload),
+      status: 'pending',
+      updatedAt: new Date(),
+    }).returning();
 
     res.json({ ok: true, messageId: msg.id });
   } catch (err) {
@@ -87,12 +88,14 @@ inboxGlobalRouter.use(requireBpoOperator);
 
 inboxGlobalRouter.get('/inbox', async (req, res) => {
   try {
-    const items = await prisma.whatsappMessage.findMany({
-      where: { status: 'pending' },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: { client: { select: { name: true, hash: true } } },
-    });
+    const items = await db.select({
+      ...getTableColumns(t.whatsappMessage),
+      client: { name: t.client.name, hash: t.client.hash },
+    }).from(t.whatsappMessage)
+      .leftJoin(t.client, eq(t.whatsappMessage.clientId, t.client.id))
+      .where(eq(t.whatsappMessage.status, 'pending'))
+      .orderBy(desc(t.whatsappMessage.createdAt))
+      .limit(100);
     res.json({ items, total: items.length });
   } catch (err) {
     console.error(`[whatsapp] ${err?.message || err}`); res.status(500).json({ error: 'Erro interno' });
@@ -103,10 +106,10 @@ inboxGlobalRouter.post('/messages/:id/assign-client', async (req, res) => {
   try {
     const { clientId } = req.body;
     if (!clientId) return res.status(400).json({ error: 'clientId obrigatório' });
-    const msg = await prisma.whatsappMessage.update({
-      where: { id: req.params.id },
-      data: { clientId },
-    });
+    const [msg] = await db.update(t.whatsappMessage)
+      .set({ clientId, updatedAt: new Date() })
+      .where(eq(t.whatsappMessage.id, req.params.id))
+      .returning();
     res.json(msg);
   } catch (err) {
     console.error(`[whatsapp] ${err?.message || err}`); res.status(500).json({ error: 'Erro interno' });
@@ -122,11 +125,13 @@ inboxRouter.use(requireBpoClient);
 
 inboxRouter.get('/inbox', async (req, res) => {
   try {
-    const items = await prisma.whatsappMessage.findMany({
-      where: { clientId: req.bpoClient.id, status: 'pending' },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
+    const items = await db.select().from(t.whatsappMessage)
+      .where(and(
+        eq(t.whatsappMessage.clientId, req.bpoClient.id),
+        eq(t.whatsappMessage.status, 'pending'),
+      ))
+      .orderBy(desc(t.whatsappMessage.createdAt))
+      .limit(100);
     res.json({ items, total: items.length });
   } catch (err) {
     console.error(`[whatsapp] ${err?.message || err}`); res.status(500).json({ error: 'Erro interno' });
@@ -139,54 +144,57 @@ inboxRouter.post('/messages/:id/validate', async (req, res) => {
     if (!type || !amount || !dueDate) return res.status(400).json({ error: 'type, amount e dueDate obrigatórios' });
     if (!['payable', 'receivable'].includes(type)) return res.status(400).json({ error: 'type deve ser payable ou receivable' });
 
-    const msg = await prisma.whatsappMessage.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [msg] = await db.select().from(t.whatsappMessage)
+      .where(and(
+        eq(t.whatsappMessage.id, req.params.id),
+        eq(t.whatsappMessage.clientId, req.bpoClient.id),
+      ))
+      .limit(1);
     if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
 
     const amountNum = parseFloat(amount);
     let created;
     if (type === 'payable') {
-      created = await prisma.payable.create({
-        data: {
-          clientId: req.bpoClient.id,
-          supplierId: supplierId || null,
-          amount: amountNum,
-          remainingAmount: amountNum,
-          dueDate: new Date(dueDate),
-          paymentForecast: new Date(dueDate),
-          categoryId: categoryId || null,
-          description: description || msg.textContent || msg.mediaCaption || 'Lançamento via WhatsApp',
-          status: 'pending',
-          attachments: msg.mediaUrl ? JSON.stringify([{ url: msg.mediaUrl, type: msg.messageType, source: 'whatsapp' }]) : null,
-        },
-      });
+      [created] = await db.insert(t.payable).values({
+        id: crypto.randomUUID(),
+        clientId: req.bpoClient.id,
+        supplierId: supplierId || null,
+        amount: amountNum,
+        remainingAmount: amountNum,
+        dueDate: new Date(dueDate),
+        paymentForecast: new Date(dueDate),
+        categoryId: categoryId || null,
+        description: description || msg.textContent || msg.mediaCaption || 'Lançamento via WhatsApp',
+        status: 'pending',
+        attachments: msg.mediaUrl ? JSON.stringify([{ url: msg.mediaUrl, type: msg.messageType, source: 'whatsapp' }]) : null,
+        updatedAt: new Date(),
+      }).returning();
     } else {
-      created = await prisma.receivable.create({
-        data: {
-          clientId: req.bpoClient.id,
-          payerName: payerName || msg.senderName || 'Pagador via WhatsApp',
-          amount: amountNum,
-          remainingAmount: amountNum,
-          dueDate: new Date(dueDate),
-          receiptForecast: new Date(dueDate),
-          categoryId: categoryId || null,
-          paymentMethodId: paymentMethodId || null,
-          description: description || msg.textContent || 'Lançamento via WhatsApp',
-          status: 'pending',
-          attachments: msg.mediaUrl ? JSON.stringify([{ url: msg.mediaUrl, type: msg.messageType, source: 'whatsapp' }]) : null,
-        },
-      });
+      [created] = await db.insert(t.receivable).values({
+        id: crypto.randomUUID(),
+        clientId: req.bpoClient.id,
+        payerName: payerName || msg.senderName || 'Pagador via WhatsApp',
+        amount: amountNum,
+        remainingAmount: amountNum,
+        dueDate: new Date(dueDate),
+        receiptForecast: new Date(dueDate),
+        categoryId: categoryId || null,
+        paymentMethodId: paymentMethodId || null,
+        description: description || msg.textContent || 'Lançamento via WhatsApp',
+        status: 'pending',
+        attachments: msg.mediaUrl ? JSON.stringify([{ url: msg.mediaUrl, type: msg.messageType, source: 'whatsapp' }]) : null,
+        updatedAt: new Date(),
+      }).returning();
     }
 
-    await prisma.whatsappMessage.update({
-      where: { id: msg.id },
-      data: {
+    await db.update(t.whatsappMessage)
+      .set({
         status: 'validated',
         validatedAt: new Date(),
+        updatedAt: new Date(),
         ...(type === 'payable' ? { createdPayableId: created.id } : { createdReceivableId: created.id }),
-      },
-    });
+      })
+      .where(eq(t.whatsappMessage.id, msg.id));
 
     res.json({ success: true, type, created });
   } catch (err) {
@@ -197,14 +205,17 @@ inboxRouter.post('/messages/:id/validate', async (req, res) => {
 
 inboxRouter.post('/messages/:id/discard', async (req, res) => {
   try {
-    const msg = await prisma.whatsappMessage.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [msg] = await db.select().from(t.whatsappMessage)
+      .where(and(
+        eq(t.whatsappMessage.id, req.params.id),
+        eq(t.whatsappMessage.clientId, req.bpoClient.id),
+      ))
+      .limit(1);
     if (!msg) return res.status(404).json({ error: 'Não encontrada' });
-    const updated = await prisma.whatsappMessage.update({
-      where: { id: req.params.id },
-      data: { status: 'discarded' },
-    });
+    const [updated] = await db.update(t.whatsappMessage)
+      .set({ status: 'discarded', updatedAt: new Date() })
+      .where(eq(t.whatsappMessage.id, req.params.id))
+      .returning();
     res.json(updated);
   } catch (err) {
     console.error(`[whatsapp] ${err?.message || err}`); res.status(500).json({ error: 'Erro interno' });

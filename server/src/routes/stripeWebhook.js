@@ -29,14 +29,15 @@
 const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../db/client');
+const t = require('../db/schema-bpo');
+const { eq } = require('drizzle-orm');
 const { getStripe, getClientPlanByPriceId } = require('../services/stripeService');
 const { sendWelcomeEmail } = require('../services/emailService');
 const { logAudit } = require('../services/auditService');
 const { ensureClerkUserForClient, generateTempPassword } = require('../services/clientAuthSetup');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 const tsToDate = (unixSec) => (unixSec ? new Date(unixSec * 1000) : null);
@@ -58,11 +59,14 @@ function mapStripeStatus(stripeStatus) {
 
 async function findClientByCustomerOrSubscription(stripeCustomerId, stripeSubscriptionId) {
   if (stripeSubscriptionId) {
-    const c = await prisma.client.findFirst({ where: { stripeSubscriptionId } });
+    const [c] = await db.select().from(t.client)
+      .where(eq(t.client.stripeSubscriptionId, stripeSubscriptionId)).limit(1);
     if (c) return c;
   }
   if (stripeCustomerId) {
-    return prisma.client.findFirst({ where: { stripeCustomerId } });
+    const [c] = await db.select().from(t.client)
+      .where(eq(t.client.stripeCustomerId, stripeCustomerId)).limit(1);
+    return c || null;
   }
   return null;
 }
@@ -70,19 +74,22 @@ async function findClientByCustomerOrSubscription(stripeCustomerId, stripeSubscr
 async function findClientFromCheckoutSession(session) {
   // 1) metadata.clientHash — setado no createClientCheckout (fluxo via app).
   if (session?.metadata?.clientHash) {
-    const c = await prisma.client.findUnique({ where: { hash: session.metadata.clientHash } });
+    const [c] = await db.select().from(t.client)
+      .where(eq(t.client.hash, session.metadata.clientHash)).limit(1);
     if (c) return c;
   }
   // 2) Pelo customer Stripe já vinculado.
   if (session?.customer) {
-    const c = await prisma.client.findFirst({ where: { stripeCustomerId: session.customer } });
+    const [c] = await db.select().from(t.client)
+      .where(eq(t.client.stripeCustomerId, session.customer)).limit(1);
     if (c) return c;
   }
   // 3) Pelo email (último fallback — útil quando cliente paga via Payment
   //    Link externo da LP mas já tem cadastro no Breakr com mesmo email).
   const email = session?.customer_details?.email || session?.customer_email;
   if (email) {
-    const c = await prisma.client.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const [c] = await db.select().from(t.client)
+      .where(eq(t.client.email, email.toLowerCase().trim())).limit(1);
     if (c) return c;
   }
   return null;
@@ -117,7 +124,8 @@ async function autoCreateClientFromCheckout(session, sub) {
 
   const normalizedEmail = email.toLowerCase().trim();
   // Race-condition guard: se outro webhook já criou nesse meio-tempo, reusa.
-  const existing = await prisma.client.findUnique({ where: { email: normalizedEmail } });
+  const [existing] = await db.select().from(t.client)
+    .where(eq(t.client.email, normalizedEmail)).limit(1);
   if (existing) return existing;
 
   const name = session?.customer_details?.name || 'Cliente Breakr';
@@ -135,21 +143,21 @@ async function autoCreateClientFromCheckout(session, sub) {
     operational: { fichas: [], insumos: [] },
   };
 
-  const client = await prisma.client.create({
-    data: {
-      name,
-      hash,
-      email: normalizedEmail,
-      password: passwordHash,
-      data: JSON.stringify(initialData),
-      stripeCustomerId: session.customer || null,
-      stripeSubscriptionId: session.subscription || null,
-      subscriptionStatus: sub ? mapStripeStatus(sub.status) : 'active',
-      subscriptionPlan: sub?.items?.data?.[0]?.price?.id || null,
-      currentPeriodEnd: tsToDate(sub?.current_period_end),
-      trialEndsAt: tsToDate(sub?.trial_end),
-    },
-  });
+  const [client] = await db.insert(t.client).values({
+    id: crypto.randomUUID(),
+    name,
+    hash,
+    email: normalizedEmail,
+    password: passwordHash,
+    data: JSON.stringify(initialData),
+    stripeCustomerId: session.customer || null,
+    stripeSubscriptionId: session.subscription || null,
+    subscriptionStatus: sub ? mapStripeStatus(sub.status) : 'active',
+    subscriptionPlan: sub?.items?.data?.[0]?.price?.id || null,
+    currentPeriodEnd: tsToDate(sub?.current_period_end),
+    trialEndsAt: tsToDate(sub?.trial_end),
+    updatedAt: new Date(),
+  }).returning();
 
   // Cria/linka user no Clerk com mesma senha bcrypt — best-effort
   const clerkResult = await ensureClerkUserForClient({
@@ -158,17 +166,16 @@ async function autoCreateClientFromCheckout(session, sub) {
     passwordHash,
   });
   if (clerkResult.clerkUserId) {
-    await prisma.client.update({
-      where: { id: client.id },
-      data: { clerkUserId: clerkResult.clerkUserId },
-    });
+    await db.update(t.client)
+      .set({ clerkUserId: clerkResult.clerkUserId, updatedAt: new Date() })
+      .where(eq(t.client.id, client.id));
   }
 
   // Welcome email com credenciais — best-effort, não bloqueia (mas loga)
   sendWelcomeEmail({ to: normalizedEmail, clientName: name, hash, tempPassword })
     .catch(err => console.warn('[stripe webhook] auto-create welcome email falhou:', err.message));
 
-  logAudit(prisma, {
+  logAudit({
     action: 'client.auto_created_from_stripe',
     category: 'admin',
     entityType: 'client',
@@ -220,9 +227,8 @@ async function handleCheckoutCompleted(session) {
   }
 
   // 3) Cliente encontrado — atualiza com dados da assinatura.
-  await prisma.client.update({
-    where: { id: client.id },
-    data: {
+  await db.update(t.client)
+    .set({
       stripeCustomerId: session.customer || client.stripeCustomerId,
       stripeSubscriptionId: session.subscription || client.stripeSubscriptionId,
       subscriptionStatus: sub ? mapStripeStatus(sub.status) : 'active',
@@ -231,8 +237,9 @@ async function handleCheckoutCompleted(session) {
       trialEndsAt: tsToDate(sub?.trial_end),
       canceledAt: null,
       pastDueSince: null,
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .where(eq(t.client.id, client.id));
   return client.id;
 }
 
@@ -243,9 +250,8 @@ async function handleSubscriptionUpsert(subscription) {
     return null;
   }
   const status = mapStripeStatus(subscription.status);
-  await prisma.client.update({
-    where: { id: client.id },
-    data: {
+  await db.update(t.client)
+    .set({
       stripeSubscriptionId: subscription.id,
       subscriptionStatus: status,
       subscriptionPlan: subscription.items?.data?.[0]?.price?.id || null,
@@ -253,22 +259,23 @@ async function handleSubscriptionUpsert(subscription) {
       trialEndsAt: tsToDate(subscription.trial_end),
       pastDueSince: status === 'past_due' ? (client.pastDueSince || new Date()) : null,
       canceledAt: status === 'canceled' ? (client.canceledAt || new Date()) : null,
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .where(eq(t.client.id, client.id));
   return client.id;
 }
 
 async function handleSubscriptionDeleted(subscription) {
   const client = await findClientByCustomerOrSubscription(subscription.customer, subscription.id);
   if (!client) return null;
-  await prisma.client.update({
-    where: { id: client.id },
-    data: {
+  await db.update(t.client)
+    .set({
       subscriptionStatus: 'canceled',
       canceledAt: new Date(),
       currentPeriodEnd: tsToDate(subscription.current_period_end) || client.currentPeriodEnd,
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .where(eq(t.client.id, client.id));
   return client.id;
 }
 
@@ -277,32 +284,34 @@ async function handleInvoicePaid(invoice) {
   if (!client) return null;
   // currentPeriodEnd quem ajusta é o customer.subscription.updated (Stripe
   // dispara em sequência) — aqui só status/pastDueSince.
-  await prisma.client.update({
-    where: { id: client.id },
-    data: {
+  await db.update(t.client)
+    .set({
       subscriptionStatus: 'active',
       pastDueSince: null,
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .where(eq(t.client.id, client.id));
   return client.id;
 }
 
 async function handleInvoiceFailed(invoice) {
   const client = await findClientByCustomerOrSubscription(invoice.customer, invoice.subscription);
   if (!client) return null;
-  await prisma.client.update({
-    where: { id: client.id },
-    data: {
+  await db.update(t.client)
+    .set({
       subscriptionStatus: 'past_due',
       pastDueSince: client.pastDueSince || new Date(),
-    },
-  });
+      updatedAt: new Date(),
+    })
+    .where(eq(t.client.id, client.id));
   return client.id;
 }
 
 async function findClientByCustomerId(customerId) {
   if (!customerId) return null;
-  return prisma.client.findFirst({ where: { stripeCustomerId: customerId } });
+  const [c] = await db.select().from(t.client)
+    .where(eq(t.client.stripeCustomerId, customerId)).limit(1);
+  return c || null;
 }
 
 // ─── Webhook endpoint ────────────────────────────────────────────────
@@ -331,7 +340,8 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
   }
 
   // 2) Idempotência — Stripe pode reenviar o mesmo event.id.
-  const already = await prisma.stripeEvent.findUnique({ where: { id: event.id } }).catch(() => null);
+  const [already] = await db.select().from(t.stripeEvent)
+    .where(eq(t.stripeEvent.id, event.id)).limit(1).catch(() => []);
   if (already) {
     return res.json({ received: true, deduped: true });
   }
@@ -400,21 +410,20 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 
   // 4) Marca o evento como processado (dedup futuro).
   try {
-    await prisma.stripeEvent.create({
-      data: {
-        id: event.id,
-        type: event.type,
-        clientId: affectedClientId,
-        payload: JSON.stringify(event).slice(0, 100000), // trunca payloads grandes
-      },
+    await db.insert(t.stripeEvent).values({
+      id: event.id,
+      type: event.type,
+      clientId: affectedClientId,
+      payload: JSON.stringify(event).slice(0, 100000), // trunca payloads grandes
     });
   } catch (err) {
-    // P2002 = race (outro worker já inseriu). Qualquer outro erro só loga.
-    if (err && err.code !== 'P2002') console.error('[stripe webhook] StripeEvent.create:', err.message);
+    // 23505 = unique_violation no Postgres/pg (race: outro worker já inseriu).
+    // Qualquer outro erro só loga.
+    if (err && err.code !== '23505') console.error('[stripe webhook] StripeEvent.create:', err.message);
   }
 
   // 5) Auditoria (best-effort, nunca quebra).
-  logAudit(prisma, {
+  logAudit({
     action: handled ? `stripe.${event.type}` : 'stripe.event.ignored',
     category: auditCategory,
     entityType: 'client',

@@ -17,11 +17,16 @@
 
 const express = require('express');
 const multer = require('multer');
-const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const {
+  eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray,
+  isNull, isNotNull, desc, asc, sql, count, getTableColumns,
+} = require('drizzle-orm');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ============================================================================
@@ -194,9 +199,9 @@ const parseCSV = (content) => {
 router.post('/upload/:bankAccountId', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Arquivo obrigatório' });
-    const account = await prisma.bankAccount.findFirst({
-      where: { id: req.params.bankAccountId, clientId: req.bpoClient.id },
-    });
+    const [account] = await db.select().from(t.bankAccount)
+      .where(and(eq(t.bankAccount.id, req.params.bankAccountId), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!account) return res.status(404).json({ error: 'Conta bancária não encontrada' });
 
     const content = req.file.buffer.toString('utf-8');
@@ -217,25 +222,24 @@ router.post('/upload/:bankAccountId', upload.single('file'), async (req, res) =>
 
     // Cria BankTransactions (idempotente via externalId quando OFX)
     const created = [];
-    for (const t of parsed) {
+    for (const trx of parsed) {
       // Se tem FITID, evita duplicar
-      if (t.externalId) {
-        const exists = await prisma.bankTransaction.findFirst({
-          where: { bankAccountId: account.id, externalId: t.externalId },
-        });
+      if (trx.externalId) {
+        const [exists] = await db.select().from(t.bankTransaction)
+          .where(and(eq(t.bankTransaction.bankAccountId, account.id), eq(t.bankTransaction.externalId, trx.externalId)))
+          .limit(1);
         if (exists) continue;
       }
-      const item = await prisma.bankTransaction.create({
-        data: {
-          bankAccountId: account.id,
-          externalId: t.externalId,
-          amount: t.amount,
-          date: new Date(t.date),
-          description: t.description,
-          type: t.type,
-          source,
-        },
-      });
+      const [item] = await db.insert(t.bankTransaction).values({
+        id: crypto.randomUUID(),
+        bankAccountId: account.id,
+        externalId: trx.externalId,
+        amount: trx.amount,
+        date: new Date(trx.date),
+        description: trx.description,
+        type: trx.type,
+        source,
+      }).returning();
       created.push(item);
     }
 
@@ -250,17 +254,20 @@ router.post('/upload/:bankAccountId', upload.single('file'), async (req, res) =>
 router.get('/pending', async (req, res) => {
   try {
     const { bankAccountId } = req.query;
-    const where = {
-      bankAccount: { clientId: req.bpoClient.id },
-      reconciledType: null,
-      ...(bankAccountId ? { bankAccountId } : {}),
-    };
-    const items = await prisma.bankTransaction.findMany({
-      where,
-      orderBy: { date: 'desc' },
-      take: 100,
-      include: { bankAccount: { select: { bankName: true, account: true } } },
-    });
+    const conds = [
+      eq(t.bankAccount.clientId, req.bpoClient.id),
+      isNull(t.bankTransaction.reconciledType),
+    ];
+    if (bankAccountId) conds.push(eq(t.bankTransaction.bankAccountId, bankAccountId));
+
+    const items = await db.select({
+      ...getTableColumns(t.bankTransaction),
+      bankAccount: { bankName: t.bankAccount.bankName, account: t.bankAccount.account },
+    }).from(t.bankTransaction)
+      .innerJoin(t.bankAccount, eq(t.bankTransaction.bankAccountId, t.bankAccount.id))
+      .where(and(...conds))
+      .orderBy(desc(t.bankTransaction.date))
+      .limit(100);
     res.json({ items, total: items.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -270,16 +277,21 @@ router.get('/pending', async (req, res) => {
 // === Sugestões de match (regras + valor + data) ===
 router.get('/suggest/:transactionId', async (req, res) => {
   try {
-    const tx = await prisma.bankTransaction.findFirst({
-      where: { id: req.params.transactionId, bankAccount: { clientId: req.bpoClient.id } },
-    });
+    const [tx] = await db.select({ ...getTableColumns(t.bankTransaction) })
+      .from(t.bankTransaction)
+      .innerJoin(t.bankAccount, eq(t.bankTransaction.bankAccountId, t.bankAccount.id))
+      .where(and(eq(t.bankTransaction.id, req.params.transactionId), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!tx) return res.status(404).json({ error: 'Transação não encontrada' });
+
+    // tx.date vem como string (mode: 'string'); normaliza pra Date p/ aritmética.
+    const txDate = new Date(tx.date);
 
     // Janelas LARGAS pra trazer pool grande, score fino classifica:
     // - Data: ±90 dias antes / ±30 dias depois (pagamento atrasado é comum)
     // - Valor: ±50% (pra pegar parciais e arredondamentos)
-    const fromDate = new Date(tx.date.getTime() - 90 * 86400000);
-    const toDate = new Date(tx.date.getTime() + 30 * 86400000);
+    const fromDate = new Date(txDate.getTime() - 90 * 86400000);
+    const toDate = new Date(txDate.getTime() + 30 * 86400000);
     const amountNum = Number(tx.amount);
 
     const suggestions = [];
@@ -312,7 +324,7 @@ router.get('/suggest/:transactionId', async (req, res) => {
         else if (hits === 1) s += 5;
       }
       // Proximidade de data: ±3 dias +15, ±7 dias +10, ±15 dias +5
-      const daysDiff = Math.abs((new Date(dueDate).getTime() - tx.date.getTime()) / 86400000);
+      const daysDiff = Math.abs((new Date(dueDate).getTime() - txDate.getTime()) / 86400000);
       if (daysDiff <= 3) s += 15;
       else if (daysDiff <= 7) s += 10;
       else if (daysDiff <= 15) s += 5;
@@ -328,35 +340,38 @@ router.get('/suggest/:transactionId', async (req, res) => {
 
     if (tx.type === 'debit') {
       // Pool 1: valor próximo (±50%) na janela de data
-      const includes = {
-        supplier: { select: { name: true } },
-        recurrence: { select: { occurrencesCount: true } },
+      const payableSelect = {
+        ...getTableColumns(t.payable),
+        supplier: { name: t.supplier.name },
+        recurrence: { occurrencesCount: t.recurrence.occurrencesCount },
       };
-      const byValue = await prisma.payable.findMany({
-        where: {
-          clientId: req.bpoClient.id,
-          status: { in: ['pending', 'scheduled', 'paid_partial'] },
-          dueDate: { gte: fromDate, lte: toDate },
-          remainingAmount: { gte: amountNum * 0.5, lte: amountNum * 1.5 },
-        },
-        include: includes,
-        take: 50,
-      });
+      const byValue = await db.select(payableSelect).from(t.payable)
+        .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+        .leftJoin(t.recurrence, eq(t.payable.recurrenceId, t.recurrence.id))
+        .where(and(
+          eq(t.payable.clientId, req.bpoClient.id),
+          inArray(t.payable.status, ['pending', 'scheduled', 'paid_partial']),
+          gte(t.payable.dueDate, fromDate),
+          lte(t.payable.dueDate, toDate),
+          gte(t.payable.remainingAmount, amountNum * 0.5),
+          lte(t.payable.remainingAmount, amountNum * 1.5),
+        ))
+        .limit(50);
       // Pool 2: fornecedor cujo nome matcha algum token da descrição da transação
       // (sem filtro de valor — score vai punir se valor distante)
-      const byName = txTokens.length > 0 ? await prisma.payable.findMany({
-        where: {
-          clientId: req.bpoClient.id,
-          status: { in: ['pending', 'scheduled', 'paid_partial'] },
-          OR: [
-            { supplier: { name: { contains: txTokens[0], mode: 'insensitive' } } },
-            ...(txTokens[1] ? [{ supplier: { name: { contains: txTokens[1], mode: 'insensitive' } } }] : []),
-            { description: { contains: txTokens[0], mode: 'insensitive' } },
-          ],
-        },
-        include: includes,
-        take: 30,
-      }) : [];
+      const byName = txTokens.length > 0 ? await db.select(payableSelect).from(t.payable)
+        .leftJoin(t.supplier, eq(t.payable.supplierId, t.supplier.id))
+        .leftJoin(t.recurrence, eq(t.payable.recurrenceId, t.recurrence.id))
+        .where(and(
+          eq(t.payable.clientId, req.bpoClient.id),
+          inArray(t.payable.status, ['pending', 'scheduled', 'paid_partial']),
+          or(
+            sql`${t.supplier.name} ILIKE ${'%' + txTokens[0] + '%'}`,
+            ...(txTokens[1] ? [sql`${t.supplier.name} ILIKE ${'%' + txTokens[1] + '%'}`] : []),
+            sql`${t.payable.description} ILIKE ${'%' + txTokens[0] + '%'}`,
+          ),
+        ))
+        .limit(30) : [];
 
       [...byValue, ...byName].forEach((c) => {
         if (seenIds.has(c.id)) return;
@@ -382,30 +397,33 @@ router.get('/suggest/:transactionId', async (req, res) => {
         });
       });
     } else {
-      const includesR = { recurrence: { select: { occurrencesCount: true } } };
-      const byValue = await prisma.receivable.findMany({
-        where: {
-          clientId: req.bpoClient.id,
-          status: { in: ['pending', 'received_partial'] },
-          dueDate: { gte: fromDate, lte: toDate },
-          remainingAmount: { gte: amountNum * 0.5, lte: amountNum * 1.5 },
-        },
-        include: includesR,
-        take: 50,
-      });
-      const byName = txTokens.length > 0 ? await prisma.receivable.findMany({
-        where: {
-          clientId: req.bpoClient.id,
-          status: { in: ['pending', 'received_partial'] },
-          OR: [
-            { payerName: { contains: txTokens[0], mode: 'insensitive' } },
-            ...(txTokens[1] ? [{ payerName: { contains: txTokens[1], mode: 'insensitive' } }] : []),
-            { description: { contains: txTokens[0], mode: 'insensitive' } },
-          ],
-        },
-        include: includesR,
-        take: 30,
-      }) : [];
+      const receivableSelect = {
+        ...getTableColumns(t.receivable),
+        recurrence: { occurrencesCount: t.recurrence.occurrencesCount },
+      };
+      const byValue = await db.select(receivableSelect).from(t.receivable)
+        .leftJoin(t.recurrence, eq(t.receivable.recurrenceId, t.recurrence.id))
+        .where(and(
+          eq(t.receivable.clientId, req.bpoClient.id),
+          inArray(t.receivable.status, ['pending', 'received_partial']),
+          gte(t.receivable.dueDate, fromDate),
+          lte(t.receivable.dueDate, toDate),
+          gte(t.receivable.remainingAmount, amountNum * 0.5),
+          lte(t.receivable.remainingAmount, amountNum * 1.5),
+        ))
+        .limit(50);
+      const byName = txTokens.length > 0 ? await db.select(receivableSelect).from(t.receivable)
+        .leftJoin(t.recurrence, eq(t.receivable.recurrenceId, t.recurrence.id))
+        .where(and(
+          eq(t.receivable.clientId, req.bpoClient.id),
+          inArray(t.receivable.status, ['pending', 'received_partial']),
+          or(
+            sql`${t.receivable.payerName} ILIKE ${'%' + txTokens[0] + '%'}`,
+            ...(txTokens[1] ? [sql`${t.receivable.payerName} ILIKE ${'%' + txTokens[1] + '%'}`] : []),
+            sql`${t.receivable.description} ILIKE ${'%' + txTokens[0] + '%'}`,
+          ),
+        ))
+        .limit(30) : [];
 
       [...byValue, ...byName].forEach((c) => {
         if (seenIds.has(c.id)) return;
@@ -435,9 +453,8 @@ router.get('/suggest/:transactionId', async (req, res) => {
     suggestions.splice(10);
 
     // Aplica regras de conciliação (palavra-chave)
-    const rules = await prisma.reconciliationRule.findMany({
-      where: { clientId: req.bpoClient.id, active: true },
-    });
+    const rules = await db.select().from(t.reconciliationRule)
+      .where(and(eq(t.reconciliationRule.clientId, req.bpoClient.id), eq(t.reconciliationRule.active, true)));
     const matchedRules = rules.filter((r) => {
       const desc = tx.description.toLowerCase();
       const kw = r.keyword.toLowerCase();
@@ -507,9 +524,11 @@ router.post('/:transactionId/reconcile', async (req, res) => {
       return res.status(400).json({ error: 'type inválido' });
     }
 
-    const tx = await prisma.bankTransaction.findFirst({
-      where: { id: req.params.transactionId, bankAccount: { clientId: req.bpoClient.id } },
-    });
+    const [tx] = await db.select({ ...getTableColumns(t.bankTransaction) })
+      .from(t.bankTransaction)
+      .innerJoin(t.bankAccount, eq(t.bankTransaction.bankAccountId, t.bankAccount.id))
+      .where(and(eq(t.bankTransaction.id, req.params.transactionId), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!tx) return res.status(404).json({ error: 'Transação não encontrada' });
 
     // Cross-tenant guard: o id do payable/receivable do body TEM que pertencer
@@ -517,8 +536,10 @@ router.post('/:transactionId/reconcile', async (req, res) => {
     // sem (linha 530 usa o `id` direto em reconciledId).
     if (type === 'payable' || type === 'receivable') {
       const targetClientId = type === 'payable'
-        ? (await prisma.payable.findFirst({ where: { id, clientId: req.bpoClient.id }, select: { clientId: true, remainingAmount: true } }))
-        : (await prisma.receivable.findFirst({ where: { id, clientId: req.bpoClient.id }, select: { clientId: true, remainingAmount: true } }));
+        ? (await db.select({ clientId: t.payable.clientId, remainingAmount: t.payable.remainingAmount }).from(t.payable)
+            .where(and(eq(t.payable.id, id), eq(t.payable.clientId, req.bpoClient.id))).limit(1))[0]
+        : (await db.select({ clientId: t.receivable.clientId, remainingAmount: t.receivable.remainingAmount }).from(t.receivable)
+            .where(and(eq(t.receivable.id, id), eq(t.receivable.clientId, req.bpoClient.id))).limit(1))[0];
       if (!targetClientId) {
         return res.status(404).json({ error: `${type} não encontrado` });
       }
@@ -538,15 +559,16 @@ router.post('/:transactionId/reconcile', async (req, res) => {
       }
     }
 
-    const result = await prisma.$transaction(async (txdb) => {
+    const result = await db.transaction(async (txdb) => {
       // Marca como conciliada
-      const updated = await txdb.bankTransaction.update({
-        where: { id: tx.id },
-        data: { reconciledType: type, reconciledId: id, reconciledAt: new Date() },
-      });
+      const [updated] = await txdb.update(t.bankTransaction)
+        .set({ reconciledType: type, reconciledId: id, reconciledAt: new Date() })
+        .where(eq(t.bankTransaction.id, tx.id))
+        .returning();
 
       if (createPayment && (type === 'payable' || type === 'receivable')) {
         const paymentData = {
+          id: crypto.randomUUID(),
           amount: Number(tx.amount),
           paidAt: tx.date,
           bankAccountId: tx.bankAccountId,
@@ -554,25 +576,23 @@ router.post('/:transactionId/reconcile', async (req, res) => {
         };
         if (type === 'payable') paymentData.payableId = id;
         else paymentData.receivableId = id;
-        await txdb.paymentTransaction.create({ data: paymentData });
+        await txdb.insert(t.paymentTransaction).values(paymentData);
 
         if (type === 'payable') {
-          const p = await txdb.payable.findUnique({ where: { id } });
+          const [p] = await txdb.select().from(t.payable).where(eq(t.payable.id, id)).limit(1);
           if (p) {
             const newRemaining = Math.max(0, Number(p.remainingAmount) - Number(tx.amount));
-            await txdb.payable.update({
-              where: { id },
-              data: { remainingAmount: newRemaining, status: newRemaining >= 0.01 ? 'paid_partial' : 'paid' },
-            });
+            await txdb.update(t.payable)
+              .set({ remainingAmount: newRemaining, status: newRemaining >= 0.01 ? 'paid_partial' : 'paid', updatedAt: new Date() })
+              .where(eq(t.payable.id, id));
           }
         } else {
-          const r = await txdb.receivable.findUnique({ where: { id } });
+          const [r] = await txdb.select().from(t.receivable).where(eq(t.receivable.id, id)).limit(1);
           if (r) {
             const newRemaining = Math.max(0, Number(r.remainingAmount) - Number(tx.amount));
-            await txdb.receivable.update({
-              where: { id },
-              data: { remainingAmount: newRemaining, status: newRemaining >= 0.01 ? 'received_partial' : 'received' },
-            });
+            await txdb.update(t.receivable)
+              .set({ remainingAmount: newRemaining, status: newRemaining >= 0.01 ? 'received_partial' : 'received', updatedAt: new Date() })
+              .where(eq(t.receivable.id, id));
           }
         }
       }
@@ -592,15 +612,17 @@ router.post('/:transactionId/unreconcile', async (req, res) => {
   try {
     // BankTransaction não tem clientId direto — valida o tenant pela cadeia
     // bankAccount.clientId (mesmo padrão de /reconcile e /suggest).
-    const tx = await prisma.bankTransaction.findFirst({
-      where: { id: req.params.transactionId, bankAccount: { clientId: req.bpoClient.id } },
-    });
+    const [tx] = await db.select({ ...getTableColumns(t.bankTransaction) })
+      .from(t.bankTransaction)
+      .innerJoin(t.bankAccount, eq(t.bankTransaction.bankAccountId, t.bankAccount.id))
+      .where(and(eq(t.bankTransaction.id, req.params.transactionId), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!tx) return res.status(404).json({ error: 'Registro não encontrado' });
 
-    const updated = await prisma.bankTransaction.update({
-      where: { id: tx.id },
-      data: { reconciledType: null, reconciledId: null, reconciledAt: null },
-    });
+    const [updated] = await db.update(t.bankTransaction)
+      .set({ reconciledType: null, reconciledId: null, reconciledAt: null })
+      .where(eq(t.bankTransaction.id, tx.id))
+      .returning();
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -610,10 +632,9 @@ router.post('/:transactionId/unreconcile', async (req, res) => {
 // === Regras de conciliação ===
 router.get('/rules', async (req, res) => {
   try {
-    const items = await prisma.reconciliationRule.findMany({
-      where: { clientId: req.bpoClient.id },
-      orderBy: { createdAt: 'desc' },
-    });
+    const items = await db.select().from(t.reconciliationRule)
+      .where(eq(t.reconciliationRule.clientId, req.bpoClient.id))
+      .orderBy(desc(t.reconciliationRule.createdAt));
     res.json({ items });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -624,17 +645,17 @@ router.post('/rules', async (req, res) => {
   try {
     const { keyword, matchType, supplierId, payerName, categoryId, bankAccountId } = req.body;
     if (!keyword) return res.status(400).json({ error: 'keyword obrigatório' });
-    const item = await prisma.reconciliationRule.create({
-      data: {
-        clientId: req.bpoClient.id,
-        keyword: keyword.trim(),
-        matchType: matchType || 'contains',
-        supplierId: supplierId || null,
-        payerName: payerName || null,
-        categoryId: categoryId || null,
-        bankAccountId: bankAccountId || null,
-      },
-    });
+    const [item] = await db.insert(t.reconciliationRule).values({
+      id: crypto.randomUUID(),
+      clientId: req.bpoClient.id,
+      keyword: keyword.trim(),
+      matchType: matchType || 'contains',
+      supplierId: supplierId || null,
+      payerName: payerName || null,
+      categoryId: categoryId || null,
+      bankAccountId: bankAccountId || null,
+      updatedAt: new Date(),
+    }).returning();
     res.status(201).json(item);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -645,15 +666,14 @@ router.delete('/rules/:id', async (req, res) => {
   try {
     // Valida o tenant antes (IDOR) e usa soft delete: ReconciliationRule
     // marca inatividade por `active = false`, delete físico é proibido.
-    const rule = await prisma.reconciliationRule.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [rule] = await db.select().from(t.reconciliationRule)
+      .where(and(eq(t.reconciliationRule.id, req.params.id), eq(t.reconciliationRule.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!rule) return res.status(404).json({ error: 'Registro não encontrado' });
 
-    await prisma.reconciliationRule.update({
-      where: { id: rule.id },
-      data: { active: false },
-    });
+    await db.update(t.reconciliationRule)
+      .set({ active: false, updatedAt: new Date() })
+      .where(eq(t.reconciliationRule.id, rule.id));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

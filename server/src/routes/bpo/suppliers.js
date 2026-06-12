@@ -11,11 +11,13 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, or, ne, gt, gte, lt, lte, inArray, notInArray, isNull, isNotNull, desc, asc, sql, count, getTableColumns } = require('drizzle-orm');
+const crypto = require('crypto');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 // Aplica middleware em tudo
 router.use(requireBpoOperator);
@@ -31,32 +33,45 @@ const isValidCnpj = (cnpj) => cleanCnpj(cnpj).length === 14;
 router.get('/', async (req, res) => {
   try {
     const { search, page = 1, pageSize = 50, includeInactive } = req.query;
-    const where = {
-      clientId: req.bpoClient.id,
-      // Soft delete: oculta inativos por padrão (sobrepor com ?includeInactive=true)
-      ...(includeInactive === 'true' ? {} : { active: true }),
-      ...(search ? {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { cnpj: { contains: cleanCnpj(search) } },
-        ]
-      } : {}),
-    };
-    const [items, total] = await Promise.all([
-      prisma.supplier.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: parseInt(pageSize, 10),
-        orderBy: { name: 'asc' },
-        include: {
-          defaultCategory: { select: { id: true, name: true } },
-          defaultBankAccount: { select: { id: true, bankName: true, account: true } },
-          _count: { select: { payables: true } },
-        },
-      }),
-      prisma.supplier.count({ where }),
+    const conditions = [eq(t.supplier.clientId, req.bpoClient.id)];
+    // Soft delete: oculta inativos por padrão (sobrepor com ?includeInactive=true)
+    if (includeInactive !== 'true') conditions.push(eq(t.supplier.active, true));
+    if (search) {
+      conditions.push(or(
+        sql`${t.supplier.name} ILIKE ${'%' + search + '%'}`,
+        sql`${t.supplier.cnpj} ILIKE ${'%' + cleanCnpj(search) + '%'}`,
+      ));
+    }
+    const where = and(...conditions);
+
+    const take = parseInt(pageSize, 10);
+    const skip = (page - 1) * pageSize;
+
+    const [rows, [totalRow]] = await Promise.all([
+      db.select({
+        ...getTableColumns(t.supplier),
+        defaultCategory: { id: t.financialCategory.id, name: t.financialCategory.name },
+        defaultBankAccount: { id: t.bankAccount.id, bankName: t.bankAccount.bankName, account: t.bankAccount.account },
+      })
+        .from(t.supplier)
+        .leftJoin(t.financialCategory, eq(t.supplier.defaultCategoryId, t.financialCategory.id))
+        .leftJoin(t.bankAccount, eq(t.supplier.defaultBankAccountId, t.bankAccount.id))
+        .where(where)
+        .orderBy(asc(t.supplier.name))
+        .limit(take)
+        .offset(skip),
+      db.select({ n: count() }).from(t.supplier).where(where),
     ]);
-    res.json({ items, total, page: parseInt(page, 10), pageSize: parseInt(pageSize, 10) });
+
+    // _count: { payables: true } — contagem de payables por fornecedor
+    const items = await Promise.all(rows.map(async (row) => {
+      const [payCount] = await db.select({ n: count() })
+        .from(t.payable)
+        .where(eq(t.payable.supplierId, row.id));
+      return { ...row, _count: { payables: payCount.n } };
+    }));
+
+    res.json({ items, total: totalRow.n, page: parseInt(page, 10), pageSize: parseInt(pageSize, 10) });
   } catch (err) {
     console.error('[bpo suppliers list]', err);
     res.status(500).json({ error: 'Erro ao listar fornecedores' });
@@ -66,20 +81,37 @@ router.get('/', async (req, res) => {
 // GET single
 router.get('/:id', async (req, res) => {
   try {
-    const supplier = await prisma.supplier.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: {
-        defaultCategory: true,
-        defaultBankAccount: true,
-        payables: {
-          orderBy: { dueDate: 'desc' },
-          take: 10,
-          select: { id: true, amount: true, dueDate: true, status: true, invoiceNumber: true },
-        },
-      },
-    });
+    const [supplier] = await db.select()
+      .from(t.supplier)
+      .where(and(eq(t.supplier.id, req.params.id), eq(t.supplier.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!supplier) return res.status(404).json({ error: 'Fornecedor não encontrado' });
-    res.json(supplier);
+
+    // Relations
+    const [defaultCategory] = supplier.defaultCategoryId
+      ? await db.select().from(t.financialCategory).where(eq(t.financialCategory.id, supplier.defaultCategoryId)).limit(1)
+      : [];
+    const [defaultBankAccount] = supplier.defaultBankAccountId
+      ? await db.select().from(t.bankAccount).where(eq(t.bankAccount.id, supplier.defaultBankAccountId)).limit(1)
+      : [];
+    const payables = await db.select({
+      id: t.payable.id,
+      amount: t.payable.amount,
+      dueDate: t.payable.dueDate,
+      status: t.payable.status,
+      invoiceNumber: t.payable.invoiceNumber,
+    })
+      .from(t.payable)
+      .where(eq(t.payable.supplierId, supplier.id))
+      .orderBy(desc(t.payable.dueDate))
+      .limit(10);
+
+    res.json({
+      ...supplier,
+      defaultCategory: defaultCategory || null,
+      defaultBankAccount: defaultBankAccount || null,
+      payables,
+    });
   } catch (err) {
     console.error('[bpo suppliers get]', err);
     res.status(500).json({ error: 'Erro ao buscar fornecedor' });
@@ -94,27 +126,28 @@ router.post('/', async (req, res) => {
     if (!isValidCnpj(cnpj)) return res.status(400).json({ error: 'CNPJ inválido (precisa ter 14 dígitos)' });
 
     // Checa duplicidade
-    const existing = await prisma.supplier.findUnique({
-      where: { clientId_cnpj: { clientId: req.bpoClient.id, cnpj: cleanCnpj(cnpj) } },
-    });
+    const [existing] = await db.select()
+      .from(t.supplier)
+      .where(and(eq(t.supplier.clientId, req.bpoClient.id), eq(t.supplier.cnpj, cleanCnpj(cnpj))))
+      .limit(1);
     if (existing) return res.status(409).json({ error: 'CNPJ já cadastrado pra este cliente' });
 
-    const supplier = await prisma.supplier.create({
-      data: {
-        clientId: req.bpoClient.id,
-        cnpj: cleanCnpj(cnpj),
-        name: name.trim(),
-        email: email?.trim() || null,
-        phone: phone?.trim() || null,
-        pixKey: pixKey?.trim() || null,
-        bankCode: bankCode || null,
-        agency: agency || null,
-        account: account || null,
-        defaultCategoryId: defaultCategoryId || null,
-        defaultBankAccountId: defaultBankAccountId || null,
-        notes: notes?.trim() || null,
-      },
-    });
+    const [supplier] = await db.insert(t.supplier).values({
+      id: crypto.randomUUID(),
+      clientId: req.bpoClient.id,
+      cnpj: cleanCnpj(cnpj),
+      name: name.trim(),
+      email: email?.trim() || null,
+      phone: phone?.trim() || null,
+      pixKey: pixKey?.trim() || null,
+      bankCode: bankCode || null,
+      agency: agency || null,
+      account: account || null,
+      defaultCategoryId: defaultCategoryId || null,
+      defaultBankAccountId: defaultBankAccountId || null,
+      notes: notes?.trim() || null,
+      updatedAt: new Date().toISOString(),
+    }).returning();
     res.status(201).json(supplier);
   } catch (err) {
     console.error('[bpo suppliers create]', err);
@@ -125,9 +158,10 @@ router.post('/', async (req, res) => {
 // UPDATE
 router.put('/:id', async (req, res) => {
   try {
-    const existing = await prisma.supplier.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select()
+      .from(t.supplier)
+      .where(and(eq(t.supplier.id, req.params.id), eq(t.supplier.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Fornecedor não encontrado' });
 
     const { cnpj, name, email, phone, pixKey, bankCode, agency, account, defaultCategoryId, defaultBankAccountId, notes } = req.body;
@@ -135,15 +169,15 @@ router.put('/:id', async (req, res) => {
     // Se mudou CNPJ, valida + checa duplicidade
     if (cnpj && cleanCnpj(cnpj) !== existing.cnpj) {
       if (!isValidCnpj(cnpj)) return res.status(400).json({ error: 'CNPJ inválido' });
-      const dup = await prisma.supplier.findUnique({
-        where: { clientId_cnpj: { clientId: req.bpoClient.id, cnpj: cleanCnpj(cnpj) } },
-      });
+      const [dup] = await db.select()
+        .from(t.supplier)
+        .where(and(eq(t.supplier.clientId, req.bpoClient.id), eq(t.supplier.cnpj, cleanCnpj(cnpj))))
+        .limit(1);
       if (dup) return res.status(409).json({ error: 'CNPJ já cadastrado' });
     }
 
-    const supplier = await prisma.supplier.update({
-      where: { id: req.params.id },
-      data: {
+    const [supplier] = await db.update(t.supplier)
+      .set({
         ...(cnpj !== undefined ? { cnpj: cleanCnpj(cnpj) } : {}),
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(email !== undefined ? { email: email?.trim() || null } : {}),
@@ -155,8 +189,10 @@ router.put('/:id', async (req, res) => {
         ...(defaultCategoryId !== undefined ? { defaultCategoryId: defaultCategoryId || null } : {}),
         ...(defaultBankAccountId !== undefined ? { defaultBankAccountId: defaultBankAccountId || null } : {}),
         ...(notes !== undefined ? { notes: notes?.trim() || null } : {}),
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(t.supplier.id, req.params.id))
+      .returning();
     res.json(supplier);
   } catch (err) {
     console.error('[bpo suppliers update]', err);
@@ -167,16 +203,16 @@ router.put('/:id', async (req, res) => {
 // DELETE (soft delete: regra do projeto — delete físico é proibido)
 router.delete('/:id', async (req, res) => {
   try {
-    const existing = await prisma.supplier.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db.select()
+      .from(t.supplier)
+      .where(and(eq(t.supplier.id, req.params.id), eq(t.supplier.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Fornecedor não encontrado' });
 
     // Soft delete sempre — marca active=false, preserva histórico e FKs com payables
-    await prisma.supplier.update({
-      where: { id: req.params.id },
-      data: { active: false },
-    });
+    await db.update(t.supplier)
+      .set({ active: false, updatedAt: new Date() })
+      .where(eq(t.supplier.id, req.params.id));
     res.json({ success: true, softDeleted: true });
   } catch (err) {
     console.error('[bpo suppliers delete]', err);

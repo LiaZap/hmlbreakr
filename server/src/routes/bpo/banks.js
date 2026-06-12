@@ -4,11 +4,13 @@
  */
 
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const { db } = require('../../db/client');
+const t = require('../../db/schema-bpo');
+const { eq, and, desc, count } = require('drizzle-orm');
+const crypto = require('crypto');
 const { requireBpoClient, requireBpoOperator } = require('./middleware');
 
 const router = express.Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 router.use(requireBpoOperator);
 router.use(requireBpoClient);
@@ -16,11 +18,23 @@ router.use(requireBpoClient);
 // LIST
 router.get('/', async (req, res) => {
   try {
-    const items = await prisma.bankAccount.findMany({
-      where: { clientId: req.bpoClient.id, active: true },
-      orderBy: { bankName: 'asc' },
-      include: { _count: { select: { payments: true } } },
-    });
+    const accounts = await db
+      .select()
+      .from(t.bankAccount)
+      .where(and(eq(t.bankAccount.clientId, req.bpoClient.id), eq(t.bankAccount.active, true)))
+      .orderBy(t.bankAccount.bankName);
+
+    // _count: { payments: true } — conta PaymentTransaction por bankAccountId
+    const items = await Promise.all(
+      accounts.map(async (acc) => {
+        const [c] = await db
+          .select({ n: count() })
+          .from(t.paymentTransaction)
+          .where(eq(t.paymentTransaction.bankAccountId, acc.id));
+        return { ...acc, _count: { payments: Number(c.n) } };
+      })
+    );
+
     res.json({ items, total: items.length });
   } catch (err) {
     console.error('[bpo banks list]', err);
@@ -31,14 +45,22 @@ router.get('/', async (req, res) => {
 // GET single
 router.get('/:id', async (req, res) => {
   try {
-    const item = await prisma.bankAccount.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-      include: {
-        payments: { take: 20, orderBy: { paidAt: 'desc' } },
-      },
-    });
+    const [item] = await db
+      .select()
+      .from(t.bankAccount)
+      .where(and(eq(t.bankAccount.id, req.params.id), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!item) return res.status(404).json({ error: 'Conta não encontrada' });
-    res.json(item);
+
+    // include: { payments: { take: 20, orderBy: { paidAt: 'desc' } } }
+    const payments = await db
+      .select()
+      .from(t.paymentTransaction)
+      .where(eq(t.paymentTransaction.bankAccountId, item.id))
+      .orderBy(desc(t.paymentTransaction.paidAt))
+      .limit(20);
+
+    res.json({ ...item, payments });
   } catch (err) {
     console.error('[bpo banks get]', err);
     res.status(500).json({ error: 'Erro ao buscar conta' });
@@ -52,8 +74,10 @@ router.post('/', async (req, res) => {
     if (!bankCode || !bankName || !agency || !account) {
       return res.status(400).json({ error: 'bankCode, bankName, agency e account são obrigatórios' });
     }
-    const item = await prisma.bankAccount.create({
-      data: {
+    const [item] = await db
+      .insert(t.bankAccount)
+      .values({
+        id: crypto.randomUUID(),
         clientId: req.bpoClient.id,
         bankCode: String(bankCode).trim(),
         bankName: String(bankName).trim(),
@@ -62,8 +86,9 @@ router.post('/', async (req, res) => {
         type: type || 'corrente',
         currentBalance: currentBalance ? parseFloat(currentBalance) : 0,
         isManual: true,
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .returning();
     res.status(201).json(item);
   } catch (err) {
     console.error('[bpo banks create]', err);
@@ -74,15 +99,17 @@ router.post('/', async (req, res) => {
 // UPDATE
 router.put('/:id', async (req, res) => {
   try {
-    const existing = await prisma.bankAccount.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db
+      .select()
+      .from(t.bankAccount)
+      .where(and(eq(t.bankAccount.id, req.params.id), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Conta não encontrada' });
 
     const { bankCode, bankName, agency, account, type, currentBalance, active } = req.body;
-    const item = await prisma.bankAccount.update({
-      where: { id: req.params.id },
-      data: {
+    const [item] = await db
+      .update(t.bankAccount)
+      .set({
         ...(bankCode !== undefined ? { bankCode: String(bankCode).trim() } : {}),
         ...(bankName !== undefined ? { bankName: String(bankName).trim() } : {}),
         ...(agency !== undefined ? { agency: String(agency).trim() } : {}),
@@ -90,8 +117,10 @@ router.put('/:id', async (req, res) => {
         ...(type !== undefined ? { type } : {}),
         ...(currentBalance !== undefined ? { currentBalance: parseFloat(currentBalance) || 0 } : {}),
         ...(active !== undefined ? { active: !!active } : {}),
-      },
-    });
+        updatedAt: new Date(),
+      })
+      .where(eq(t.bankAccount.id, req.params.id))
+      .returning();
     res.json(item);
   } catch (err) {
     console.error('[bpo banks update]', err);
@@ -102,16 +131,18 @@ router.put('/:id', async (req, res) => {
 // DELETE (soft delete: regra do projeto — delete físico é proibido)
 router.delete('/:id', async (req, res) => {
   try {
-    const existing = await prisma.bankAccount.findFirst({
-      where: { id: req.params.id, clientId: req.bpoClient.id },
-    });
+    const [existing] = await db
+      .select()
+      .from(t.bankAccount)
+      .where(and(eq(t.bankAccount.id, req.params.id), eq(t.bankAccount.clientId, req.bpoClient.id)))
+      .limit(1);
     if (!existing) return res.status(404).json({ error: 'Conta não encontrada' });
 
     // Soft delete sempre — marca active=false, preserva histórico e FKs
-    await prisma.bankAccount.update({
-      where: { id: req.params.id },
-      data: { active: false },
-    });
+    await db
+      .update(t.bankAccount)
+      .set({ active: false, updatedAt: new Date() })
+      .where(eq(t.bankAccount.id, req.params.id));
     res.json({ success: true, softDeleted: true });
   } catch (err) {
     console.error('[bpo banks delete]', err);
