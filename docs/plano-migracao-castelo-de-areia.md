@@ -1,0 +1,271 @@
+# Plano de Migração — Tirar o "castelo de areia" (JSON) de produção
+
+> **Status:** proposta (não executada em produção).
+> **Branch:** `refactor/json-to-tables`.
+> **Guardrail absoluto deste plano:** nada é deletado de nenhum banco; toda
+> validação roda numa **cópia local** espelhada da produção; a produção atual
+> (blob `Client.data` + Prisma) continua sendo a fonte da verdade até o corte
+> final, com o blob mantido como rede de segurança mesmo depois.
+>
+> Complementa: [`refactor-json-para-tabelas.md`](./refactor-json-para-tabelas.md)
+> (o "como") e [`auditoria-persistencia.md`](./auditoria-persistencia.md) (o
+> "o que está onde hoje"). Este documento responde **duas perguntas**:
+> 1. As tabelas foram todas criadas e estão conectadas corretamente? (cap. 2–4)
+> 2. Qual a melhor forma de migrar sem sentir impacto? (cap. 5–8)
+
+---
+
+## 1. TL;DR
+
+- O **núcleo** (insumos → fichas → itens → módulos → opções; menu; faturamento)
+  está **bem modelado** e já foi backfilled e reconciliado no local (39 clientes,
+  0 divergências de contagem e de faturamento). **A espinha dorsal está pronta.**
+- Mas a migração **ainda é "lossy"** e tem **5 defeitos de relacionamento** que
+  precisam ser corrigidos **antes** de ligar o dual-write (F2). Corrigir agora é
+  barato (ninguém lê as tabelas novas ainda); corrigir depois do corte é caro.
+- A melhor forma de migrar com baixo impacto é **strangler-fig por domínio, com
+  feature flag por cliente**, reusando o padrão que **já existe e funciona**:
+  `onboardingSync.js` (blob → tabelas, idempotente, não-destrutivo). O blob nunca
+  é apagado — vira backup vivo.
+
+**Veredito da pergunta "faltou criar tabela?":** faltam **2 tabelas**
+(`Category`, e um lar para o **perfil do dono/usuário**) e **4 ligações**
+(Employee↔BpoEmployee, Partner↔BpoPartner, Marketplace/CardMachine↔PaymentMethod,
+MenuItem→TechnicalSheet obrigatório?). Além disso, faltam **colunas** em
+`TechnicalSheet` e `Ingredient` (receituário e unidade de compra) — sem elas a
+normalização perde dados.
+
+---
+
+## 2. Tabelas criadas — inventário e veredito
+
+17 tabelas Drizzle, em 2 migrações. Drizzle é dono só delas; Prisma continua dono
+de `Client`, `Payable`, `BpoEmployee`, `PaymentMethod`, etc.
+
+| # | Tabela | Migração | Origem no blob | Veredito |
+|---|--------|----------|----------------|----------|
+| 1 | `Ingredient` | 0000 | `operational.insumos[]` | ✅ criada — ⚠️ faltam colunas (`packUnit`, `yield`, `isPrepared`) |
+| 2 | `TechnicalSheet` | 0000 | `operational.fichas[]` | ✅ criada — ⚠️ faltam colunas do receituário |
+| 3 | `TechnicalSheetItem` | 0000 | `fichas[].ingredients[]` | ✅ relação interna correta |
+| 4 | `SheetModule` | 0000 | `fichas[].modules[]` | ✅ correta |
+| 5 | `SheetModuleOption` | 0000 | `modules[].options[]` | ✅ correta (composição via `linkedSheetId`) |
+| 6 | `MenuItem` | 0000 | `menuEngineering[]` | ✅ criada — ⚠️ link com ficha é opcional |
+| 7 | `RevenueEntry` | 0000 | `revenue_history` | ✅ correta (unique client+ano+mês) |
+| 8 | `DailyRevenue` | 0000 | `daily_revenue` | ✅ correta (unique client+data) |
+| 9 | `CompanyProfile` | 0001 | `identity`/`location_costs` | ✅ 1:1 com Client — ⚠️ perde logo/cuisine |
+| 10 | `FixedCostItem` | 0001 | custos recorrentes | ✅ criada (EAV) — ⚠️ sem catálogo de chaves |
+| 11 | `Employee` | 0001 | `formData.employees[]` | ⚠️ **duplica** `BpoEmployee` sem vínculo |
+| 12 | `Partner` | 0001 | `formData.partners[]` | ⚠️ **duplica** `BpoPartner` sem vínculo |
+| 13 | `Equipment` | 0001 | `formData.equipment[]` | ✅ criada |
+| 14 | `Vehicle` | 0001 | `formData.vehicles[]` | ✅ criada |
+| 15 | `CardMachine` | 0001 | `fees_cards` | ⚠️ sobrepõe `PaymentMethod` (card) |
+| 16 | `Marketplace` | 0001 | `fees_marketplaces` | ⚠️ sobrepõe `PaymentMethod` (marketplace) |
+| 17 | `MetricSnapshot` | 0001 | indicadores por mês | ⚠️ `drivers` como JSON (reintroduz o anti-padrão) |
+
+**Faltando criar (planejadas mas não implementadas):**
+
+| Tabela ausente | Por quê | Hoje vira o quê |
+|----------------|---------|-----------------|
+| `Category` | `operational.categories` (categorias custom do cliente) | string solta em 3 tabelas; o backfill **nem lê** |
+| Perfil do dono (`UserProfile` ou colunas no Client) | `data.user` / `formData.user_info` (nome, foto, role do dono) | **descartado** — backfill ignora 100% |
+
+---
+
+## 3. Relações — o que está certo e o que está errado
+
+### 3.1 Relações internas (núcleo) — ✅ corretas
+
+```
+TechnicalSheet ──(cascade)──> TechnicalSheetItem ──(set null)──> Ingredient
+      │                                                              ▲
+      ├──(cascade)──> SheetModule ──(cascade)──> SheetModuleOption ──┘ (set null, via linkedSheetId)
+      │
+      └<─(set null)── MenuItem
+```
+
+- `TechnicalSheetItem.sheetId → TechnicalSheet` **cascade** — item só existe dentro da ficha. Correto.
+- `TechnicalSheetItem.ingredientId → Ingredient` **set null** — a linha guarda `description/unitCost/lineCost` desnormalizados; apagar o insumo não invalida a ficha. Correto.
+- `SheetModule → TechnicalSheet` / `SheetModuleOption → SheetModule` **cascade**. Correto.
+- `SheetModuleOption.linkedSheetId → TechnicalSheet` **set null** — composição (opção = outra ficha) sem cascatear delete. Bem modelado.
+- Uniques de faturamento/snapshot/profile e index por `clientId` em todas: corretos (multi-tenant).
+
+> **Essa parte é a mais difícil de modelar e está logicamente correta.** O risco
+> não está no núcleo — está nas bordas (Client, Category, BPO).
+
+### 3.2 Problemas de relacionamento — ❌ corrigir antes da F2
+
+| # | Problema | Gravidade | Correção |
+|---|----------|-----------|----------|
+| P1 | **FK `clientId → Client` é `ON DELETE CASCADE`** nas 14 tabelas. Apagar um Client fisicamente apagaria toda a operação. **Viola a regra absoluta da base** ("nunca CASCADE para dados críticos"). | 🔴 alta | Trocar para `ON DELETE RESTRICT` em todas. Client deve usar soft delete. |
+| P2 | **`Category` não existe.** `category` é string solta em `Ingredient`, `TechnicalSheet`, `MenuItem`. Sem integridade → "Bebidas" vs "bebida"; renomear exige tocar N linhas (fere DRY/SOLID). | 🔴 alta | Criar `Category(id, clientId, name, scope, active, auditoria)` e trocar as 3 colunas string por `categoryId` FK. |
+| P3 | **`Employee`/`Partner` duplicam `BpoEmployee`/`BpoPartner`** sem ligação. Campos de conta pessoal são **idênticos**. Mesma pessoa pode virar 2 cadastros → folha divergente. | 🔴 alta | Decidir na F1: unificar, ou adicionar `bpoEmployeeId`/`bpoPartnerId` (FK nullable, set null). |
+| P4 | **`Marketplace`/`CardMachine` sobrepõem `PaymentMethod`** (taxa de recebimento modelada em 2 lugares). | 🟡 média | Mapear/ligar ou definir fonte única antes do dual-write. |
+| P5 | **`MenuItem.sheetId` opcional** (set null). Item de cardápio sem ficha não reflete CMV real. | 🟡 média | Decisão de negócio: obrigatório+restrict, ou manter opcional e documentar. |
+| P6 | **Dessincronia JS↔SQL:** as FK `clientId → Client` só existem no SQL bruto, não no `schema.js`. Quem lê o schema não vê o cascade escondido. | 🟡 média | Declarar/comentar a relação no `schema.js`. |
+| P7 | **`legacyId` não é único** → upsert do backfill não é realmente idempotente (reprocessar pode duplicar). | 🟡 média | `UNIQUE (clientId, legacyId) WHERE legacyId IS NOT NULL`. |
+| P8 | **Sem `modifiedBy`/`userId` em nenhuma das 17 tabelas.** A base exige registrar quem alterou; sem isso o optimistic locking e o dashboard de erros por usuário não funcionam. | 🟡 média | Adicionar `modifiedBy text` em todas as tabelas editáveis. |
+| P9 | **Soft delete inconsistente** (só 4 de 17 têm `isDeleted/deletedAt`; 13 têm só `active`, que é estado de negócio, não deleção). | 🟡 média | Padronizar `isDeleted/deletedAt` (+ `deletedBy`) nas editáveis; manter `active` separado. |
+| P10 | **Auditoria incompleta:** `TechnicalSheetItem` sem `createdAt/updatedAt`; `DailyRevenue`/módulos/opções sem `updatedAt`. Sem `updatedAt` não há optimistic locking — exatamente a causa do incidente Garapas. | 🟡 média | Adicionar `createdAt/updatedAt` nessas tabelas. |
+| P11 | **`MetricSnapshot.drivers` é JSON** com campos fixos conhecidos — reintroduz o anti-padrão que o refactor combate. | 🔵 baixa | Promover drivers a colunas `numeric`; JSON só para o dinâmico. |
+
+---
+
+## 4. A migração ainda é "lossy" — campos que somem no backfill
+
+Cobertura **estrutural** (nº de linhas) está boa e reconciliada. Cobertura de
+**campos** é parcial. Antes de desligar o blob, estes dados **somem**:
+
+| Dado no blob | Onde deveria ir | Gravidade |
+|--------------|-----------------|-----------|
+| `insumos[].purchaseUnit` (unidade que casa com `packQty`) | coluna `Ingredient.packUnit` | 🔴 alta — sem ela o custo unitário não se reproduz |
+| `fichas[].modoPreparo` (passos do preparo) | `TechnicalSheet.prepSteps` ou tabela `TechnicalSheetStep` | 🔴 alta — receituário some |
+| `fichas[].fotoPrato` | `TechnicalSheet.dishPhoto` | 🟡 média |
+| `fichas[].finalizacao` / `tempoPreparo` / `utensilios` | colunas em `TechnicalSheet` | 🟡 média |
+| `fichas[].vendasMes`, `custoInsumos`, `custoEmbalagem` | colunas em `TechnicalSheet` | 🟡 média |
+| `fichas[].lastUpdated` (data real da edição) | `updatedAt` real (hoje vira a data do backfill) | 🟡 média — quebra o card "Fichas Desatualizadas" (30+ dias) |
+| `fichas[].isImported` / `progress` | colunas em `TechnicalSheet` | 🔵 baixa |
+| `insumos[].rendimento`, `isPrepared`, `defaultQty/grossQty` | colunas em `Ingredient` | 🟡 média — quebra insumo preparado/sub-receita |
+| `operational.categories` | tabela `Category` (P2) | 🔴 alta — nem é lido |
+| `data.user` / `user_info` (perfil do dono) | tabela/colunas próprias | 🟡 média — descartado |
+| `identity.business_logo` / `restaurant_name` / `cuisine_type` | `CompanyProfile` | 🟡 média |
+| metadados de conversão do item da ficha (`grossQty`, `usageUnit`, `originalUnit`…) | colunas em `TechnicalSheetItem` | 🟡 média |
+
+> Sem fechar esses buracos (colunas + estender `backfill-core.js`), migrar
+> JSON→tabelas **perde a parte operacional/receituário da ficha** e a unidade de
+> compra do insumo. Esse é o trabalho mínimo da **F0.5** (abaixo).
+
+---
+
+## 5. Estratégia recomendada — strangler-fig por domínio
+
+Princípio: **estrangular o blob aos poucos**, nunca num big-bang. A cada fase o
+sistema continua funcionando; se algo falha, o blob ainda é a fonte da verdade.
+
+```
+F0   schema criado            ............................. ✅ feito (local)
+F0.5 fechar buracos (cap. 3-4) ............................ ⬅️ PRÓXIMO (pré-requisito)
+F1   backfill + reconciliação .............................. ✅ provado no local
+F2   dual-write (blob + tabelas) ........................... reusa onboardingSync.js
+F3   migrar LEITURA por domínio, atrás de flag ............. um domínio por vez
+F4   cálculo dos indicadores no servidor (sai do blob) ..... financialCalc → tabelas
+F5   aposentar o blob (mantido como backup) ................ corte final
+```
+
+### Por que reusar `onboardingSync.js`
+
+Ele **já faz** blob → tabelas BPO de forma **idempotente e não-destrutiva**
+(casa por CPF/nome/tag `[onb:<key>]`, nunca apaga). É o molde exato do dual-write
+de baixo impacto: o mesmo gancho que hoje sincroniza 4 domínios para o BPO passa
+a escrever também nas tabelas Drizzle. **Não inventamos um mecanismo novo —
+estendemos um que já roda em produção sem incidente.**
+
+### F2 — Dual-write (escrever nos dois, ler do blob)
+
+- Toda gravação que hoje altera `Client.data` passa a **também** gravar na tabela
+  Drizzle correspondente, na **mesma transação** (ou no mesmo gancho do
+  `onboardingSync`). O blob continua sendo lido.
+- Idempotente via `legacyId` (depois de P7, com unique). Reprocessar é seguro.
+- **Impacto percebido: zero** — a UI lê o blob como sempre; as tabelas só recebem
+  cópia. Se a escrita na tabela falhar, loga e segue (blob não é bloqueado).
+
+### F3 — Migrar leitura, um domínio por vez, atrás de flag
+
+Ordem recomendada (do mais isolado/seguro para o mais central):
+
+1. **Insumos** (`Ingredient`) — catálogo, baixo acoplamento.
+2. **Fichas + itens + módulos** (`TechnicalSheet…`) — depois de insumos.
+3. **Menu** (`MenuItem`) — depende de fichas.
+4. **Faturamento** (`RevenueEntry`/`DailyRevenue`).
+5. **Custos/onboarding** (`CompanyProfile`, `FixedCostItem`, `Employee`…) — por
+   último, porque é onde estão as duplicações P3/P4 a resolver.
+
+Cada domínio liga atrás de **feature flag por cliente**: a leitura sai do blob e
+passa para a tabela só para os clientes marcados. Valida-se 1 cliente piloto,
+depois 10%, depois geral. Reverter = desligar a flag (volta a ler o blob).
+
+### F4 — Cálculo no servidor
+
+`financialCalc.js` hoje recalcula indicadores a partir do blob a cada request. Ao
+final da F3, os mesmos cálculos passam a ler as tabelas (e/ou `MetricSnapshot`
+com drivers em colunas, P11). O blob deixa de ser fonte de cálculo.
+
+### F5 — Aposentar o blob (sem apagar)
+
+- `Client.data` deixa de ser lido/escrito, mas **permanece no banco** como backup
+  histórico. Nada é dropado (regra de disaster recovery da base).
+- Opcional e tardio: mover o blob para uma coluna/tabela de arquivo morto. Nunca
+  na mesma janela do corte.
+
+---
+
+## 6. Ordem de execução recomendada (checklist)
+
+> Tudo abaixo, até o corte, roda **só no local** espelhado. Produção intocada.
+
+**F0.5 — Corrigir o schema (pré-requisito, barato agora):**
+- [ ] P1: `clientId → Client` vira `ON DELETE RESTRICT` (editar SQL da migração).
+- [ ] P2: criar tabela `Category` + `categoryId` FK nas 3 tabelas.
+- [ ] P7: `UNIQUE (clientId, legacyId) WHERE legacyId IS NOT NULL`.
+- [ ] P8/P9/P10: `modifiedBy` + `isDeleted/deletedAt` + `createdAt/updatedAt` faltantes.
+- [ ] Cap. 4: adicionar colunas perdidas em `Ingredient` (`packUnit`, `yield`,
+      `isPrepared`…) e `TechnicalSheet` (receituário) **ou** tabela
+      `TechnicalSheetStep`.
+- [ ] Decidir P3 (Employee/Partner ↔ Bpo) e P4 (Marketplace/CardMachine ↔ PaymentMethod).
+- [ ] Decidir P5 (MenuItem.sheetId obrigatório?).
+- [ ] Gerar a migração com `drizzle-kit generate` (NUNCA `push`).
+
+**F1 — Backfill (estender o já existente):**
+- [ ] Mapear no `backfill-core.js` os campos do cap. 4 e a `Category`.
+- [ ] `prod-to-local` → migrate → `backfill --dry-run` → reconciliar (já provado).
+- [ ] Conferir 0 divergências incluindo os novos campos.
+
+**F2 — Dual-write:**
+- [ ] Estender `onboardingSync.js` (ou o gancho de escrita) para gravar Drizzle.
+- [ ] Rodar em sombra no local: editar via UI, conferir que a tabela acompanha.
+
+**F3 — Leitura por domínio + flag:**
+- [ ] Feature flag por cliente (`Client.readFromTables` ou tabela de flags).
+- [ ] Migrar leitura: insumos → fichas → menu → faturamento → custos.
+- [ ] Piloto 1 cliente → 10% → 100%, com fallback para o blob por flag.
+
+**F4–F5 — Cálculo no servidor e aposentadoria:**
+- [ ] `financialCalc` lê tabelas; valida indicadores contra o blob no local.
+- [ ] Congelar escrita no blob; manter o dado como backup. **Não dropar.**
+
+---
+
+## 7. Corte em produção e rollback
+
+1. **Backup obrigatório** antes de qualquer passo em PRD (`pg_dump`, política da base).
+2. As migrações de schema (F0.5) são **aditivas** (só CREATE/ALTER ADD) → entram
+   em produção sem downtime e sem afetar o Prisma/blob.
+3. F2 (dual-write) em produção **não muda nada perceptível** — só começa a popular
+   tabelas. Roda em paralelo por dias, gerando confiança.
+4. O "corte" real é **flag por cliente** na F3 — granular e reversível em segundos.
+5. **Rollback de qualquer fase:** desligar a flag → volta a ler o blob (que nunca
+   parou de ser escrito até F5). Sem restore, sem perda.
+
+---
+
+## 8. Riscos e mitigação
+
+| Risco | Mitigação |
+|-------|-----------|
+| Perda de dados do receituário/insumo na normalização | F0.5 fecha os buracos do cap. 4 **antes** do dual-write |
+| Cadastro duplicado de pessoa (Employee/BpoEmployee) | Resolver P3 antes da F1 (vínculo ou unificação) |
+| Categorias divergentes | `Category` (P2) antes de migrar a leitura |
+| Backfill duplicar ao reprocessar | unique de `legacyId` (P7) antes da F1 |
+| Delete físico em cascata de um Client | `RESTRICT` (P1) — feito na F0.5 |
+| Divergência blob × tabela durante a transição | dual-write idempotente + reconciliação por domínio no local |
+| Corte quebrar um cliente | flag por cliente + rollback instantâneo (blob vivo até F5) |
+
+---
+
+### Conclusão
+
+A espinha dorsal está **criada e logicamente correta**. Para "tirar o castelo de
+areia sem sentir impacto", o caminho é: **(1) fechar os 5 defeitos de relação e os
+buracos de campo no local (F0.5)**, **(2) reusar o `onboardingSync.js` como
+dual-write idempotente (F2)**, e **(3) migrar a leitura por domínio atrás de flag
+por cliente (F3)**, mantendo o blob como fonte da verdade e backup vivo até o
+último momento. Nenhum passo apaga dado; cada passo é reversível por flag.
