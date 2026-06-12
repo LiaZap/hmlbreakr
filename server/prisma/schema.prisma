@@ -57,9 +57,10 @@ model Client {
 
   // F3 (strangler): lê operational.{insumos,fichas} das tabelas Drizzle em vez do
   // blob. Kill-switch por cliente, default OFF. Blob segue como fonte do WRITE.
-  readInsumosFromTables Boolean            @default(false)
-  readFichasFromTables  Boolean            @default(false)
-  readMenuFromTables    Boolean            @default(false)
+  readInsumosFromTables    Boolean         @default(false)
+  readFichasFromTables     Boolean         @default(false)
+  readMenuFromTables       Boolean         @default(false)
+  readFaturamentoFromTables Boolean        @default(false)
 
   // BPO Financeiro V2.0
   bpoEnabled          Boolean              @default(false)

@@ -293,4 +293,32 @@ async function reconstructMenu(db, s, clientId) {
   });
 }
 
-module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu };
+// numeric → "199.000,00" (milhar com ponto, 2 casas com vírgula — formato do blob)
+function brThousands(v) {
+  if (v == null || v === '') return '';
+  const n = Number(v); if (!isFinite(n)) return '';
+  const [int, dec] = Math.abs(n).toFixed(2).split('.');
+  return (n < 0 ? '-' : '') + int.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + dec;
+}
+
+/**
+ * Reconstrói o faturamento do blob a partir de RevenueEntry + DailyRevenue.
+ * @returns {{revenue_history: Array, daily_revenue: Object}}
+ */
+async function reconstructFaturamento(db, s, clientId) {
+  const [rev, daily] = await Promise.all([
+    db.select().from(s.revenueEntry).where(eq(s.revenueEntry.clientId, clientId)),
+    db.select().from(s.dailyRevenue).where(eq(s.dailyRevenue.clientId, clientId)),
+  ]);
+  const revenue_history = rev
+    .slice().sort((a, b) => (a.year - b.year) || (a.month - b.month))
+    .map((r) => ({ month: `${String(r.month).padStart(2, '0')}/${r.year}`, amount: brThousands(r.amount) }));
+  const daily_revenue = {};
+  for (const d of daily.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)))) {
+    const ds = d.date instanceof Date ? d.date.toISOString().slice(0, 10) : String(d.date).slice(0, 10);
+    daily_revenue[ds] = Number(d.amount);
+  }
+  return { revenue_history, daily_revenue };
+}
+
+module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento };
