@@ -288,8 +288,10 @@ Uma verificação adversarial pós-implementação (3 agentes) achou **perdas qu
 - O `GET /client/:hash` já entrega `data` das tabelas (F3) e o front recalcula — então a DRE do dashboard já vem das tabelas p/ clientes migrados.
 
 **F5 — Aposentar o blob:**
-- [ ] Pré-requisito restante: migrar `identity`/`user_info`/onboarding p/ colunas (CompanyProfile/Client) — é o último resíduo lido do blob.
-- [ ] Congelar escrita no blob; manter o dado como backup. **Não dropar.**
+- [x] **Resíduo de identidade migrado** (LOCAL): `coreRead.reconstructResidue` serve `restaurant`/`user`/`profile`/`formData.identity`/`metric_snapshots` de `CompanyProfile`+`MetricSnapshot` (flag `readResidueFromTables`, ligada p/ os 39). Round-trip `f3-roundtrip-residuo.js` **fiel** (texto+snapshots; `initials` derivado; `user_info` fica no blob por colapso de `user_phone`). Validado: Itálico serve o resíduo das tabelas, imagens via fallback.
+- [ ] ⚠️ **ÚLTIMO BLOQUEADOR DA F5 = imagens base64.** `restaurant.logo`, `user/profile.photo`, `identity.business_logo`, `fichas[].fotoPrato`, `partners[].photo` são base64 (até ~2,7 MB) servidos por **fallback do blob** — `CompanyProfile`/`TechnicalSheet` só guardam URL. Pra dropar o blob de vez, migrar essas imagens p/ **object storage** (S3/equivalente) e guardar só a URL. Decisão de infra.
+- [ ] Sobram ainda no blob (config/UI, baixa prioridade): `user_info`, flags de onboarding (`_onboardingStep`/`onboarding_completed`/`mot_actions`), `operational.categories` (lista custom), `benefits` (legado).
+- [ ] Quando imagens→storage: congelar escrita no blob; manter como backup. **Não dropar.**
 
 ---
 

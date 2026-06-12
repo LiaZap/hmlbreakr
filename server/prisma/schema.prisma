@@ -62,6 +62,7 @@ model Client {
   readMenuFromTables        Boolean        @default(false)
   readFaturamentoFromTables Boolean        @default(false)
   readCustosFromTables      Boolean        @default(false)
+  readResidueFromTables     Boolean        @default(false)
 
   // BPO Financeiro V2.0
   bpoEnabled          Boolean              @default(false)

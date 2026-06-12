@@ -423,6 +423,38 @@ async function reconstructCustos(db, s, clientId, blobFd = {}) {
 }
 
 /**
+ * Reconstrói o RESÍDUO de identidade/perfil do blob a partir de CompanyProfile
+ * (texto) + MetricSnapshot (drivers exatos). Imagens base64 (logo/fotos) NÃO
+ * migram → fallback do blob. Retorna as peças p/ a injeção colocar nos paths
+ * certos: { restaurant, user, profile, identity, user_info, metric_snapshots }.
+ * operational.categories NÃO entra (Category conflaciona custom+usadas → no blob).
+ */
+async function reconstructResidue(db, s, clientId, blobData = {}) {
+  const [profileRows, snaps] = await Promise.all([
+    db.select().from(s.companyProfile).where(eq(s.companyProfile.clientId, clientId)).limit(1),
+    db.select().from(s.metricSnapshot).where(eq(s.metricSnapshot.clientId, clientId)),
+  ]);
+  const p = profileRows[0]; if (!p) return null;
+  const bd = blobData || {}; const bfd = bd.formData || {};
+  // imagens base64 ficam no blob (urlOnly descartou no backfill) → fallback
+  const logo = p.businessLogo || bfd.identity?.business_logo || bd.restaurant?.logo || null;
+  const photo = p.ownerPhoto || bd.user?.photo || bd.profile?.photo || bfd.user_info?.user_photo || null;
+  const put = (o, k, v) => { if (v !== undefined && v !== null && v !== '') o[k] = v; };
+
+  const restaurant = {}; put(restaurant, 'name', p.restaurantName); put(restaurant, 'logo', logo); put(restaurant, 'category', p.restaurantCategory);
+  const user = {}; put(user, 'name', p.ownerName); put(user, 'photo', photo); put(user, 'role', p.ownerRole);
+  if (p.ownerName) user.initials = String(p.ownerName).substring(0, 2).toUpperCase();
+  if (typeof p.ownerIsOwner === 'boolean') user.isOwner = p.ownerIsOwner;
+  const profile = {}; put(profile, 'name', p.ownerName); put(profile, 'phone', p.ownerPhone); put(profile, 'cpf', p.ownerCpf); put(profile, 'birthday', p.ownerBirthday); put(profile, 'photo', photo); put(profile, 'email', p.ownerEmail);
+  const identity = {}; put(identity, 'restaurant_name', p.restaurantName); put(identity, 'cuisine_type', p.cuisineType); put(identity, 'business_logo', logo); put(identity, 'tax_regime', p.taxRegime); identity.is_mei = p.isMei ? 'Sim' : 'Não';
+  const user_info = {}; put(user_info, 'user_name', p.ownerName); put(user_info, 'user_phone', p.ownerPhone); put(user_info, 'user_photo', photo);
+  const metric_snapshots = {};
+  for (const m of snaps) if (m.drivers) metric_snapshots[m.periodKey] = m.drivers;
+
+  return { restaurant, user, profile, identity, user_info, metric_snapshots };
+}
+
+/**
  * F4 — monta o `data` (shape do blob) do cliente a partir das TABELAS, fazendo
  * overlay no blob para as partes ainda não migradas (identity, user_info,
  * onboarding, operational.categories, metric_snapshots, benefits legado).
@@ -446,4 +478,4 @@ async function reconstructClientData(db, s, clientId, blobData = {}) {
   };
 }
 
-module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructCostObjects, reconstructClientData };
+module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructCostObjects, reconstructResidue, reconstructClientData };

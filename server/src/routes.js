@@ -17,7 +17,7 @@ const coreSchema = require('./db/schema');
 const { syncCoreTables } = require('./services/coreSync');
 // F3 read — reconstrói {insumos,fichas,menu,faturamento,custos} das tabelas (atrás de flag por cliente).
 // F4 — reconstructClientData monta o `data` completo das tabelas p/ o cálculo server-side.
-const { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructClientData } = require('./services/coreRead');
+const { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructResidue, reconstructClientData } = require('./services/coreRead');
 
 // Helpers de setup de auth pra cliente novo (Clerk + senha temp).
 // Compartilhados com stripeWebhook.js — single source of truth.
@@ -1404,6 +1404,27 @@ router.get('/client/:hash', async (req, res) => {
       } catch (e) {
         console.error('[F3 reconstructCustos] falhou, usando blob:', e?.message || e);
         dashboardData._custosSource = 'blob-fallback';
+      }
+    }
+
+    // F3 resíduo: identity/user/profile/restaurant/metric_snapshots das tabelas
+    // (CompanyProfile+MetricSnapshot). Imagens base64 = fallback do blob; user_info
+    // segue do blob. Lê o blob ANTES de sobrescrever (p/ o fallback de imagem).
+    if (client.readResidueFromTables) {
+      try {
+        const res = await reconstructResidue(coreDb, coreSchema, client.id, dashboardData);
+        if (res) {
+          dashboardData.restaurant = res.restaurant;
+          dashboardData.user = res.user;
+          dashboardData.profile = res.profile;
+          if (!dashboardData.formData) dashboardData.formData = {};
+          dashboardData.formData.identity = res.identity;
+          dashboardData.formData.metric_snapshots = res.metric_snapshots;
+          dashboardData._residueSource = 'tables';
+        }
+      } catch (e) {
+        console.error('[F3 reconstructResidue] falhou, usando blob:', e?.message || e);
+        dashboardData._residueSource = 'blob-fallback';
       }
     }
 
