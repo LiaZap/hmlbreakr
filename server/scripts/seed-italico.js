@@ -12,8 +12,10 @@
 
 require('dotenv').config();
 const bcrypt = require('bcrypt');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const crypto = require('crypto');
+const { db, pool } = require('../src/db/client');
+const t = require('../src/db/schema-bpo');
+const { eq, and, inArray, or } = require('drizzle-orm');
 
 const HASH = 'seeditalico00000000000';
 const NAME = 'Itálico | Gastronomia Italiana';
@@ -96,17 +98,17 @@ function menuFromFichas(fichas) {
 
 // ── Cleanup idempotente ────────────────────────────────────────────────────
 async function cleanup() {
-  const existing = await prisma.client.findUnique({ where: { hash: HASH } });
+  const [existing] = await db.select().from(t.client).where(eq(t.client.hash, HASH)).limit(1);
   if (!existing) return;
   log('Cliente existente — limpando para recriar...');
-  const banks = await prisma.bankAccount.findMany({ where: { clientId: existing.id }, select: { id: true } });
+  const banks = await db.select({ id: t.bankAccount.id }).from(t.bankAccount).where(eq(t.bankAccount.clientId, existing.id));
   const bankIds = banks.map(b => b.id);
   if (bankIds.length) {
-    await prisma.paymentTransaction.deleteMany({ where: { bankAccountId: { in: bankIds } } });
-    await prisma.bankTransfer.deleteMany({ where: { OR: [{ fromAccountId: { in: bankIds } }, { toAccountId: { in: bankIds } }] } });
-    await prisma.bankTransaction.deleteMany({ where: { bankAccountId: { in: bankIds } } });
+    await db.delete(t.paymentTransaction).where(inArray(t.paymentTransaction.bankAccountId, bankIds));
+    await db.delete(t.bankTransfer).where(or(inArray(t.bankTransfer.fromAccountId, bankIds), inArray(t.bankTransfer.toAccountId, bankIds)));
+    await db.delete(t.bankTransaction).where(inArray(t.bankTransaction.bankAccountId, bankIds));
   }
-  await prisma.client.delete({ where: { id: existing.id } });
+  await db.delete(t.client).where(eq(t.client.id, existing.id));
   ok('Limpeza concluída');
 }
 
@@ -331,18 +333,18 @@ async function main() {
   };
 
   const passwordHash = await bcrypt.hash(LOGIN_PASSWORD, 10);
-  const client = await prisma.client.create({
-    data: {
-      name: NAME,
-      hash: HASH,
-      email: LOGIN_EMAIL,
-      password: passwordHash,
-      data: JSON.stringify(clientData),
-      bpoEnabled: true,
-      bpoActivatedAt: monthsFromNow(-8),
-      active: true,
-    },
-  });
+  const [client] = await db.insert(t.client).values({
+    id: crypto.randomUUID(),
+    name: NAME,
+    hash: HASH,
+    email: LOGIN_EMAIL,
+    password: passwordHash,
+    data: JSON.stringify(clientData),
+    bpoEnabled: true,
+    bpoActivatedAt: monthsFromNow(-8),
+    active: true,
+    updatedAt: new Date(),
+  }).returning();
   ok('Client criado:', client.id);
   ok(`Login: ${LOGIN_EMAIL} / senha "${LOGIN_PASSWORD}"`);
 
@@ -364,16 +366,19 @@ async function main() {
     { name: 'Vendas - Reservas',     dreGroup: 'receita',    color: '#F97316', type: 'receita' },
   ];
   const cats = [];
-  for (const c of catData) cats.push(await prisma.financialCategory.create({ data: { ...c, clientId: client.id } }));
+  for (const c of catData) {
+    const [cat] = await db.insert(t.financialCategory).values({ id: crypto.randomUUID(), ...c, clientId: client.id, updatedAt: new Date() }).returning();
+    cats.push(cat);
+  }
   ok(`${cats.length} categorias`);
 
   // ── Bancos (4) — campo CORRETO: type (não accountType), sem initialBalance ─
-  const banks = await Promise.all([
-    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '341', bankName: 'Itaú',           agency: '0457', account: '98765-4', type: 'corrente', currentBalance: 42180.00, isManual: true } }),
-    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '001', bankName: 'Banco do Brasil', agency: '1234', account: '11122-3', type: 'corrente', currentBalance: 19450.00, isManual: true } }),
-    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '237', bankName: 'Bradesco',       agency: '0892', account: '44455-6', type: 'corrente', currentBalance: 23890.00, isManual: true } }),
-    prisma.bankAccount.create({ data: { clientId: client.id, bankCode: '260', bankName: 'Nubank PJ',      agency: '0001', account: '77788-9', type: 'corrente', currentBalance: 9120.00,  isManual: true } }),
-  ]);
+  const banks = (await Promise.all([
+    db.insert(t.bankAccount).values({ id: crypto.randomUUID(), clientId: client.id, bankCode: '341', bankName: 'Itaú',           agency: '0457', account: '98765-4', type: 'corrente', currentBalance: 42180.00, isManual: true, updatedAt: new Date() }).returning(),
+    db.insert(t.bankAccount).values({ id: crypto.randomUUID(), clientId: client.id, bankCode: '001', bankName: 'Banco do Brasil', agency: '1234', account: '11122-3', type: 'corrente', currentBalance: 19450.00, isManual: true, updatedAt: new Date() }).returning(),
+    db.insert(t.bankAccount).values({ id: crypto.randomUUID(), clientId: client.id, bankCode: '237', bankName: 'Bradesco',       agency: '0892', account: '44455-6', type: 'corrente', currentBalance: 23890.00, isManual: true, updatedAt: new Date() }).returning(),
+    db.insert(t.bankAccount).values({ id: crypto.randomUUID(), clientId: client.id, bankCode: '260', bankName: 'Nubank PJ',      agency: '0001', account: '77788-9', type: 'corrente', currentBalance: 9120.00,  isManual: true, updatedAt: new Date() }).returning(),
+  ])).map(([b]) => b);
   ok(`${banks.length} contas bancárias — saldo total R$ ${(42180+19450+23890+9120).toLocaleString('pt-BR')}`);
 
   // ── Fornecedores (12 italianos) — campo CORRETO: cnpj (não document) ────
@@ -395,26 +400,27 @@ async function main() {
   for (const s of supData) {
     const cat = s.defaultCat ? cats.find(c => c.name === s.defaultCat) : null;
     const { defaultCat, ...rest } = s;
-    sups.push(await prisma.supplier.create({ data: { ...rest, clientId: client.id, defaultCategoryId: cat?.id || null } }));
+    const [sup] = await db.insert(t.supplier).values({ id: crypto.randomUUID(), ...rest, clientId: client.id, defaultCategoryId: cat?.id || null, updatedAt: new Date() }).returning();
+    sups.push(sup);
   }
   ok(`${sups.length} fornecedores`);
 
   // ── Meios de pagamento — campo CORRETO: feePercent (não feeRate) ─────
   // Limpa antes — o onboardingSync pode ter rodado e criado duplicatas
-  await prisma.paymentMethod.deleteMany({ where: { clientId: client.id } });
-  const pms = await Promise.all([
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Cartão Crédito', type: 'card_credit', feePercent: 2.90, settlementDays: 30 } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Cartão Débito',  type: 'card_debit',  feePercent: 1.75, settlementDays: 1  } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'PIX',            type: 'pix',         feePercent: 0.00, settlementDays: 0  } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Dinheiro',       type: 'cash',        feePercent: 0.00, settlementDays: 0  } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'iFood',          type: 'marketplace', feePercent: 23.00, settlementDays: 14 } }),
-    prisma.paymentMethod.create({ data: { clientId: client.id, name: 'Rappi',          type: 'marketplace', feePercent: 20.00, settlementDays: 14 } }),
-  ]);
+  await db.delete(t.paymentMethod).where(eq(t.paymentMethod.clientId, client.id));
+  const pms = (await Promise.all([
+    db.insert(t.paymentMethod).values({ id: crypto.randomUUID(), clientId: client.id, name: 'Cartão Crédito', type: 'card_credit', feePercent: 2.90, settlementDays: 30, updatedAt: new Date() }).returning(),
+    db.insert(t.paymentMethod).values({ id: crypto.randomUUID(), clientId: client.id, name: 'Cartão Débito',  type: 'card_debit',  feePercent: 1.75, settlementDays: 1,  updatedAt: new Date() }).returning(),
+    db.insert(t.paymentMethod).values({ id: crypto.randomUUID(), clientId: client.id, name: 'PIX',            type: 'pix',         feePercent: 0.00, settlementDays: 0,  updatedAt: new Date() }).returning(),
+    db.insert(t.paymentMethod).values({ id: crypto.randomUUID(), clientId: client.id, name: 'Dinheiro',       type: 'cash',        feePercent: 0.00, settlementDays: 0,  updatedAt: new Date() }).returning(),
+    db.insert(t.paymentMethod).values({ id: crypto.randomUUID(), clientId: client.id, name: 'iFood',          type: 'marketplace', feePercent: 23.00, settlementDays: 14, updatedAt: new Date() }).returning(),
+    db.insert(t.paymentMethod).values({ id: crypto.randomUUID(), clientId: client.id, name: 'Rappi',          type: 'marketplace', feePercent: 20.00, settlementDays: 14, updatedAt: new Date() }).returning(),
+  ])).map(([p]) => p);
   ok(`${pms.length} meios de pagamento`);
 
   // ── Funcionários BPO (espelham formData.employees) — onboardingSync
   //    pode ter criado a partir do formData; limpamos e recriamos.
-  await prisma.bpoEmployee.deleteMany({ where: { clientId: client.id } });
+  await db.delete(t.bpoEmployee).where(eq(t.bpoEmployee.clientId, client.id));
   const empData = [
     { name: 'Marco Rossi',    role: 'Sous Chef',  baseSalary: 4200, cpf: '111.222.333-44' },
     { name: 'Luca Esposito',  role: 'Cozinheiro', baseSalary: 2800, cpf: '222.333.444-55' },
@@ -423,13 +429,13 @@ async function main() {
     { name: 'Carla Moretti',  role: 'Garçonete',  baseSalary: 2200, cpf: '555.666.777-88' },
     { name: 'Dario Lombardi', role: 'Sommelier',  baseSalary: 3800, cpf: '666.777.888-99' },
   ];
-  for (const e of empData) await prisma.bpoEmployee.create({ data: { ...e, clientId: client.id } });
+  for (const e of empData) await db.insert(t.bpoEmployee).values({ id: crypto.randomUUID(), ...e, clientId: client.id, updatedAt: new Date() });
   ok(`${empData.length} funcionários`);
 
   // ── Sócios BPO — campo CORRETO: prolaboreAmount (sem equityPct) ──────
-  await prisma.bpoPartner.deleteMany({ where: { clientId: client.id } });
-  await prisma.bpoPartner.create({ data: { clientId: client.id, name: 'Giuseppe Ferraro', cpf: '777.888.999-00', prolaboreAmount: 12000 } });
-  await prisma.bpoPartner.create({ data: { clientId: client.id, name: 'Sofia Bianchi',    cpf: '888.999.000-11', prolaboreAmount: 10000 } });
+  await db.delete(t.bpoPartner).where(eq(t.bpoPartner.clientId, client.id));
+  await db.insert(t.bpoPartner).values({ id: crypto.randomUUID(), clientId: client.id, name: 'Giuseppe Ferraro', cpf: '777.888.999-00', prolaboreAmount: 12000, updatedAt: new Date() });
+  await db.insert(t.bpoPartner).values({ id: crypto.randomUUID(), clientId: client.id, name: 'Sofia Bianchi',    cpf: '888.999.000-11', prolaboreAmount: 10000, updatedAt: new Date() });
   ok('2 sócios');
 
   // ── Payables (30 — passado/presente/futuro) ──────────────────────────
@@ -469,31 +475,30 @@ async function main() {
     const sup = findSup(p.supplier);
     const cat = findCat(p.category);
     const dueDate = daysFromNow(p.dueDays);
-    const payable = await prisma.payable.create({
-      data: {
-        clientId: client.id,
-        supplierId: sup?.id || null,
-        categoryId: cat?.id || null,
-        description: p.description,
-        amount: p.amount,
-        remainingAmount: p.status === 'paid' ? 0 : p.amount,
-        dueDate, paymentForecast: dueDate,
-        status: p.status,
-        scheduledStatus: p.scheduledStatus || null,
-        scheduledAt: p.scheduledStatus ? new Date() : null,
-      },
-    });
+    const [payable] = await db.insert(t.payable).values({
+      id: crypto.randomUUID(),
+      clientId: client.id,
+      supplierId: sup?.id || null,
+      categoryId: cat?.id || null,
+      description: p.description,
+      amount: p.amount,
+      remainingAmount: p.status === 'paid' ? 0 : p.amount,
+      dueDate, paymentForecast: dueDate,
+      status: p.status,
+      scheduledStatus: p.scheduledStatus || null,
+      scheduledAt: p.scheduledStatus ? new Date() : null,
+      updatedAt: new Date(),
+    }).returning();
     // Pra payables 'paid', cria PaymentTransaction ligando ao Itaú (banco 0)
     // — assim aparece histórico de movimentação no dashboard.
     if (p.status === 'paid') {
-      await prisma.paymentTransaction.create({
-        data: {
-          payableId: payable.id,
-          bankAccountId: banks[0].id,
-          amount: p.amount,
-          paidAt: dueDate,
-          notes: `Pagamento de "${p.description}"`,
-        },
+      await db.insert(t.paymentTransaction).values({
+        id: crypto.randomUUID(),
+        payableId: payable.id,
+        bankAccountId: banks[0].id,
+        amount: p.amount,
+        paidAt: dueDate,
+        notes: `Pagamento de "${p.description}"`,
       });
       paidCount++;
     }
@@ -520,29 +525,28 @@ async function main() {
   for (const r of sampleReceivables) {
     const cat = findCat(r.category);
     const dueDate = daysFromNow(r.dueDays);
-    const receivable = await prisma.receivable.create({
-      data: {
-        clientId: client.id,
-        categoryId: cat?.id || null,
-        payerName: r.payer,
-        description: `Recebível: ${r.payer}`,
-        amount: r.amount,
-        remainingAmount: r.status === 'received' ? 0 : r.amount,
-        dueDate, receiptForecast: dueDate,
-        status: r.status,
-      },
-    });
+    const [receivable] = await db.insert(t.receivable).values({
+      id: crypto.randomUUID(),
+      clientId: client.id,
+      categoryId: cat?.id || null,
+      payerName: r.payer,
+      description: `Recebível: ${r.payer}`,
+      amount: r.amount,
+      remainingAmount: r.status === 'received' ? 0 : r.amount,
+      dueDate, receiptForecast: dueDate,
+      status: r.status,
+      updatedAt: new Date(),
+    }).returning();
     if (r.status === 'received') {
       // Distribui recebidos entre os 4 bancos pra variar saldo
       const bankIdx = recvCount % banks.length;
-      await prisma.paymentTransaction.create({
-        data: {
-          receivableId: receivable.id,
-          bankAccountId: banks[bankIdx].id,
-          amount: r.amount,
-          paidAt: dueDate,
-          notes: `Recebimento de "${r.payer}"`,
-        },
+      await db.insert(t.paymentTransaction).values({
+        id: crypto.randomUUID(),
+        receivableId: receivable.id,
+        bankAccountId: banks[bankIdx].id,
+        amount: r.amount,
+        paidAt: dueDate,
+        notes: `Recebimento de "${r.payer}"`,
       });
       recvCount++;
     }
@@ -566,16 +570,15 @@ async function main() {
     { bank: 0, type: 'debit',  amount: 6200,  desc: 'FRIGORIFICO BOVINO PREMIUM',      dayOff: -6 },
     { bank: 3, type: 'debit',  amount: 920,   desc: 'SABESP - AGUA',                   dayOff: -7 },
   ];
-  for (const t of bankTxs) {
-    await prisma.bankTransaction.create({
-      data: {
-        bankAccountId: banks[t.bank].id,
-        amount: t.amount,
-        type: t.type,
-        description: t.desc,
-        date: daysFromNow(t.dayOff),
-        source: 'manual',
-      },
+  for (const tx of bankTxs) {
+    await db.insert(t.bankTransaction).values({
+      id: crypto.randomUUID(),
+      bankAccountId: banks[tx.bank].id,
+      amount: tx.amount,
+      type: tx.type,
+      description: tx.desc,
+      date: daysFromNow(tx.dayOff),
+      source: 'manual',
     });
   }
   ok(`${bankTxs.length} movimentações bancárias (últimos 7 dias)`);
@@ -590,4 +593,4 @@ async function main() {
 
 main()
   .catch(e => { err('Erro fatal:', e); process.exit(1); })
-  .finally(() => prisma.$disconnect());
+  .finally(() => pool.end());

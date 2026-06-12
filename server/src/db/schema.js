@@ -383,6 +383,7 @@ const partner = pgTable('Partner', {
   name: text('name'),
   cpf: text('cpf'),
   role: text('role'),                       // ← role
+  photoUrl: text('photoUrl'),               // foto do sócio no object storage (MinIO); base64 fica no blob até backfill
   proLabore: numeric('proLabore', { precision: 18, scale: 2 }),
   personalAccountBank: text('personalAccountBank'),
   personalAccountAgency: text('personalAccountAgency'),

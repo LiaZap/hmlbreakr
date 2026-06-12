@@ -385,7 +385,8 @@ async function reconstructCustos(db, s, clientId, blobFd = {}) {
     put('name', p.name); put('role', p.role); put('pro_labore', brMoneyTh(p.proLabore));
     put('personal_bank', p.personalAccountBank); put('personal_agency', p.personalAccountAgency); put('personal_account', p.personalAccountNumber);
     put('cpf', p.cpf);
-    const photo = photoByName.get(normName(p.name)); if (photo) o.photo = photo;
+    // Foto: prefere a URL no object storage (MinIO); cai pro base64 do blob.
+    const photo = p.photoUrl || photoByName.get(normName(p.name)); if (photo) o.photo = photo;
     return o;
   });
   const equipment = equip.map((e) => {

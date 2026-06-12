@@ -15,26 +15,9 @@ const crypto = require('crypto');
 const { db: coreDb } = require('./db/client');
 const coreSchema = require('./db/schema');
 const { syncCoreTables } = require('./services/coreSync');
+// F5 — sobe imagens base64 do blob pro object storage (MinIO) após o coreSync.
+const { syncClientImages } = require('./services/imageSync');
 
-// Shim de compat: o serviço coreSync ainda lê BpoEmployee/BpoPartner via uma
-// interface estilo Prisma (tabela.findMany({ where, select })). Após a migração
-// p/ Drizzle não há mais PrismaClient — este adaptador mínimo serve essas duas
-// leituras (id/cpf/name) usando coreDb, preservando o contrato do serviço.
-// syncOnboardingToBpo/diffOnboardingVsBpo ignoram o 1º arg (recebem `_prisma`).
-const prismaCompat = {
-  bpoEmployee: {
-    findMany: async ({ where = {} } = {}) =>
-      coreDb.select({ id: bpo.bpoEmployee.id, cpf: bpo.bpoEmployee.cpf, name: bpo.bpoEmployee.name })
-        .from(bpo.bpoEmployee)
-        .where(eq(bpo.bpoEmployee.clientId, where.clientId)),
-  },
-  bpoPartner: {
-    findMany: async ({ where = {} } = {}) =>
-      coreDb.select({ id: bpo.bpoPartner.id, cpf: bpo.bpoPartner.cpf, name: bpo.bpoPartner.name })
-        .from(bpo.bpoPartner)
-        .where(eq(bpo.bpoPartner.clientId, where.clientId)),
-  },
-};
 // F3 read — reconstrói {insumos,fichas,menu,faturamento,custos} das tabelas (atrás de flag por cliente).
 // F4 — reconstructClientData monta o `data` completo das tabelas p/ o cálculo server-side.
 const { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructResidue, reconstructClientData } = require('./services/coreRead');
@@ -1777,11 +1760,13 @@ router.post('/client/:hash/sync', async (req, res) => {
         .catch(err => console.error('[onboardingSync] hook failed:', err))
         // coreSync DEPOIS do BPO sync: o vínculo Employee→BpoEmployee acha as
         // linhas recém-criadas. Blob é a fonte da verdade; isto é projeção.
-        .finally(() => syncCoreTables(prismaCompat, coreDb, coreSchema, clientIdToUpdate, newData)
+        .finally(() => syncCoreTables(coreDb, coreSchema, clientIdToUpdate, newData)
+          .then(() => syncClientImages(coreDb, coreSchema, clientIdToUpdate, newData))
           .catch(err => console.error('[coreSync] hook failed:', err?.message || err)));
     } else {
       // Sem formData o blob ainda muda (insumos/fichas/menu) → reprojeta mesmo assim.
-      syncCoreTables(prismaCompat, coreDb, coreSchema, clientIdToUpdate, newData)
+      syncCoreTables(coreDb, coreSchema, clientIdToUpdate, newData)
+        .then(() => syncClientImages(coreDb, coreSchema, clientIdToUpdate, newData))
         .catch(err => console.error('[coreSync] hook failed:', err?.message || err));
     }
 
@@ -1889,10 +1874,12 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
     if (merged.formData && Object.keys(merged.formData).length > 0) {
       syncOnboardingToBpo(null, clientIdToUpdate, merged.formData)
         .catch(err => console.error('[onboardingSync] hook failed:', err))
-        .finally(() => syncCoreTables(prismaCompat, coreDb, coreSchema, clientIdToUpdate, merged)
+        .finally(() => syncCoreTables(coreDb, coreSchema, clientIdToUpdate, merged)
+          .then(() => syncClientImages(coreDb, coreSchema, clientIdToUpdate, merged))
           .catch(err => console.error('[coreSync] hook failed:', err?.message || err)));
     } else {
-      syncCoreTables(prismaCompat, coreDb, coreSchema, clientIdToUpdate, merged)
+      syncCoreTables(coreDb, coreSchema, clientIdToUpdate, merged)
+        .then(() => syncClientImages(coreDb, coreSchema, clientIdToUpdate, merged))
         .catch(err => console.error('[coreSync] hook failed:', err?.message || err));
     }
 

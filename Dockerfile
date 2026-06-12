@@ -2,9 +2,6 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
-
 # 1. Copiar arquivos de dependências (Raiz e Server)
 COPY package*.json ./
 COPY server/package*.json ./server/
@@ -16,14 +13,12 @@ RUN cd server && npm install
 # 3. Copiar todo o código fonte
 COPY . .
 
-# 4. Gerar o Client do Prisma (Backend)
-RUN cd server && npx prisma generate
-
-# 5. Construir o Frontend (Gera a pasta /dist)
+# 4. Construir o Frontend (Gera a pasta /dist)
 RUN npm run build
 
-# 6. Expor a porta da API
+# 5. Expor a porta da API
 EXPOSE 3001
 
-# 7. Iniciar o servidor (que serve a API e o Frontend)
+# 6. Iniciar o servidor: aplica migrações Drizzle (src/db/migrate.js) e sobe a API.
+#    O `npm start` roda `node src/db/migrate.js && node src/index.js` (sem Prisma).
 CMD ["npm", "start", "--prefix", "server"]

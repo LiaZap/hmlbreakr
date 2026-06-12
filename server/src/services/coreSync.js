@@ -19,6 +19,7 @@
  */
 const crypto = require('crypto');
 const { eq } = require('drizzle-orm');
+const bpo = require('../db/schema-bpo');
 
 const uuid = () => crypto.randomUUID();
 const first = (...vals) => vals.find((v) => v !== undefined && v !== null);
@@ -514,7 +515,6 @@ async function insertRows(db, table, rows) {
 
 /**
  * Reprojeta as tabelas Drizzle do cliente a partir do blob (rebuild: wipe+insert).
- * @param {object} prisma  PrismaClient (lê BpoEmployee/BpoPartner p/ o vínculo)
  * @param {object} db      drizzle db
  * @param {object} s       schema (require('../db/schema'))
  * @param {string} clientId
@@ -522,11 +522,13 @@ async function insertRows(db, table, rows) {
  * @param {object} opts    { wipe=true, dry=false, modifiedBy='sync:F2' }
  * @returns {Promise<{counts,blob,coverage,validation}>}
  */
-async function syncCoreTables(prisma, db, s, clientId, data, opts = {}) {
+async function syncCoreTables(db, s, clientId, data, opts = {}) {
   const { wipe = true, dry = false, modifiedBy = 'sync:F2' } = opts;
   const [bpoEmployees, bpoPartners] = await Promise.all([
-    prisma.bpoEmployee.findMany({ where: { clientId }, select: { id: true, cpf: true, name: true } }),
-    prisma.bpoPartner.findMany({ where: { clientId }, select: { id: true, cpf: true, name: true } }),
+    db.select({ id: bpo.bpoEmployee.id, cpf: bpo.bpoEmployee.cpf, name: bpo.bpoEmployee.name })
+      .from(bpo.bpoEmployee).where(eq(bpo.bpoEmployee.clientId, clientId)),
+    db.select({ id: bpo.bpoPartner.id, cpf: bpo.bpoPartner.cpf, name: bpo.bpoPartner.name })
+      .from(bpo.bpoPartner).where(eq(bpo.bpoPartner.clientId, clientId)),
   ]);
   const built = buildClientRows(clientId, data, { bpoEmployees, bpoPartners, modifiedBy });
   if (!dry) {

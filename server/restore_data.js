@@ -1,5 +1,6 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { db, pool } = require('./src/db/client');
+const t = require('./src/db/schema-bpo');
+const { eq } = require('drizzle-orm');
 
 async function main() {
   const hash = 'r743zcvib886f44b8y5x2';
@@ -82,16 +83,13 @@ async function main() {
     }
   };
 
-  await prisma.client.update({
-    where: { hash },
-    data: {
-      data: JSON.stringify(demoData)
-    }
-  });
+  await db.update(t.client)
+    .set({ data: JSON.stringify(demoData), updatedAt: new Date() })
+    .where(eq(t.client.hash, hash));
 
   console.log("Data restored successfully.");
 }
 
 main()
   .catch(e => console.error(e))
-  .finally(async () => await prisma.$disconnect());
+  .finally(async () => await pool.end());

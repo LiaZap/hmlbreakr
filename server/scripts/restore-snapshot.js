@@ -23,9 +23,10 @@
  */
 require('dotenv').config();
 const readline = require('readline');
-const { PrismaClient } = require('@prisma/client');
+const { db, pool } = require('../src/db/client');
+const t = require('../src/db/schema-bpo');
+const { eq, and } = require('drizzle-orm');
 const { createSnapshot } = require('../src/services/snapshotService');
-const prisma = new PrismaClient();
 
 const [clientId, snapshotId] = process.argv.slice(2);
 if (!clientId || !snapshotId) {
@@ -44,17 +45,17 @@ const ask = (q) => new Promise((resolve) => {
 (async () => {
   try {
     // 1. Valida cliente
-    const client = await prisma.client.findUnique({
-      where: { id: clientId },
-      select: { id: true, hash: true, name: true, email: true, data: true },
-    });
+    const [client] = await db.select({ id: t.client.id, hash: t.client.hash, name: t.client.name, email: t.client.email, data: t.client.data })
+      .from(t.client)
+      .where(eq(t.client.id, clientId))
+      .limit(1);
     if (!client) { console.error(`❌ Cliente ${clientId} nao encontrado.`); process.exit(1); }
 
     // 2. Valida snapshot
-    const snap = await prisma.clientDataSnapshot.findFirst({
-      where: { id: snapshotId, clientId },
-      select: { id: true, createdAt: true, size: true, reason: true, data: true },
-    });
+    const [snap] = await db.select({ id: t.clientDataSnapshot.id, createdAt: t.clientDataSnapshot.createdAt, size: t.clientDataSnapshot.size, reason: t.clientDataSnapshot.reason, data: t.clientDataSnapshot.data })
+      .from(t.clientDataSnapshot)
+      .where(and(eq(t.clientDataSnapshot.id, snapshotId), eq(t.clientDataSnapshot.clientId, clientId)))
+      .limit(1);
     if (!snap) { console.error(`❌ Snapshot ${snapshotId} nao encontrado pra esse cliente.`); process.exit(1); }
 
     const currentSize = (client.data || '').length;
@@ -77,7 +78,7 @@ const ask = (q) => new Promise((resolve) => {
       const ans = await ask('\n⚠️  Confirma restore? Digite "YES" (em maiusculas) pra prosseguir: ');
       if (ans !== 'YES') {
         console.log('Cancelado.\n');
-        await prisma.$disconnect();
+        await pool.end();
         return;
       }
     }
@@ -85,21 +86,20 @@ const ask = (q) => new Promise((resolve) => {
     // 4. Pre-restore snapshot (estado atual vira backup, permite desfazer)
     console.log('\n[1/2] Criando pre-restore snapshot do estado atual...');
     try {
-      await createSnapshot(prisma, clientId, client.data, 'pre-restore');
+      await createSnapshot(clientId, client.data, 'pre-restore');
       console.log('      ✅ Pre-restore snapshot criado.');
     } catch (err) {
       console.error('      ❌ Falha ao criar pre-restore snapshot — restore ABORTADO.');
       console.error('         Motivo:', err.message);
-      await prisma.$disconnect();
+      await pool.end();
       process.exit(1);
     }
 
     // 5. Aplica o restore
     console.log('\n[2/2] Restaurando snapshot...');
-    await prisma.client.update({
-      where: { id: clientId },
-      data: { data: snap.data },
-    });
+    await db.update(t.client)
+      .set({ data: snap.data, updatedAt: new Date() })
+      .where(eq(t.client.id, clientId));
     console.log('      ✅ Client.data atualizado.');
 
     console.log('\n══════════════════════════════════════════════════════════');
@@ -111,11 +111,11 @@ const ask = (q) => new Promise((resolve) => {
     console.log('  ser usado pra desfazer. Liste snapshots de novo pra ver.');
     console.log('══════════════════════════════════════════════════════════\n');
 
-    await prisma.$disconnect();
+    await pool.end();
   } catch (err) {
     console.error('\n❌ Erro:', err.message);
     console.error(err.stack);
-    await prisma.$disconnect();
+    await pool.end();
     process.exit(1);
   }
 })();

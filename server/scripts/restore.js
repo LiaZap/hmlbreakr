@@ -2,23 +2,23 @@
  * BREAKR DATABASE RESTORE SCRIPT
  *
  * Restores data from a backup JSON file into a fresh database.
- * Run prisma migrate deploy BEFORE running this script.
+ * Run drizzle migrations BEFORE running this script.
  *
  * Usage:
  *   1. Set DATABASE_URL in .env to the NEW database
- *   2. Run: npx prisma migrate deploy
+ *   2. Run the drizzle migrations
  *   3. Run: node scripts/restore.js backup-2026-04-16T12-00-00.json
  *
  * ⚠️ WARNING: This will INSERT data. Run on an EMPTY database only.
  */
 
-const { PrismaClient } = require('@prisma/client');
+const { db, pool } = require('../src/db/client');
+const t = require('../src/db/schema-bpo');
+const { count } = require('drizzle-orm');
 const fs = require('fs');
 const path = require('path');
 
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-
-const prisma = new PrismaClient();
 
 async function restore() {
   const backupFile = process.argv[2];
@@ -52,9 +52,9 @@ async function restore() {
     }
 
     // Check if database is empty
-    const existingClients = await prisma.client.count();
-    if (existingClients > 0) {
-      console.warn(`⚠️  O banco já tem ${existingClients} clientes!`);
+    const [{ value: existingClients }] = await db.select({ value: count() }).from(t.client);
+    if (Number(existingClients) > 0) {
+      console.warn(`⚠️  O banco já tem ${Number(existingClients)} clientes!`);
       console.warn('   O restore vai ADICIONAR os dados. Dados duplicados podem causar erros.');
       console.warn('   Para continuar, pressione Ctrl+C para cancelar ou aguarde 5 segundos...\n');
       await new Promise(r => setTimeout(r, 5000));
@@ -65,7 +65,7 @@ async function restore() {
       console.log(`📥 Restaurando ${data.agencies.length} agências...`);
       for (const agency of data.agencies) {
         try {
-          await prisma.agency.create({ data: {
+          await db.insert(t.agency).values({
             id: agency.id,
             name: agency.name,
             hash: agency.hash,
@@ -78,8 +78,7 @@ async function restore() {
             plan: agency.plan || 'basic',
             active: agency.active ?? false,
             createdAt: new Date(agency.createdAt),
-            updatedAt: new Date(agency.updatedAt),
-          }});
+          }).returning();
         } catch (err) {
           console.warn(`   ⚠️ Agência "${agency.name}" falhou: ${err.message}`);
         }
@@ -91,7 +90,7 @@ async function restore() {
       console.log(`📥 Restaurando ${data.clients.length} clientes...`);
       for (const client of data.clients) {
         try {
-          await prisma.client.create({ data: {
+          await db.insert(t.client).values({
             id: client.id,
             name: client.name,
             hash: client.hash,
@@ -107,7 +106,7 @@ async function restore() {
             data: typeof client.data === 'string' ? client.data : JSON.stringify(client.data),
             createdAt: new Date(client.createdAt),
             updatedAt: new Date(client.updatedAt),
-          }});
+          }).returning();
         } catch (err) {
           console.warn(`   ⚠️ Cliente "${client.name}" falhou: ${err.message}`);
         }
@@ -119,7 +118,7 @@ async function restore() {
       console.log(`📥 Restaurando ${data.teamMembers.length} membros de equipe...`);
       for (const tm of data.teamMembers) {
         try {
-          await prisma.teamMember.create({ data: {
+          await db.insert(t.teamMember).values({
             id: tm.id,
             name: tm.name,
             hash: tm.hash,
@@ -128,7 +127,7 @@ async function restore() {
             role: tm.role || 'Gerente',
             clientId: tm.clientId,
             createdAt: new Date(tm.createdAt),
-          }});
+          }).returning();
         } catch (err) {
           console.warn(`   ⚠️ TeamMember "${tm.name}" falhou: ${err.message}`);
         }
@@ -140,7 +139,7 @@ async function restore() {
       console.log(`📥 Restaurando ${data.broadcasts.length} comunicados...`);
       for (const b of data.broadcasts) {
         try {
-          await prisma.broadcast.create({ data: {
+          await db.insert(t.broadcast).values({
             id: b.id,
             title: b.title,
             message: b.message,
@@ -150,7 +149,7 @@ async function restore() {
             targetCategory: b.targetCategory,
             createdAt: new Date(b.createdAt),
             expiresAt: b.expiresAt ? new Date(b.expiresAt) : null,
-          }});
+          }).returning();
         } catch (err) {
           console.warn(`   ⚠️ Broadcast "${b.title}" falhou: ${err.message}`);
         }
@@ -159,24 +158,24 @@ async function restore() {
 
     // Verify
     const counts = await Promise.all([
-      prisma.client.count(),
-      prisma.agency.count(),
-      prisma.teamMember.count(),
-      prisma.broadcast.count(),
+      db.select({ value: count() }).from(t.client),
+      db.select({ value: count() }).from(t.agency),
+      db.select({ value: count() }).from(t.teamMember),
+      db.select({ value: count() }).from(t.broadcast),
     ]);
 
     console.log('\n✅ Restore concluído!\n');
     console.log('📊 Verificação:');
-    console.log(`   • ${counts[0]} clientes no banco`);
-    console.log(`   • ${counts[1]} agências no banco`);
-    console.log(`   • ${counts[2]} membros de equipe no banco`);
-    console.log(`   • ${counts[3]} comunicados no banco`);
+    console.log(`   • ${Number(counts[0][0].value)} clientes no banco`);
+    console.log(`   • ${Number(counts[1][0].value)} agências no banco`);
+    console.log(`   • ${Number(counts[2][0].value)} membros de equipe no banco`);
+    console.log(`   • ${Number(counts[3][0].value)} comunicados no banco`);
 
   } catch (error) {
     console.error('❌ Erro no restore:', error.message);
     process.exit(1);
   } finally {
-    await prisma.$disconnect();
+    await pool.end();
   }
 }
 

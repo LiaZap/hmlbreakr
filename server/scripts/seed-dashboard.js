@@ -22,8 +22,9 @@
  * Idempotente: sobrescreve o Client.data dos clientes seed a cada execução.
  */
 
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { db, pool } = require('../src/db/client');
+const t = require('../src/db/schema-bpo');
+const { eq, sql } = require('drizzle-orm');
 
 // ============================================================================
 // Hashes FIXOS (mesmos do seed-bpo.js)
@@ -772,16 +773,15 @@ function cmvSummary(dataObj) {
 // Persistência
 // ============================================================================
 async function applySeed(built) {
-  const existing = await prisma.client.findUnique({ where: { hash: built.hash } });
+  const [existing] = await db.select().from(t.client).where(eq(t.client.hash, built.hash)).limit(1);
   if (!existing) {
     err(`Cliente nao encontrado (hash=${built.hash}). Rode 'npm run seed:bpo' antes.`);
     return false;
   }
 
-  await prisma.client.update({
-    where: { hash: built.hash },
-    data: { data: JSON.stringify(built.data) },
-  });
+  await db.update(t.client)
+    .set({ data: JSON.stringify(built.data), updatedAt: new Date() })
+    .where(eq(t.client.hash, built.hash));
 
   const s = cmvSummary(built.data);
   ok(`${built.name} atualizado`);
@@ -803,7 +803,7 @@ async function main() {
   log(`DATABASE_URL: ${process.env.DATABASE_URL ? '***configurado***' : 'NAO ENCONTRADO'}`);
 
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await db.execute(sql`SELECT 1`);
   } catch (e) {
     err('Falha ao conectar no Postgres:', e.message);
     process.exit(1);
@@ -837,5 +837,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await pool.end();
   });

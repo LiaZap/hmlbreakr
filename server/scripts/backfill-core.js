@@ -21,12 +21,11 @@
  *       node scripts/backfill-core.js --wipe
  */
 require('dotenv').config();
-const { PrismaClient } = require('@prisma/client');
 const { db, pool } = require('../src/db/client');
 const s = require('../src/db/schema');
+const bpo = require('../src/db/schema-bpo');
+const { eq, or } = require('drizzle-orm');
 const { syncCoreTables } = require('../src/services/coreSync');
-
-const prisma = new PrismaClient();
 
 const args = process.argv.slice(2);
 const has = (f) => args.includes(f);
@@ -88,7 +87,7 @@ async function backfillClient(client) {
   try { data = JSON.parse(client.data || '{}'); } catch { console.warn(`  [skip] ${client.hash}: data inválido`); return null; }
   if (INSPECT) { inspect(client, data); return null; }
   // Mapeamento + persistência centralizados no coreSync (mesmo da F2).
-  const report = await syncCoreTables(prisma, db, s, client.id, data, { wipe: WIPE, dry: DRY, modifiedBy: 'backfill:F1' });
+  const report = await syncCoreTables(db, s, client.id, data, { wipe: WIPE, dry: DRY, modifiedBy: 'backfill:F1' });
   return { client: client.hash, ...report };
 }
 
@@ -104,14 +103,21 @@ async function main() {
     console.error('  Use a cópia local (porta 5433). Para rodar contra remoto (NÃO recomendado): --allow-remote.');
     process.exit(1);
   }
-  const where = ONLY ? { OR: [{ hash: ONLY }, { id: ONLY }] } : {};
+  const where = ONLY ? or(eq(bpo.client.hash, ONLY), eq(bpo.client.id, ONLY)) : undefined;
   // Busca só os ids primeiro; carrega o blob UM por vez → memória constante.
-  const list = await prisma.client.findMany({ where, select: { id: true, hash: true, name: true } });
+  const list = await db
+    .select({ id: bpo.client.id, hash: bpo.client.hash, name: bpo.client.name })
+    .from(bpo.client)
+    .where(where);
   console.log(`Clientes: ${list.length}`);
 
   const reports = [];
   for (const meta of list) {
-    const c = await prisma.client.findUnique({ where: { id: meta.id }, select: { id: true, hash: true, name: true, data: true } });
+    const [c] = await db
+      .select({ id: bpo.client.id, hash: bpo.client.hash, name: bpo.client.name, data: bpo.client.data })
+      .from(bpo.client)
+      .where(eq(bpo.client.id, meta.id))
+      .limit(1);
     if (!c) continue;
     const r = await backfillClient(c);
     if (r) reports.push(r);
@@ -163,4 +169,4 @@ async function main() {
 
 main()
   .catch((e) => { console.error('Falha:', e); process.exitCode = 1; })
-  .finally(async () => { await prisma.$disconnect(); await pool.end(); });
+  .finally(async () => { await pool.end(); });

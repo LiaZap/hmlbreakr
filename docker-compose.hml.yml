@@ -1,0 +1,90 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HML (Homologação) — Breaker. App (Next/Express + Vite) + Postgres + MinIO.
+#
+# Uso direto (VPS/dev):   docker compose -f docker-compose.hml.yml up -d --build
+# EasyPanel: use como REFERÊNCIA — crie 3 serviços (app via Dockerfile, Postgres
+#   e MinIO via templates do EasyPanel) e replique as variáveis de ambiente.
+#
+# As migrações (Drizzle) rodam sozinhas no boot do app: `npm start` chama
+# `node src/db/migrate.js` antes de subir a API. NÃO há Prisma.
+#
+# Os valores vêm de um arquivo .env (copie de .env.hml.example e preencha).
+# NUNCA commite o .env com segredos reais.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-breaker_hml}
+      POSTGRES_USER: ${POSTGRES_USER:-breaker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-breaker} -d ${POSTGRES_DB:-breaker_hml}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?defina MINIO_ROOT_USER no .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?defina MINIO_ROOT_PASSWORD no .env}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "9000:9000"   # API S3 (imagens públicas)
+      - "9001:9001"   # Console web do MinIO
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # ── Banco (Drizzle/pg) ──
+      DATABASE_URL: postgres://${POSTGRES_USER:-breaker}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-breaker_hml}
+      # ── Object storage (MinIO) — imagens F5 ──
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-breaker-images}
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL}
+      # ── App / auth / billing (replicar do .env) ──
+      APP_URL: ${APP_URL}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-false}
+
+volumes:
+  pgdata:
+  miniodata:
