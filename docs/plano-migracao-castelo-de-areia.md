@@ -279,10 +279,16 @@ Uma verificação adversarial pós-implementação (3 agentes) achou **perdas qu
   - Restam no blob só `identity`, `user_info`, flags de onboarding e `metric_snapshots` — **config/UI-state**, não dado operacional/financeiro. Todo o dado operacional+financeiro agora migra fielmente.
 - [x] Injeção única no `GET /client/:hash` ([routes.js](../server/src/routes.js)) atrás das flags, best-effort (fallback ao blob); marca `_{insumos,fichas,menu,faturamento,custos}Source`.
 - [x] **Validado com a app rodando** (porta 3001): Itálico serve insumos+fichas+menu+faturamento+custos(6 listas) das tabelas, fiéis; objetos de custo/identity/onboarding do blob. Cliente sem flag serve tudo do blob.
-- [ ] (próximo) Ligar as flags p/ 10% → 100% (observar em sombra); **F4** (mover o cálculo da DRE/indicadores do `financialCalc` para ler das tabelas em vez do blob); migrar `identity`/onboarding p/ colunas (último resíduo antes da **F5**). Blob segue fonte do WRITE.
+- [x] **Rollout (LOCAL)**: as 5 flags ligadas para os **39/39 clientes** (round-trip já provou fidelidade p/ todos). Validado: ConfeitaLizz (não-piloto) serve os 5 domínios das tabelas. (Rollout em PRD = deploy do branch + ligar as flags gradualmente 10%→100% via UPDATE/admin.)
 
-**F4–F5 — Cálculo no servidor e aposentadoria:**
-- [ ] `financialCalc` lê tabelas; valida indicadores contra o blob no local.
+**F4 — Cálculo no servidor lendo das tabelas — ✅ feito no LOCAL:**
+- [x] `coreRead.reconstructClientData`: monta o `data` (shape do blob) das tabelas, com overlay no blob p/ o resíduo (identity/onboarding/metric_snapshots/benefits legado).
+- [x] **Portão de paridade** `scripts/f4-calc-parity.js`: roda o `financialCalc` sobre o blob × sobre as tabelas nos 39 clientes → **indicadores idênticos** (DRE, CMV, receita; só `revenueMonths` difere por placeholders de mês sem valor, que não afetam números).
+- [x] Wirado em `/admin/clients` ([routes.js](../server/src/routes.js)): cliente totalmente migrado tem o `_financial` calculado das tabelas; senão do blob. Refatorado p/ `Promise.all` (async). Rota verificada (401 sem auth, sem crash).
+- O `GET /client/:hash` já entrega `data` das tabelas (F3) e o front recalcula — então a DRE do dashboard já vem das tabelas p/ clientes migrados.
+
+**F5 — Aposentar o blob:**
+- [ ] Pré-requisito restante: migrar `identity`/`user_info`/onboarding p/ colunas (CompanyProfile/Client) — é o último resíduo lido do blob.
 - [ ] Congelar escrita no blob; manter o dado como backup. **Não dropar.**
 
 ---

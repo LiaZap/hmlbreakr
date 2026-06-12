@@ -16,7 +16,8 @@ const { db: coreDb } = require('./db/client');
 const coreSchema = require('./db/schema');
 const { syncCoreTables } = require('./services/coreSync');
 // F3 read — reconstrói {insumos,fichas,menu,faturamento,custos} das tabelas (atrás de flag por cliente).
-const { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos } = require('./services/coreRead');
+// F4 — reconstructClientData monta o `data` completo das tabelas p/ o cálculo server-side.
+const { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructClientData } = require('./services/coreRead');
 
 // Helpers de setup de auth pra cliente novo (Clerk + senha temp).
 // Compartilhados com stripeWebhook.js — single source of truth.
@@ -289,7 +290,8 @@ router.get('/admin/clients', requireAdmin, async (req, res) => {
       where: req.query.showInactive === '1' ? {} : { active: true },
       // stripeCustomerId/stripeSubscriptionId: usados pelo funil comercial (BAH-091)
       // pra excluir clientes que ja pagaram do pipeline de leads.
-      select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true, stripeCustomerId: true, stripeSubscriptionId: true }
+      select: { id: true, name: true, hash: true, email: true, createdAt: true, data: true, bpoEnabled: true, bpoActivatedAt: true, stripeCustomerId: true, stripeSubscriptionId: true,
+        readInsumosFromTables: true, readFichasFromTables: true, readMenuFromTables: true, readFaturamentoFromTables: true, readCustosFromTables: true }
     });
 
     // Modo FULL: devolve os clientes com `data` cru (JSON string completo do banco).
@@ -297,10 +299,12 @@ router.get('/admin/clients', requireAdmin, async (req, res) => {
       return res.json(clients);
     }
 
-    const lightweight = clients.map(c => {
+    const lightweight = await Promise.all(clients.map(async c => {
       try {
         const d = JSON.parse(c.data || '{}');
         const fd = d.formData || {};
+        // F4: cliente totalmente migrado lê o cálculo das tabelas (paridade provada com o blob).
+        const fullyOnTables = c.readInsumosFromTables && c.readFichasFromTables && c.readMenuFromTables && c.readFaturamentoFromTables && c.readCustosFromTables;
         // Strip operational (fichas + insumos can be huge), keep only what admin panel needs
         return {
           ...c,
@@ -334,15 +338,16 @@ router.get('/admin/clients', requireAdmin, async (req, res) => {
             // Via services/financialCalc.js (inclui TODOS os componentes: location, utilities,
             // recurring, operational, monthly services, admin, marketing, marketplaces, vehicles,
             // equipment depreciation, other fixed costs, partners pro-labore, employees CLT reserves, benefícios)
-            _financial: (() => {
+            _financial: await (async () => {
               try {
-                return calculateClientFinancials(c.data);
+                const calcData = fullyOnTables ? await reconstructClientData(coreDb, coreSchema, c.id, d) : c.data;
+                return calculateClientFinancials(calcData);
               } catch { return null; }
             })()
           })
         };
       } catch { return c; }
-    });
+    }));
     res.json(lightweight);
   } catch {
     res.status(500).json({ error: 'Erro ao listar clientes' });

@@ -422,4 +422,28 @@ async function reconstructCustos(db, s, clientId, blobFd = {}) {
   return { employees, partners: partnersOut, equipment, vehicles: vehiclesOut, fees_cards, fees_marketplaces, ...costObjects };
 }
 
-module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructCostObjects };
+/**
+ * F4 — monta o `data` (shape do blob) do cliente a partir das TABELAS, fazendo
+ * overlay no blob para as partes ainda não migradas (identity, user_info,
+ * onboarding, operational.categories, metric_snapshots, benefits legado).
+ * Serve para alimentar o financialCalc lendo das tabelas em vez do blob cru.
+ */
+async function reconstructClientData(db, s, clientId, blobData = {}) {
+  const blobFichasById = {};
+  for (const f of (blobData.operational?.fichas || [])) blobFichasById[String(f.id)] = f;
+  const [insumos, fichas, menu, fat, custos] = await Promise.all([
+    reconstructInsumos(db, s, clientId),
+    reconstructFichas(db, s, clientId, blobFichasById),
+    reconstructMenu(db, s, clientId),
+    reconstructFaturamento(db, s, clientId),
+    reconstructCustos(db, s, clientId, blobData.formData || {}),
+  ]);
+  return {
+    ...blobData,
+    operational: { ...(blobData.operational || {}), insumos, fichas },
+    menuEngineering: menu,
+    formData: { ...(blobData.formData || {}), ...custos, revenue_history: fat.revenue_history, daily_revenue: fat.daily_revenue },
+  };
+}
+
+module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructCostObjects, reconstructClientData };
