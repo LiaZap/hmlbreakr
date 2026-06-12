@@ -15,8 +15,8 @@ const crypto = require('crypto');
 const { db: coreDb } = require('./db/client');
 const coreSchema = require('./db/schema');
 const { syncCoreTables } = require('./services/coreSync');
-// F3 read — reconstrói operational.insumos das tabelas (atrás de flag por cliente).
-const { reconstructInsumos } = require('./services/coreRead');
+// F3 read — reconstrói operational.{insumos,fichas} das tabelas (atrás de flag por cliente).
+const { reconstructInsumos, reconstructFichas } = require('./services/coreRead');
 
 // Helpers de setup de auth pra cliente novo (Clerk + senha temp).
 // Compartilhados com stripeWebhook.js — single source of truth.
@@ -1344,6 +1344,21 @@ router.get('/client/:hash', async (req, res) => {
       } catch (e) {
         console.error('[F3 reconstructInsumos] falhou, usando blob:', e?.message || e);
         dashboardData._insumosSource = 'blob-fallback';
+      }
+    }
+
+    // F3 fichas: idem para operational.fichas (TechnicalSheet + items/modules/steps).
+    // Passa o blob como fallback de fotoPrato (base64 não migra p/ tabela).
+    if (client.readFichasFromTables) {
+      try {
+        const blobFichasById = {};
+        for (const f of (dashboardData.operational?.fichas || [])) blobFichasById[String(f.id)] = f;
+        const fichasFromTables = await reconstructFichas(coreDb, coreSchema, client.id, blobFichasById);
+        dashboardData.operational = { ...(dashboardData.operational || {}), fichas: fichasFromTables };
+        dashboardData._fichasSource = 'tables';
+      } catch (e) {
+        console.error('[F3 reconstructFichas] falhou, usando blob:', e?.message || e);
+        dashboardData._fichasSource = 'blob-fallback';
       }
     }
 

@@ -111,7 +111,9 @@ const ingredient = pgTable('Ingredient', {
 // pai (self-FK adicionada via SQL bruto). FILHO de agregado — delete físico.
 const ingredientComponent = pgTable('IngredientComponent', {
   id: id(),
-  ingredientId: text('ingredientId').notNull().references(() => ingredient.id, { onDelete: 'cascade' }),  // insumo preparado RAIZ
+  // raiz polimórfica: pertence a um insumo preparado OU a um item de ficha preparado (exatamente um)
+  ingredientId: text('ingredientId').references(() => ingredient.id, { onDelete: 'cascade' }),
+  technicalSheetItemId: text('technicalSheetItemId').references(() => technicalSheetItem.id, { onDelete: 'cascade' }),
   parentComponentId: text('parentComponentId'),        // self-FK (nível aninhado) — SQL bruto
   componentIngredientId: text('componentIngredientId').references(() => ingredient.id, { onDelete: 'set null' }),  // link ao insumo base, se existir
   legacyId: text('legacyId'),
@@ -142,6 +144,7 @@ const ingredientComponent = pgTable('IngredientComponent', {
   ...audit(),
 }, (t) => ({
   ingIdx: index('IngredientComponent_ingredientId_idx').on(t.ingredientId),
+  itemIdx: index('IngredientComponent_technicalSheetItemId_idx').on(t.technicalSheetItemId),
   parentIdx: index('IngredientComponent_parentComponentId_idx').on(t.parentComponentId),
 }));
 
@@ -154,7 +157,8 @@ const technicalSheet = pgTable('TechnicalSheet', {
   name: text('name').notNull(),
   category: text('category'),                          // label denormalizado (← type)
   isModular: boolean('isModular').default(false).notNull(),
-  yield: numeric('yield', { precision: 18, scale: 4 }),           // rendimento
+  yield: numeric('yield', { precision: 18, scale: 4 }),           // rendimento (parte numérica)
+  yieldUnit: text('yieldUnit'),                        // ← rendimento (unidade, ex "gr")
   sellingPrice: numeric('sellingPrice', { precision: 18, scale: 2 }),  // ← precoVenda
   totalCost: numeric('totalCost', { precision: 18, scale: 2 }),   // ← custoTotal (denormalizado)
   costIngredients: numeric('costIngredients', { precision: 18, scale: 2 }),  // ← custoInsumos
@@ -162,7 +166,8 @@ const technicalSheet = pgTable('TechnicalSheet', {
   costMin: numeric('costMin', { precision: 18, scale: 2 }),       // modular
   costMax: numeric('costMax', { precision: 18, scale: 2 }),       // modular
   salesEstimateMonthly: numeric('salesEstimateMonthly', { precision: 18, scale: 2 }),  // ← vendasMes
-  prepTimeMinutes: integer('prepTimeMinutes'),         // ← tempoPreparo
+  prepTimeMinutes: integer('prepTimeMinutes'),         // ← tempoPreparo (parte numérica, p/ query)
+  prepTime: text('prepTime'),                          // ← tempoPreparo (texto cru, ex "5 min" — fidelidade)
   utensils: text('utensils'),                          // ← utensilios
   finishing: text('finishing'),                        // ← finalizacao
   dishPhoto: text('dishPhoto'),                        // ← fotoPrato (URL; base64 fica no blob — ver F0.5)
@@ -188,7 +193,7 @@ const technicalSheetItem = pgTable('TechnicalSheetItem', {
   quantity: numeric('quantity', { precision: 18, scale: 4 }).notNull(),  // ← qty
   unit: text('unit'),
   unitCost: numeric('unitCost', { precision: 18, scale: 6 }).notNull(),  // ← price
-  lineCost: numeric('lineCost', { precision: 18, scale: 2 }).notNull(),  // ← custo
+  lineCost: numeric('lineCost', { precision: 18, scale: 6 }).notNull(),  // ← custo (6 casas: blob tem "R$ 0,675")
   // metadados de conversão (reconstroem o custo sem reprocessar)
   defaultQty: numeric('defaultQty', { precision: 18, scale: 4 }),  // ← defaultQty
   grossQty: numeric('grossQty', { precision: 18, scale: 4 }),      // ← grossQty
@@ -197,6 +202,18 @@ const technicalSheetItem = pgTable('TechnicalSheetItem', {
   usageUnit: text('usageUnit'),                        // ← usageUnit
   purchaseUnit: text('purchaseUnit'),                  // ← purchaseUnit
   originalUnit: text('originalUnit'),                  // ← originalUnit
+  // snapshot completo do item (o item é um insumo denormalizado + uso; pode divergir do insumo base)
+  legacyId: text('legacyId'),                          // ← id do item no blob (estável)
+  category: text('category'),                          // ← category
+  purchaseQty: numeric('purchaseQty', { precision: 18, scale: 4 }),    // ← purchaseQty
+  purchaseTotal: numeric('purchaseTotal', { precision: 18, scale: 2 }), // ← purchaseTotal
+  yield: numeric('yield', { precision: 18, scale: 4 }),               // ← rendimento (num)
+  yieldUnit: text('yieldUnit'),                        // ← rendimento (unidade)
+  isPrepared: boolean('isPrepared').default(false).notNull(),
+  preparedYield: numeric('preparedYield', { precision: 18, scale: 4 }),     // ← rendimentoPreparado
+  preparedYieldUnit: text('preparedYieldUnit'),        // ← rendimentoUnit
+  preparedTotalCost: numeric('preparedTotalCost', { precision: 18, scale: 4 }),  // ← totalCost
+  sourceUpdatedAt: ts('sourceUpdatedAt'),              // ← lastUpdated (epoch)
   ...audit(),
 }, (t) => ({
   sheetIdx: index('TechnicalSheetItem_sheetId_idx').on(t.sheetId),

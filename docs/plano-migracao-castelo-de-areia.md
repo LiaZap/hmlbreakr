@@ -265,12 +265,16 @@ Uma verificação adversarial pós-implementação (3 agentes) achou **perdas qu
 - [x] Estratégia = **projeção reconstruída a cada save** (wipe+insert por cliente, idempotente). Blob continua a fonte da verdade; `modifiedBy='sync:F2'`. Smoke test OK; backfill regredido (0 divergências) prova o módulo compartilhado.
 - [ ] (próximo) Observar em sombra com edição real pela UI e validar a projeção em produção (após deploy).
 
-**F3 — Leitura por domínio + flag — 🚧 INSUMOS feito no LOCAL:**
-- [x] Flag por cliente `Client.readInsumosFromTables` (coluna Prisma, default OFF, kill-switch). Migração `20260612120000_read_insumos_flag`.
-- [x] Reverse mapper `src/services/coreRead.js` (inverso do coreSync): Ingredient(+IngredientComponent árvore) → shape do blob, `id=legacyId` (estável), chaves PT/compra, `R$`/vírgula com precisão preservada.
-- [x] **Portão de round-trip** `scripts/f3-roundtrip-insumos.js`: blob × reconstrução, **100% fiel** nos 39 clientes (1822 insumos, 215 subs, 0 divergência, 0 lossy). Pré-requisito: `IngredientComponent` enriquecido (migração `0004`) c/ o snapshot completo do sub.
-- [x] Injeção no `GET /client/:hash` ([routes.js:1334](../server/src/routes.js)) atrás da flag, best-effort (fallback ao blob); marca `_insumosSource`. Piloto: Itálico ligado, serve 41 insumos da tabela.
-- [ ] (próximo) Validar com a app rodando; ligar p/ 10% → 100%; depois migrar leitura de fichas → menu → faturamento → custos (mesmo padrão).
+**F3 — Leitura por domínio + flag — 🚧 INSUMOS e FICHAS feitos no LOCAL:**
+- [x] **Insumos**: flag `Client.readInsumosFromTables` (default OFF). Reverse mapper em `coreRead.js`. Round-trip `f3-roundtrip-insumos.js` **100% fiel** (1822 insumos, 215 subs). Pré-req: `IngredientComponent` enriquecido (mig. `0004`).
+- [x] **Fichas**: flag `Client.readFichasFromTables` (default OFF). `coreRead.reconstructFichas` (TechnicalSheet + items/modules/options/steps; `id=legacyId`; fotoPrato base64 = fallback do blob). Round-trip `f3-roundtrip-fichas.js` **100% fiel** (1402 fichas, 4820 itens). Pré-reqs:
+  - `TechnicalSheet` +`yieldUnit`/`prepTime` (migs. `0005`/`0006`) — tempoPreparo é texto livre ("5 min").
+  - `TechnicalSheetItem` +snapshot completo + `lineCost` 18,6 (blob tem "R$ 0,675").
+  - `IngredientComponent` **polimórfico** (mig. `0007`): pertence a um insumo **ou** a um item de ficha (`technicalSheetItemId`) — item preparado tem sub-receita própria que pode divergir do insumo base.
+  - `insumos` (contador) tratado como derivado (`=ingredients.length`; blob às vezes stale → corrigido).
+- [x] Injeção única no `GET /client/:hash` ([routes.js](../server/src/routes.js)) atrás das flags, best-effort (fallback ao blob); marca `_insumosSource`/`_fichasSource`.
+- [x] **Validado com a app rodando** (porta 3001): Itálico serve 41 insumos + 19 fichas das tabelas, fiéis. Cliente sem flag (ConfeitaLizz) serve do blob.
+- [ ] (próximo) Ligar p/ 10% → 100%; migrar leitura de menu → faturamento → custos (mesmo padrão). Blob segue fonte do WRITE.
 
 **F4–F5 — Cálculo no servidor e aposentadoria:**
 - [ ] `financialCalc` lê tabelas; valida indicadores contra o blob no local.

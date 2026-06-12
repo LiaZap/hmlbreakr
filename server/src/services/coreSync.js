@@ -72,13 +72,14 @@ function makeMatcher(rows, nameKey) {
 }
 
 // Caminha a árvore de subIngredients do insumo preparado → IngredientComponent.
-function emitComponents(list, rootIngredientId, parentId, ingMap, out, modifiedBy) {
+// rootCol = 'ingredientId' (sub-receita de insumo) ou 'technicalSheetItemId' (sub-receita de item de ficha)
+function emitComponents(list, rootCol, rootId, parentId, ingMap, out, modifiedBy) {
   let pos = 0;
   for (const c of (Array.isArray(list) ? list : [])) {
     const compId = uuid();
     const ry = parseYield(c.rendimento);
     out.push({
-      id: compId, ingredientId: rootIngredientId, parentComponentId: parentId,
+      id: compId, [rootCol]: rootId, parentComponentId: parentId,
       componentIngredientId: c.id != null ? (ingMap[String(c.id)] || null) : null,
       legacyId: c.id != null ? String(c.id) : null,
       name: first(c.name, c.nome) || 'Componente',
@@ -99,7 +100,7 @@ function emitComponents(list, rootIngredientId, parentId, ingMap, out, modifiedB
       modifiedBy,
     });
     if (Array.isArray(c.subIngredients) && c.subIngredients.length) {
-      emitComponents(c.subIngredients, rootIngredientId, compId, ingMap, out, modifiedBy);
+      emitComponents(c.subIngredients, rootCol, rootId, compId, ingMap, out, modifiedBy);
     }
   }
 }
@@ -173,7 +174,7 @@ function buildClientRows(clientId, data, opts = {}) {
   for (const it of (op.insumos || [])) {
     if (Array.isArray(it.subIngredients) && it.subIngredients.length) {
       const rootId = it.id != null ? ingMap[String(it.id)] : null;
-      if (rootId) emitComponents(it.subIngredients, rootId, null, ingMap, compRows, MODIFIED_BY);
+      if (rootId) emitComponents(it.subIngredients, 'ingredientId', rootId, null, ingMap, compRows, MODIFIED_BY);
     }
   }
 
@@ -183,13 +184,15 @@ function buildClientRows(clientId, data, opts = {}) {
     const id = uuid();
     if (f.id != null) sheetMap[String(f.id)] = id;
     const fcat = first(f.categoria, f.category, f.type);
+    const fy = parseYield(first(f.rendimento, f.yield));
     return {
       id, clientId: cid, legacyId: f.id != null ? String(f.id) : null,
       categoryId: catId('sheet', fcat),
       name: first(f.nome, f.name) || 'Ficha',
       category: fcat || null,
       isModular: !!f.isModular,
-      yield: money(first(f.rendimento, f.yield)),
+      yield: fy.value,
+      yieldUnit: fy.unit,
       sellingPrice: money(first(f.precoVenda, f.sellingPrice)),
       totalCost: money(first(f.custoTotal, f.totalCost)),
       costIngredients: money(f.custoInsumos),
@@ -197,6 +200,7 @@ function buildClientRows(clientId, data, opts = {}) {
       costMin: money(f.custoMin), costMax: money(f.custoMax),
       salesEstimateMonthly: money(f.vendasMes),
       prepTimeMinutes: intOrNull(f.tempoPreparo),
+      prepTime: (f.tempoPreparo != null && String(f.tempoPreparo).trim() !== '') ? String(f.tempoPreparo) : null,
       utensils: (f.utensilios && String(f.utensilios).trim()) || null,
       finishing: (f.finalizacao && String(f.finalizacao).trim()) || null,
       dishPhoto: urlOnly(f.fotoPrato),
@@ -242,17 +246,31 @@ function buildClientRows(clientId, data, opts = {}) {
         const line = money(first(it.custo, it.custoTotal, it.lineCost)) || '0';
         const unitCost = money(first(it.price, it.custoUnitario, it.unitCost))
           || (parseFloat(qty) ? String(parseFloat(line) / parseFloat(qty)) : '0');
+        const iy = parseYield(it.rendimento);
+        const itemId = uuid();
         itemRows.push({
-          id: uuid(), sheetId,
+          id: itemId, sheetId,
           ingredientId: first(it.insumoId, it.id) != null ? (ingMap[String(first(it.insumoId, it.id))] || null) : null,
+          legacyId: it.id != null ? String(it.id) : null,
           description: first(it.nome, it.descricao, it.name, it.description) || 'Item',
+          category: first(it.categoria, it.category) || null,
           quantity: qty, unit: first(it.unit, it.unidade) || null,
           unitCost, lineCost: line,
           defaultQty: money(it.defaultQty), grossQty: money(it.grossQty), netQty: money(it.netQty),
           correctionFactor: money(it.fc),
           usageUnit: it.usageUnit || null, purchaseUnit: it.purchaseUnit || null, originalUnit: it.originalUnit || null,
+          purchaseQty: money(it.purchaseQty), purchaseTotal: money(it.purchaseTotal),
+          yield: iy.value, yieldUnit: iy.unit,
+          isPrepared: boolish(it.isPrepared),
+          preparedYield: money(it.rendimentoPreparado), preparedYieldUnit: it.rendimentoUnit || null,
+          preparedTotalCost: money(it.totalCost),
+          sourceUpdatedAt: epochToDate(it.lastUpdated),
           modifiedBy: MODIFIED_BY,
         });
+        // item de ficha preparado tem sua PRÓPRIA sub-receita (snapshot pode divergir do insumo base)
+        if (boolish(it.isPrepared) && Array.isArray(it.subIngredients) && it.subIngredients.length) {
+          emitComponents(it.subIngredients, 'technicalSheetItemId', itemId, null, ingMap, compRows, MODIFIED_BY);
+        }
       }
     }
   }
@@ -461,7 +479,8 @@ function buildClientRows(clientId, data, opts = {}) {
 // ordem FK-safe de insert (category antes dos que a referenciam; ingredient antes
 // de component/item; sheet antes de item/module/step/menu; module antes de option).
 const INSERT_ORDER = [
-  'category', 'ingredient', 'ingredientComponent', 'technicalSheet', 'technicalSheetItem',
+  // ingredientComponent DEPOIS de technicalSheetItem (FK polimórfica technicalSheetItemId)
+  'category', 'ingredient', 'technicalSheet', 'technicalSheetItem', 'ingredientComponent',
   'sheetModule', 'sheetModuleOption', 'technicalSheetStep', 'menuItem', 'revenueEntry',
   'dailyRevenue', 'companyProfile', 'fixedCostItem', 'employee', 'partner', 'equipment',
   'vehicle', 'cardMachine', 'marketplace', 'metricSnapshot',
