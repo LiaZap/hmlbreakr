@@ -16,102 +16,67 @@
  * tudo). 50 * ~1MB ≈ 50MB por cliente ativo — aceitável.
  *
  * Helpers admin permitem listar e restaurar snapshots via UI.
+ *
+ * Migrado de Prisma → Drizzle (usa db + schema-bpo direto; sem param `prisma`).
  */
+const crypto = require('crypto');
+const { eq, and, desc, notInArray } = require('drizzle-orm');
+const { db } = require('../db/client');
+const s = require('../db/schema-bpo');
 
 /**
  * Cria snapshot do data atual do cliente. NÃO valida se é JSON válido —
- * armazena a string crua pra preservar inclusive estados corrompidos (que
- * podem ser úteis pra debug).
- *
- * @param {import('@prisma/client').PrismaClient} prisma
- * @param {string} clientId
- * @param {string} currentData — string JSON (ou qualquer string) já presente em Client.data
- * @param {string} [reason='auto'] — origem do snapshot
+ * armazena a string crua pra preservar inclusive estados corrompidos.
  * @returns {Promise<{id: string, size: number}>}
  */
-async function createSnapshot(prisma, clientId, currentData, reason = 'auto') {
+async function createSnapshot(clientId, currentData, reason = 'auto') {
   if (!clientId) throw new Error('createSnapshot: clientId é obrigatório');
   if (typeof currentData !== 'string') {
-    // Edge case: data vazio ou null. Salva como string vazia pra manter rastro.
     currentData = currentData == null ? '' : String(currentData);
   }
   const size = Buffer.byteLength(currentData, 'utf8');
-  const snap = await prisma.clientDataSnapshot.create({
-    data: {
-      clientId,
-      data: currentData,
-      size,
-      reason: reason || 'auto',
-    },
-    select: { id: true, size: true, createdAt: true, reason: true },
-  });
+  const [snap] = await db.insert(s.clientDataSnapshot)
+    .values({ id: crypto.randomUUID(), clientId, data: currentData, size, reason: reason || 'auto' })
+    .returning({ id: s.clientDataSnapshot.id, size: s.clientDataSnapshot.size, createdAt: s.clientDataSnapshot.createdAt, reason: s.clientDataSnapshot.reason });
   return snap;
 }
 
 /**
- * Deleta snapshots antigos do cliente mantendo só os N mais recentes.
- * Best-effort — falha silenciosa (apenas loga).
- *
- * @param {import('@prisma/client').PrismaClient} prisma
- * @param {string} clientId
- * @param {number} [keepLast=50]
+ * Deleta snapshots antigos do cliente mantendo só os N mais recentes. Best-effort.
  * @returns {Promise<{deleted: number}>}
  */
-async function pruneOldSnapshots(prisma, clientId, keepLast = 50) {
+async function pruneOldSnapshots(clientId, keepLast = 50) {
   if (!clientId) return { deleted: 0 };
   const keep = Math.max(1, Number(keepLast) || 50);
-  // Busca os IDs dos N mais recentes pra preservar
-  const recent = await prisma.clientDataSnapshot.findMany({
-    where: { clientId },
-    orderBy: { createdAt: 'desc' },
-    take: keep,
-    select: { id: true },
-  });
+  const recent = await db.select({ id: s.clientDataSnapshot.id }).from(s.clientDataSnapshot)
+    .where(eq(s.clientDataSnapshot.clientId, clientId))
+    .orderBy(desc(s.clientDataSnapshot.createdAt)).limit(keep);
   const keepIds = recent.map((r) => r.id);
   if (keepIds.length === 0) return { deleted: 0 };
-  const result = await prisma.clientDataSnapshot.deleteMany({
-    where: {
-      clientId,
-      id: { notIn: keepIds },
-    },
-  });
-  return { deleted: result.count };
+  const res = await db.delete(s.clientDataSnapshot)
+    .where(and(eq(s.clientDataSnapshot.clientId, clientId), notInArray(s.clientDataSnapshot.id, keepIds)));
+  return { deleted: res.rowCount ?? 0 };
 }
 
 /**
- * Lista snapshots de um cliente, omitindo o campo `data` (pesado).
- * Ordenado do mais recente pro mais antigo.
- *
- * @param {import('@prisma/client').PrismaClient} prisma
- * @param {string} clientId
- * @returns {Promise<Array<{id, size, reason, createdAt}>>}
+ * Lista snapshots de um cliente, omitindo o campo `data` (pesado). Mais recente primeiro.
  */
-async function listSnapshots(prisma, clientId) {
+async function listSnapshots(clientId) {
   if (!clientId) return [];
-  return prisma.clientDataSnapshot.findMany({
-    where: { clientId },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      size: true,
-      reason: true,
-      createdAt: true,
-    },
-  });
+  return db.select({ id: s.clientDataSnapshot.id, size: s.clientDataSnapshot.size, reason: s.clientDataSnapshot.reason, createdAt: s.clientDataSnapshot.createdAt })
+    .from(s.clientDataSnapshot)
+    .where(eq(s.clientDataSnapshot.clientId, clientId))
+    .orderBy(desc(s.clientDataSnapshot.createdAt));
 }
 
 /**
  * Retorna o snapshot completo (com `data`) — usado pra restore/preview.
- *
- * @param {import('@prisma/client').PrismaClient} prisma
- * @param {string} snapshotId
  * @returns {Promise<object|null>}
  */
-async function getSnapshot(prisma, snapshotId) {
+async function getSnapshot(snapshotId) {
   if (!snapshotId) return null;
-  return prisma.clientDataSnapshot.findUnique({
-    where: { id: snapshotId },
-  });
+  const [row] = await db.select().from(s.clientDataSnapshot).where(eq(s.clientDataSnapshot.id, snapshotId)).limit(1);
+  return row || null;
 }
 
 module.exports = {

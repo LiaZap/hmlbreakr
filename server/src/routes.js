@@ -1743,7 +1743,7 @@ router.post('/client/:hash/sync', async (req, res) => {
     // não bloquear o save se snapshot falhar (banco cheio, etc).
     if (currentSavedClient && currentSavedClient.data) {
       try {
-        await createSnapshot(prisma, clientIdToUpdate, currentSavedClient.data, snapshotReason);
+        await createSnapshot(clientIdToUpdate, currentSavedClient.data, snapshotReason);
       } catch (snapErr) {
         console.error('[sync] snapshot pré-save falhou (continuando save):', snapErr.message);
       }
@@ -1759,7 +1759,7 @@ router.post('/client/:hash/sync', async (req, res) => {
     // Best-effort cleanup — mantém os 50 snapshots mais recentes
     // (aumentado 20→50 em 29/05/2026 — Pampa Entreveiro teve 56 saves em
     // 1 dia e o limite anterior pruneou todo o historico de ontem).
-    pruneOldSnapshots(prisma, clientIdToUpdate, 50)
+    pruneOldSnapshots(clientIdToUpdate, 50)
       .catch(err => console.error('[sync] pruneOldSnapshots falhou:', err.message));
 
     // Espelha sócios/funcionários/payment methods do onboarding pro BPO

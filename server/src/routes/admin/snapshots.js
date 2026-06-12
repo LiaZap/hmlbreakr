@@ -46,7 +46,7 @@ router.get('/clients/:clientId/snapshots', async (req, res) => {
     });
     if (!client) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-    const snapshots = await listSnapshots(prisma, clientId);
+    const snapshots = await listSnapshots(clientId);
     return res.json({
       client: { id: client.id, name: client.name, hash: client.hash },
       count: snapshots.length,
@@ -82,7 +82,7 @@ router.post(
 
       // 2. Valida snapshot e que ele pertence ao cliente (segurança: não
       // permitir restaurar snapshot de outro cliente)
-      const snap = await getSnapshot(prisma, snapshotId);
+      const snap = await getSnapshot(snapshotId);
       if (!snap) return res.status(404).json({ error: 'Snapshot não encontrado' });
       if (snap.clientId !== clientId) {
         return res.status(403).json({ error: 'Snapshot não pertence a esse cliente' });
@@ -94,7 +94,6 @@ router.post(
       let preRestoreSnapshotId = null;
       try {
         const preSnap = await createSnapshot(
-          prisma,
           clientId,
           client.data || '',
           'pre-restore'
@@ -114,7 +113,7 @@ router.post(
       });
 
       // 5. Cleanup best-effort
-      pruneOldSnapshots(prisma, clientId, 20).catch((err) =>
+      pruneOldSnapshots(clientId, 20).catch((err) =>
         console.error('[admin snapshots restore] prune falhou:', err.message)
       );
 
