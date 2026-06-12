@@ -107,7 +107,7 @@ model StripeEvent {
 model ClientDataSnapshot {
   id        String   @id @default(uuid())
   clientId  String
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
   data      String // JSON snapshot do Client.data
   size      Int // bytes — pra detectar saves anômalos (size diminuiu muito)
   reason    String? // 'auto' | 'pre-onboarding-save' | 'manual' | 'auto-shrink-detected' | 'pre-restore' | etc
@@ -149,7 +149,7 @@ model TeamMember {
   clerkUserId String?  @unique
   role        String   @default("Gerente")
   clientId    String
-  client      Client   @relation("ClientTeam", fields: [clientId], references: [id], onDelete: Cascade)
+  client      Client   @relation("ClientTeam", fields: [clientId], references: [id], onDelete: Restrict)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -206,7 +206,7 @@ model AuditLog {
 model Supplier {
   id                   String             @id @default(uuid())
   clientId             String
-  client               Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client               Client             @relation(fields: [clientId], references: [id], onDelete: Restrict)
   cnpj                 String
   name                 String
   email                String?
@@ -232,7 +232,7 @@ model Supplier {
 model BankAccount {
   id                   String               @id @default(uuid())
   clientId             String
-  client               Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client               Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
   bankCode             String // 001=BB, 237=Bradesco, 341=Itaú, etc.
   bankName             String
   agency               String
@@ -259,7 +259,7 @@ model BankAccount {
 model FinancialCategory {
   id               String              @id @default(uuid())
   clientId         String
-  client           Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client           Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
   name             String
   type             String // receita | despesa
   parentId         String?
@@ -280,7 +280,7 @@ model FinancialCategory {
 model BpoEmployee {
   id             String    @id @default(uuid())
   clientId       String
-  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
   name           String
   cpf            String?
   email          String?
@@ -311,7 +311,7 @@ model BpoEmployee {
 model BpoPartner {
   id                    String   @id @default(uuid())
   clientId              String
-  client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client                Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
   name                  String
   cpf                   String?
   email                 String?
@@ -332,7 +332,7 @@ model BpoPartner {
 model PaymentMethod {
   id             String              @id @default(uuid())
   clientId       String
-  client         Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client         Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
   name           String // iFood, Aiqfome, Crédito, Débito, PIX, Dinheiro
   type           String // marketplace | card_credit | card_debit | pix | cash | transfer
   feePercent     Decimal             @default(0) @db.Decimal(5, 2)
@@ -352,7 +352,7 @@ model PaymentMethod {
 model Loan {
   id                  String   @id @default(uuid())
   clientId            String
-  client              Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client              Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
   bankName            String
   contractNumber      String?
   description         String? // ex: "Capital de giro - reforma"
@@ -383,7 +383,7 @@ model Loan {
 model ReceivableAdvance {
   id              String         @id @default(uuid())
   clientId        String
-  client          Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client          Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
   paymentMethodId String?
   paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   // Identificação opcional (ex: "iFood antecipação semanal")
@@ -406,7 +406,7 @@ model ReceivableAdvance {
 model Payable {
   id                String               @id @default(uuid())
   clientId          String
-  client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client            Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
   supplierId        String?
   supplier          Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   amount            Decimal              @db.Decimal(18, 2)
@@ -452,7 +452,7 @@ model Payable {
 model Receivable {
   id                String               @id @default(uuid())
   clientId          String
-  client            Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client            Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
   payerName         String // cliente final do restaurante (pode ser "iFood", "Cliente avulso", etc.)
   payerDocument     String?
   amount            Decimal              @db.Decimal(18, 2)
@@ -547,7 +547,7 @@ model BankTransaction {
 model ReconciliationRule {
   id            String   @id @default(uuid())
   clientId      String
-  client        Client   @relation("ClientReconciliationRules", fields: [clientId], references: [id], onDelete: Cascade)
+  client        Client   @relation("ClientReconciliationRules", fields: [clientId], references: [id], onDelete: Restrict)
   keyword       String
   matchType     String   @default("contains") // contains | starts | exact | regex
   supplierId    String?
@@ -564,7 +564,7 @@ model ReconciliationRule {
 model BankTransfer {
   id            String      @id @default(uuid())
   clientId      String
-  client        Client      @relation("ClientBankTransfers", fields: [clientId], references: [id], onDelete: Cascade)
+  client        Client      @relation("ClientBankTransfers", fields: [clientId], references: [id], onDelete: Restrict)
   fromAccountId String
   fromAccount   BankAccount @relation("TransferFromAccount", fields: [fromAccountId], references: [id])
   toAccountId   String
@@ -581,7 +581,7 @@ model BankTransfer {
 model BpoTask {
   id          String    @id @default(uuid())
   clientId    String
-  client      Client    @relation("ClientBpoTasks", fields: [clientId], references: [id], onDelete: Cascade)
+  client      Client    @relation("ClientBpoTasks", fields: [clientId], references: [id], onDelete: Restrict)
   type        String // overdue_payable | overdue_receivable | unconciliated_tx | whatsapp_pending | manual
   severity    String    @default("normal") // low | normal | high | critical
   title       String
@@ -633,7 +633,7 @@ model WhatsappMessage {
 model PdvIntegration {
   id             String    @id @default(uuid())
   clientId       String
-  client         Client    @relation("ClientPdvIntegrations", fields: [clientId], references: [id], onDelete: Cascade)
+  client         Client    @relation("ClientPdvIntegrations", fields: [clientId], references: [id], onDelete: Restrict)
   provider       String // suitable | colibri | linx | saipos | outro
   authConfig     String // JSON: { apiKey, baseUrl, etc }
   active         Boolean   @default(true)

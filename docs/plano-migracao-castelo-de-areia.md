@@ -230,7 +230,18 @@ com drivers em colunas, P11). O blob deixa de ser fonte de cálculo.
 5. **NUNCA** re-rodar `generate` por cima do mesmo idx 0002 (apagaria o append). Para regenerar: apague `0002.sql` + `0002_snapshot.json` + a entry do journal e refaça o append.
 6. As 19 FK cross-ORM são **raw-only** (invisíveis ao snapshot do Drizzle); **NUNCA** declará-las com `.references()` para tabelas do Prisma — o `generate` duplicaria a constraint.
 
-> **Pendência fora do escopo F0.5 (lado Prisma):** `BpoEmployee`/`BpoPartner`/`PaymentMethod` ainda têm `clientId → Client` **CASCADE** (Prisma). O `set null` cross-ORM só é seguro enquanto o `Client` usar soft delete; trocar esses 3 para `RESTRICT` exige uma migração Prisma separada.
+> **~~Pendência~~ RESOLVIDA (lado Prisma):** migração `20260612000000_restrict_client_fks`
+> trocou as **16** FK `clientId → Client` do Prisma de `CASCADE` para `RESTRICT`
+> (BpoEmployee, BpoPartner, PaymentMethod, Payable, Receivable, Supplier,
+> BankAccount, FinancialCategory, Loan, ReceivableAdvance, ReconciliationRule,
+> BankTransfer, BpoTask, PdvIntegration, TeamMember, ClientDataSnapshot).
+> Seguro: o app nunca apaga `Client` fisicamente (delete é soft `active=false`,
+> [routes.js](../server/src/routes.js)). Agora **nenhuma** FK→Client é CASCADE
+> nos dois ORMs (31 RESTRICT + 1 SET NULL p/ WhatsappMessage). Aplicada via
+> `prisma migrate deploy` (não `migrate dev`, que veria as tabelas Drizzle como
+> drift e tentaria resetar). Cascades intra-agregado (parcelas de Payable/
+> Receivable, PaymentTransaction, BankTransaction) mantidos — não são dado de
+> cliente solto.
 
 #### Rodada de verificação adversarial → migração `0003_wide_warbird` (perdas que escaparam)
 
@@ -248,9 +259,11 @@ Uma verificação adversarial pós-implementação (3 agentes) achou **perdas qu
 - [x] `migrate` → `backfill --dry-run` → `--wipe` (39 clientes): **0 divergências**; integridade FK conferida (0 órfãos `categoryId`/`bpoEmployeeId`).
 - [x] Cobertura: 382 categorias, 138 passos de preparo, 1402 fichas c/ `sourceUpdatedAt`, 39/39 perfis de dono, 114 vínculos `Employee→BpoEmployee`.
 
-**F2 — Dual-write:**
-- [ ] Estender `onboardingSync.js` (ou o gancho de escrita) para gravar Drizzle.
-- [ ] Rodar em sombra no local: editar via UI, conferir que a tabela acompanha.
+**F2 — Dual-write — ✅ IMPLEMENTADA no LOCAL:**
+- [x] Mapeamento extraído para `src/services/coreSync.js` (módulo único, deps injetadas) — usado pelo backfill **e** pelo hook de save (DRY: sem duplicar a lógica).
+- [x] Hook em `routes.js` nos 2 ganchos de save (`POST` do `Client.data`): após o `onboardingSync`, chama `syncCoreTables` (best-effort, não bloqueia o save; roda **depois** do BPO sync p/ o vínculo `Employee→BpoEmployee` achar as linhas novas).
+- [x] Estratégia = **projeção reconstruída a cada save** (wipe+insert por cliente, idempotente). Blob continua a fonte da verdade; `modifiedBy='sync:F2'`. Smoke test OK; backfill regredido (0 divergências) prova o módulo compartilhado.
+- [ ] (próximo) Observar em sombra com edição real pela UI e validar a projeção em produção (após deploy).
 
 **F3 — Leitura por domínio + flag:**
 - [ ] Feature flag por cliente (`Client.readFromTables` ou tabela de flags).

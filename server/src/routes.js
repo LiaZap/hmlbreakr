@@ -11,6 +11,11 @@ const { createSnapshot, pruneOldSnapshots } = require('./services/snapshotServic
 const { deepMerge } = require('./utils/deepMerge');
 const crypto = require('crypto');
 
+// F2 dual-write — projeção do blob nas tabelas Drizzle do núcleo (coreSync).
+const { db: coreDb } = require('./db/client');
+const coreSchema = require('./db/schema');
+const { syncCoreTables } = require('./services/coreSync');
+
 // Helpers de setup de auth pra cliente novo (Clerk + senha temp).
 // Compartilhados com stripeWebhook.js — single source of truth.
 const { ensureClerkUserForClient, generateTempPassword } = require('./services/clientAuthSetup');
@@ -1661,10 +1666,18 @@ router.post('/client/:hash/sync', async (req, res) => {
       .catch(err => console.error('[sync] pruneOldSnapshots falhou:', err.message));
 
     // Espelha sócios/funcionários/payment methods do onboarding pro BPO
-    // (best-effort — não bloqueia o save se falhar)
+    // (best-effort — não bloqueia o save se falhar) + F2 dual-write do núcleo.
     if (newData.formData) {
       syncOnboardingToBpo(prisma, clientIdToUpdate, newData.formData)
-        .catch(err => console.error('[onboardingSync] hook failed:', err));
+        .catch(err => console.error('[onboardingSync] hook failed:', err))
+        // coreSync DEPOIS do BPO sync: o vínculo Employee→BpoEmployee acha as
+        // linhas recém-criadas. Blob é a fonte da verdade; isto é projeção.
+        .finally(() => syncCoreTables(prisma, coreDb, coreSchema, clientIdToUpdate, newData)
+          .catch(err => console.error('[coreSync] hook failed:', err?.message || err)));
+    } else {
+      // Sem formData o blob ainda muda (insumos/fichas/menu) → reprojeta mesmo assim.
+      syncCoreTables(prisma, coreDb, coreSchema, clientIdToUpdate, newData)
+        .catch(err => console.error('[coreSync] hook failed:', err?.message || err));
     }
 
     // Auditoria — registra o save do Client.data (best-effort, não bloqueia)
@@ -1770,10 +1783,15 @@ router.post('/client/:hash/sync-partial', async (req, res) => {
       }
     });
 
-    // BPO hook (best-effort, non-blocking) — only if formData ended up populated
+    // BPO hook (best-effort, non-blocking) + F2 dual-write do núcleo.
     if (merged.formData && Object.keys(merged.formData).length > 0) {
       syncOnboardingToBpo(prisma, clientIdToUpdate, merged.formData)
-        .catch(err => console.error('[onboardingSync] hook failed:', err));
+        .catch(err => console.error('[onboardingSync] hook failed:', err))
+        .finally(() => syncCoreTables(prisma, coreDb, coreSchema, clientIdToUpdate, merged)
+          .catch(err => console.error('[coreSync] hook failed:', err?.message || err)));
+    } else {
+      syncCoreTables(prisma, coreDb, coreSchema, clientIdToUpdate, merged)
+        .catch(err => console.error('[coreSync] hook failed:', err?.message || err));
     }
 
     // Auditoria — registra o save parcial do Client.data (best-effort)
