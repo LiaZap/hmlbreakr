@@ -336,10 +336,12 @@ const fixedCostItem = pgTable('FixedCostItem', {
   id: id(),
   clientId: text('clientId').notNull(),
   legacyId: text('legacyId'),
-  costGroup: text('costGroup').notNull(),   // utilities|recurring|operational|admin|marketing|monthly_service|other|location
-  costKey: text('costKey'),                 // energy|water|pest_control|software_pdv|agency|rent|...
-  label: text('label'),
-  amount: numeric('amount', { precision: 18, scale: 2 }).notNull(),
+  costGroup: text('costGroup').notNull(),   // = chave do formData: location_costs|utilities|recurring_services|operational_fixed|admin_systems|marketing_structure|monthly_services|other_fixed_costs
+  costKey: text('costKey'),                 // chave do objeto (energy|software_pdv|...); null p/ arrays
+  label: text('label'),                     // nome do item p/ arrays (monthly_services/other_fixed_costs)
+  rawValue: text('rawValue'),               // valor ORIGINAL exato (string) — espelho fiel do blob
+  amount: numeric('amount', { precision: 18, scale: 2 }),   // parse de rawValue (null se não-numérico, ex "meta")
+  position: integer('position'),            // ordem dentro do array group
   active: boolean('active').default(true).notNull(),
   ...soft(),
   ...audit(),

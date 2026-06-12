@@ -326,6 +326,30 @@ const brMoneyTh = (v) => { const t = brThousands(v); return t === '' ? '' : 'R$ 
 const normName = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
 /**
+ * Reconstrói os OBJETOS de custo do formData a partir de FixedCostItem (espelho
+ * fiel: rawValue = string original). Grupos-objeto → {costKey: rawValue}; grupos-
+ * array (monthly_services/other_fixed_costs) → [{name, value}] por position.
+ * @returns {Object} { location_costs:{...}, utilities:{...}, ..., monthly_services:[...] }
+ */
+async function reconstructCostObjects(db, s, clientId) {
+  const rows = await db.select().from(s.fixedCostItem)
+    .where(and(eq(s.fixedCostItem.clientId, clientId), eq(s.fixedCostItem.isDeleted, false)));
+  const out = {}; const arrays = {};
+  for (const r of rows) {
+    if (r.costKey != null) {
+      if (!out[r.costGroup]) out[r.costGroup] = {};
+      out[r.costGroup][r.costKey] = r.rawValue;
+    } else {
+      (arrays[r.costGroup] = arrays[r.costGroup] || []).push({ name: r.label, value: r.rawValue, _p: r.position });
+    }
+  }
+  for (const [g, arr] of Object.entries(arrays)) {
+    out[g] = arr.sort((a, b) => (a._p || 0) - (b._p || 0)).map(({ name, value }) => ({ name, value }));
+  }
+  return out;
+}
+
+/**
  * Reconstrói as 6 LISTAS de custos/onboarding do formData a partir das tabelas
  * (Employee/Partner/Equipment/Vehicle/CardMachine/Marketplace). NÃO cobre os
  * objetos de custo (FixedCostItem é agregado, não espelho) nem identity/onboarding
@@ -393,7 +417,9 @@ async function reconstructCustos(db, s, clientId, blobFd = {}) {
     put('monthly_fee', brMoneyTh(m.monthlyFee));
     return o;
   });
-  return { employees, partners: partnersOut, equipment, vehicles: vehiclesOut, fees_cards, fees_marketplaces };
+  // + objetos de custo (espelho fiel do FixedCostItem)
+  const costObjects = await reconstructCostObjects(db, s, clientId);
+  return { employees, partners: partnersOut, equipment, vehicles: vehiclesOut, fees_cards, fees_marketplaces, ...costObjects };
 }
 
-module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos };
+module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos, reconstructCostObjects };

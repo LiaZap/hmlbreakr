@@ -57,6 +57,13 @@
       "when": 1781271734550,
       "tag": "0007_living_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781281254394,
+      "tag": "0008_perfect_cammi",
+      "breakpoints": true
     }
   ]
 }

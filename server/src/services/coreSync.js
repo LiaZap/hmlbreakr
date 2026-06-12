@@ -332,17 +332,27 @@ function buildClientRows(clientId, data, opts = {}) {
     modifiedBy: MODIFIED_BY,
   }];
 
-  // 8) Custos fixos genéricos → FixedCostItem
+  // 8) Custos fixos → FixedCostItem (ESPELHO FIEL do formData, não agregado):
+  //    TODAS as chaves de cada objeto de custo (incl. zeros e config string),
+  //    rawValue = valor ORIGINAL (string exata). Arrays com position. costGroup =
+  //    o nome da chave do formData (p/ reconstruir o objeto 1-a-1). amount = parse
+  //    (p/ a DRE/F4 somar). location_costs/admin_systems também alimentam o
+  //    CompanyProfile (rent/iptu/simples) — aqui é o espelho do objeto.
   const costRows = [];
-  const pushCost = (group, key, val, label) => { const a = money(val); if (a !== null && parseFloat(a) !== 0) costRows.push({ id: uuid(), clientId: cid, costGroup: group, costKey: key, label: label || key, amount: a, modifiedBy: MODIFIED_BY }); };
-  if (fd.location_costs) pushCost('location', 'rent', fd.location_costs.rent, 'Aluguel');
-  for (const k of ['energy', 'water', 'internet', 'telefone', 'security', 'security_guard']) pushCost('utilities', k, fd.utilities?.[k]);
-  for (const k of ['pest_control', 'waste_removal', 'cleaning_supplies']) pushCost('recurring', k, fd.recurring_services?.[k]);
-  for (const k of ['kitchen_gas', 'kitchen_oil', 'disposables']) pushCost('operational', k, fd.operational_fixed?.[k]);
-  for (const k of ['software_pdv', 'accountant', 'card_machine_rent', 'taxes_das']) pushCost('admin', k, fd.admin_systems?.[k]);
-  for (const k of ['agency', 'ads_budget']) pushCost('marketing', k, fd.marketing_structure?.[k]);
-  for (const it of (fd.monthly_services || [])) pushCost('monthly_service', null, it.value, first(it.name, it.label));
-  for (const it of (fd.other_fixed_costs || [])) pushCost('other', null, it.value, first(it.name, it.label));
+  const OBJ_GROUPS = ['location_costs', 'utilities', 'recurring_services', 'operational_fixed', 'admin_systems', 'marketing_structure'];
+  for (const g of OBJ_GROUPS) {
+    const obj = fd[g];
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      for (const [k, v] of Object.entries(obj)) {
+        costRows.push({ id: uuid(), clientId: cid, costGroup: g, costKey: k, label: null, rawValue: v == null ? null : String(v), amount: money(v), modifiedBy: MODIFIED_BY });
+      }
+    }
+  }
+  for (const g of ['monthly_services', 'other_fixed_costs']) {
+    (fd[g] || []).forEach((it, idx) => {
+      costRows.push({ id: uuid(), clientId: cid, costGroup: g, costKey: null, label: first(it.name, it.label) || null, rawValue: it.value == null ? null : String(it.value), amount: money(it.value), position: idx, modifiedBy: MODIFIED_BY });
+    });
+  }
 
   // 9) Employees / Partners (vínculo best-effort) / Equipment / Vehicles / Cards / Marketplaces / Snapshots
   const matchEmp = makeMatcher(bpoEmployees, 'name');
