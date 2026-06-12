@@ -265,16 +265,17 @@ Uma verificação adversarial pós-implementação (3 agentes) achou **perdas qu
 - [x] Estratégia = **projeção reconstruída a cada save** (wipe+insert por cliente, idempotente). Blob continua a fonte da verdade; `modifiedBy='sync:F2'`. Smoke test OK; backfill regredido (0 divergências) prova o módulo compartilhado.
 - [ ] (próximo) Observar em sombra com edição real pela UI e validar a projeção em produção (após deploy).
 
-**F3 — Leitura por domínio + flag — 🚧 INSUMOS e FICHAS feitos no LOCAL:**
+**F3 — Leitura por domínio + flag — 🚧 INSUMOS, FICHAS e MENU feitos no LOCAL:**
 - [x] **Insumos**: flag `Client.readInsumosFromTables` (default OFF). Reverse mapper em `coreRead.js`. Round-trip `f3-roundtrip-insumos.js` **100% fiel** (1822 insumos, 215 subs). Pré-req: `IngredientComponent` enriquecido (mig. `0004`).
 - [x] **Fichas**: flag `Client.readFichasFromTables` (default OFF). `coreRead.reconstructFichas` (TechnicalSheet + items/modules/options/steps; `id=legacyId`; fotoPrato base64 = fallback do blob). Round-trip `f3-roundtrip-fichas.js` **100% fiel** (1402 fichas, 4820 itens). Pré-reqs:
   - `TechnicalSheet` +`yieldUnit`/`prepTime` (migs. `0005`/`0006`) — tempoPreparo é texto livre ("5 min").
   - `TechnicalSheetItem` +snapshot completo + `lineCost` 18,6 (blob tem "R$ 0,675").
   - `IngredientComponent` **polimórfico** (mig. `0007`): pertence a um insumo **ou** a um item de ficha (`technicalSheetItemId`) — item preparado tem sub-receita própria que pode divergir do insumo base.
   - `insumos` (contador) tratado como derivado (`=ingredients.length`; blob às vezes stale → corrigido).
-- [x] Injeção única no `GET /client/:hash` ([routes.js](../server/src/routes.js)) atrás das flags, best-effort (fallback ao blob); marca `_insumosSource`/`_fichasSource`.
-- [x] **Validado com a app rodando** (porta 3001): Itálico serve 41 insumos + 19 fichas das tabelas, fiéis. Cliente sem flag (ConfeitaLizz) serve do blob.
-- [ ] (próximo) Ligar p/ 10% → 100%; migrar leitura de menu → faturamento → custos (mesmo padrão). Blob segue fonte do WRITE.
+- [x] **Menu**: flag `Client.readMenuFromTables` (default OFF). `coreRead.reconstructMenu` (MenuItem; menuEngineering top-level; `sales` número, `price`/`cost` strings "R$", `id` preserva número/string). Round-trip `f3-roundtrip-menu.js` **100% fiel** (1174 itens). Sem enriquecimento de schema (MenuItem já cobria os 6 campos). Itens-seed sem id ganham um id (não perde dado).
+- [x] Injeção única no `GET /client/:hash` ([routes.js](../server/src/routes.js)) atrás das flags, best-effort (fallback ao blob); marca `_insumosSource`/`_fichasSource`/`_menuSource`.
+- [x] **Validado com a app rodando** (porta 3001): Itálico serve 41 insumos + 19 fichas + 16 menu das tabelas, fiéis. Cliente sem flag (ConfeitaLizz) serve do blob.
+- [ ] (próximo) Ligar p/ 10% → 100%; migrar leitura de **faturamento** → **custos/onboarding** (mesmo padrão). Blob segue fonte do WRITE.
 
 **F4–F5 — Cálculo no servidor e aposentadoria:**
 - [ ] `financialCalc` lê tabelas; valida indicadores contra o blob no local.

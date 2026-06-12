@@ -15,8 +15,8 @@ const crypto = require('crypto');
 const { db: coreDb } = require('./db/client');
 const coreSchema = require('./db/schema');
 const { syncCoreTables } = require('./services/coreSync');
-// F3 read — reconstrói operational.{insumos,fichas} das tabelas (atrás de flag por cliente).
-const { reconstructInsumos, reconstructFichas } = require('./services/coreRead');
+// F3 read — reconstrói {insumos,fichas,menu} das tabelas (atrás de flag por cliente).
+const { reconstructInsumos, reconstructFichas, reconstructMenu } = require('./services/coreRead');
 
 // Helpers de setup de auth pra cliente novo (Clerk + senha temp).
 // Compartilhados com stripeWebhook.js — single source of truth.
@@ -1359,6 +1359,17 @@ router.get('/client/:hash', async (req, res) => {
       } catch (e) {
         console.error('[F3 reconstructFichas] falhou, usando blob:', e?.message || e);
         dashboardData._fichasSource = 'blob-fallback';
+      }
+    }
+
+    // F3 menu: menuEngineering (top-level) das tabelas (MenuItem).
+    if (client.readMenuFromTables) {
+      try {
+        dashboardData.menuEngineering = await reconstructMenu(coreDb, coreSchema, client.id);
+        dashboardData._menuSource = 'tables';
+      } catch (e) {
+        console.error('[F3 reconstructMenu] falhou, usando blob:', e?.message || e);
+        dashboardData._menuSource = 'blob-fallback';
       }
     }
 

@@ -265,4 +265,32 @@ async function reconstructFichas(db, s, clientId, blobFichasById = {}) {
   });
 }
 
-module.exports = { reconstructInsumos, reconstructFichas };
+/**
+ * Reconstrói menuEngineering do cliente a partir de MenuItem. Shape simples:
+ * { id(number), name, category, sales, price, cost, fichaId? }. Valores numéricos.
+ */
+async function reconstructMenu(db, s, clientId) {
+  const rows = await db.select().from(s.menuItem)
+    .where(and(eq(s.menuItem.clientId, clientId), eq(s.menuItem.isDeleted, false)));
+  if (!rows.length) return [];
+  const sheetIds = [...new Set(rows.map((r) => r.sheetId).filter(Boolean))];
+  let sheetLegacy = new Map();
+  if (sheetIds.length) {
+    const sheets = await db.select({ id: s.technicalSheet.id, legacyId: s.technicalSheet.legacyId })
+      .from(s.technicalSheet).where(inArray(s.technicalSheet.id, sheetIds));
+    sheetLegacy = new Map(sheets.map((x) => [x.id, x.legacyId || x.id]));
+  }
+  const numOrZero = (v) => (v == null || v === '') ? 0 : Number(v);
+  return rows.map((r) => {
+    const leg = String(r.legacyId || r.id);
+    const m = { id: /^\d+$/.test(leg) ? Number(leg) : leg, name: r.name };
+    if (r.category) m.category = r.category;
+    m.sales = numOrZero(r.salesEstimate);          // sales é número no blob
+    m.price = brMoney(r.price);                    // price/cost são strings "R$ x,yz"
+    m.cost = brMoney(r.cost);
+    if (r.sheetId) m.fichaId = sheetLegacy.get(r.sheetId) || null;
+    return m;
+  });
+}
+
+module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu };

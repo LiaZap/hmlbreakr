@@ -59,6 +59,7 @@ model Client {
   // blob. Kill-switch por cliente, default OFF. Blob segue como fonte do WRITE.
   readInsumosFromTables Boolean            @default(false)
   readFichasFromTables  Boolean            @default(false)
+  readMenuFromTables    Boolean            @default(false)
 
   // BPO Financeiro V2.0
   bpoEnabled          Boolean              @default(false)
