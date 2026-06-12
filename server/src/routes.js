@@ -15,8 +15,8 @@ const crypto = require('crypto');
 const { db: coreDb } = require('./db/client');
 const coreSchema = require('./db/schema');
 const { syncCoreTables } = require('./services/coreSync');
-// F3 read — reconstrói {insumos,fichas,menu,faturamento} das tabelas (atrás de flag por cliente).
-const { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento } = require('./services/coreRead');
+// F3 read — reconstrói {insumos,fichas,menu,faturamento,custos} das tabelas (atrás de flag por cliente).
+const { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos } = require('./services/coreRead');
 
 // Helpers de setup de auth pra cliente novo (Clerk + senha temp).
 // Compartilhados com stripeWebhook.js — single source of truth.
@@ -1385,6 +1385,20 @@ router.get('/client/:hash', async (req, res) => {
       } catch (e) {
         console.error('[F3 reconstructFaturamento] falhou, usando blob:', e?.message || e);
         dashboardData._faturamentoSource = 'blob-fallback';
+      }
+    }
+
+    // F3 custos: SÓ as 6 listas (employees/partners/equipment/vehicles/fees_*).
+    // Objetos de custo + identity + onboarding seguem do blob (não substituídos).
+    if (client.readCustosFromTables) {
+      try {
+        const custos = await reconstructCustos(coreDb, coreSchema, client.id, dashboardData.formData || {});
+        if (!dashboardData.formData) dashboardData.formData = {};
+        Object.assign(dashboardData.formData, custos);
+        dashboardData._custosSource = 'tables';
+      } catch (e) {
+        console.error('[F3 reconstructCustos] falhou, usando blob:', e?.message || e);
+        dashboardData._custosSource = 'blob-fallback';
       }
     }
 

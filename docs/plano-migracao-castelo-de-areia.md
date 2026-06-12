@@ -265,7 +265,7 @@ Uma verificação adversarial pós-implementação (3 agentes) achou **perdas qu
 - [x] Estratégia = **projeção reconstruída a cada save** (wipe+insert por cliente, idempotente). Blob continua a fonte da verdade; `modifiedBy='sync:F2'`. Smoke test OK; backfill regredido (0 divergências) prova o módulo compartilhado.
 - [ ] (próximo) Observar em sombra com edição real pela UI e validar a projeção em produção (após deploy).
 
-**F3 — Leitura por domínio + flag — 🚧 INSUMOS, FICHAS, MENU e FATURAMENTO feitos no LOCAL:**
+**F3 — Leitura por domínio + flag — ✅ 5 DOMÍNIOS feitos no LOCAL (insumos, fichas, menu, faturamento, custos-listas):**
 - [x] **Insumos**: flag `Client.readInsumosFromTables` (default OFF). Reverse mapper em `coreRead.js`. Round-trip `f3-roundtrip-insumos.js` **100% fiel** (1822 insumos, 215 subs). Pré-req: `IngredientComponent` enriquecido (mig. `0004`).
 - [x] **Fichas**: flag `Client.readFichasFromTables` (default OFF). `coreRead.reconstructFichas` (TechnicalSheet + items/modules/options/steps; `id=legacyId`; fotoPrato base64 = fallback do blob). Round-trip `f3-roundtrip-fichas.js` **100% fiel** (1402 fichas, 4820 itens). Pré-reqs:
   - `TechnicalSheet` +`yieldUnit`/`prepTime` (migs. `0005`/`0006`) — tempoPreparo é texto livre ("5 min").
@@ -274,9 +274,11 @@ Uma verificação adversarial pós-implementação (3 agentes) achou **perdas qu
   - `insumos` (contador) tratado como derivado (`=ingredients.length`; blob às vezes stale → corrigido).
 - [x] **Menu**: flag `Client.readMenuFromTables` (default OFF). `coreRead.reconstructMenu` (MenuItem; menuEngineering top-level; `sales` número, `price`/`cost` strings "R$", `id` preserva número/string). Round-trip `f3-roundtrip-menu.js` **100% fiel** (1174 itens). Sem enriquecimento de schema. Itens-seed sem id ganham um id (não perde dado).
 - [x] **Faturamento**: flag `Client.readFaturamentoFromTables` (default OFF). `coreRead.reconstructFaturamento` (RevenueEntry+DailyRevenue → `formData.{revenue_history,daily_revenue}`; month "MM/AAAA", amount milhar BR "199.000,00", daily=número). Round-trip `f3-roundtrip-faturamento.js` **100% fiel** (170 entries + 132 diários). Placeholders de mês sem amount são pulados (sem dado). A DRE do front lê daqui — reconstrução fiel mantém o cálculo.
-- [x] Injeção única no `GET /client/:hash` ([routes.js](../server/src/routes.js)) atrás das flags, best-effort (fallback ao blob); marca `_insumosSource`/`_fichasSource`/`_menuSource`/`_faturamentoSource`.
-- [x] **Validado com a app rodando** (porta 3001): Itálico serve 41 insumos + 19 fichas + 16 menu + faturamento das tabelas, fiéis. Cliente sem flag serve do blob.
-- [ ] (próximo) **Custos/onboarding** (Employee/Partner/Equipment/Vehicle/CardMachine/Marketplace/FixedCostItem/CompanyProfile — o domínio mais entrelaçado com a DRE). Depois ligar p/ 10% → 100%. Blob segue fonte do WRITE.
+- [x] **Custos (6 listas)**: flag `Client.readCustosFromTables` (default OFF). `coreRead.reconstructCustos` (Employee/Partner/Equipment/Vehicle/CardMachine/Marketplace → `formData.{employees,partners,equipment,vehicles,fees_cards,fees_marketplaces}`). Round-trip `f3-roundtrip-custos.js` **100% fiel** (456 itens; valores conferidos por soma — itens sem id de nome duplicado pareados por consumo). `partner.photo` (base64) = fallback do blob. A injeção faz `Object.assign` (substitui só as 6 chaves).
+  - ⚠️ **Limite documentado**: os **objetos de custo** (`utilities`/`recurring_services`/`admin_systems`/`marketing_structure`/...), `identity`, `user_info` e flags de onboarding **NÃO** vêm das tabelas — seguem do blob. Motivo: o `FixedCostItem` é um **agregado EAV** (group+key+amount numeric), não um espelho: descarta chaves não-custo (`systems_count`, `ads_platform`, `gifts_*`), valores zero e o formato. **Isto é o que impede a aposentadoria total do blob** (F5) — exige uma decisão de arquitetura (redesenhar o armazenamento de custos vs. manter o blob como store de config).
+- [x] Injeção única no `GET /client/:hash` ([routes.js](../server/src/routes.js)) atrás das flags, best-effort (fallback ao blob); marca `_{insumos,fichas,menu,faturamento,custos}Source`.
+- [x] **Validado com a app rodando** (porta 3001): Itálico serve insumos+fichas+menu+faturamento+custos(6 listas) das tabelas, fiéis; objetos de custo/identity/onboarding do blob. Cliente sem flag serve tudo do blob.
+- [ ] (próximo) Ligar as flags p/ 10% → 100% (observar em sombra); **decidir o destino dos objetos de custo** (pré-requisito da F5); depois F4 (cálculo no servidor). Blob segue fonte do WRITE.
 
 **F4–F5 — Cálculo no servidor e aposentadoria:**
 - [ ] `financialCalc` lê tabelas; valida indicadores contra o blob no local.

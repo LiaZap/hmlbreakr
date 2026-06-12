@@ -321,4 +321,79 @@ async function reconstructFaturamento(db, s, clientId) {
   return { revenue_history, daily_revenue };
 }
 
-module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento };
+// "R$ 1.618,00" (R$ + milhar). vazio → ''
+const brMoneyTh = (v) => { const t = brThousands(v); return t === '' ? '' : 'R$ ' + t; };
+const normName = (v) => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+/**
+ * Reconstrói as 6 LISTAS de custos/onboarding do formData a partir das tabelas
+ * (Employee/Partner/Equipment/Vehicle/CardMachine/Marketplace). NÃO cobre os
+ * objetos de custo (FixedCostItem é agregado, não espelho) nem identity/onboarding
+ * — esses ficam no blob (a injeção substitui só estas 6 chaves).
+ * @param {Object} blobFd formData do blob (p/ fallback de partner.photo base64)
+ */
+async function reconstructCustos(db, s, clientId, blobFd = {}) {
+  const [emps, partners, equip, vehicles, cards, mkts] = await Promise.all([
+    db.select().from(s.employee).where(and(eq(s.employee.clientId, clientId), eq(s.employee.isDeleted, false))),
+    db.select().from(s.partner).where(and(eq(s.partner.clientId, clientId), eq(s.partner.isDeleted, false))),
+    db.select().from(s.equipment).where(and(eq(s.equipment.clientId, clientId), eq(s.equipment.isDeleted, false))),
+    db.select().from(s.vehicle).where(and(eq(s.vehicle.clientId, clientId), eq(s.vehicle.isDeleted, false))),
+    db.select().from(s.cardMachine).where(and(eq(s.cardMachine.clientId, clientId), eq(s.cardMachine.isDeleted, false))),
+    db.select().from(s.marketplace).where(and(eq(s.marketplace.clientId, clientId), eq(s.marketplace.isDeleted, false))),
+  ]);
+  // fotos de sócio (base64) ficam no blob → fallback por nome normalizado
+  const photoByName = new Map((blobFd.partners || []).filter((p) => p && p.photo).map((p) => [normName(p.name), p.photo]));
+
+  const employees = emps.map((e) => {
+    const o = {};
+    const put = (k, v) => { if (v !== undefined && v !== null && v !== '') o[k] = v; };
+    put('name', e.name); put('role', e.role); put('regime', e.regime);
+    put('base_salary', brThousands(e.baseSalary)); put('premio', brThousands(e.bonus));
+    put('transport_value', brThousands(e.transportValue));
+    if (e.transportQty != null) o.transport_qty = String(e.transportQty);
+    if (e.workDays != null) o.work_days = String(e.workDays);
+    put('food_cost', brThousands(e.foodCost)); put('cpf', e.cpf);
+    return o;
+  });
+  const partnersOut = partners.map((p) => {
+    const o = {};
+    const put = (k, v) => { if (v !== undefined && v !== null && v !== '') o[k] = v; };
+    put('name', p.name); put('role', p.role); put('pro_labore', brMoneyTh(p.proLabore));
+    put('personal_bank', p.personalAccountBank); put('personal_agency', p.personalAccountAgency); put('personal_account', p.personalAccountNumber);
+    put('cpf', p.cpf);
+    const photo = photoByName.get(normName(p.name)); if (photo) o.photo = photo;
+    return o;
+  });
+  const equipment = equip.map((e) => {
+    const o = { name: e.name };
+    if (e.value != null) o.value = brMoneyTh(e.value);
+    if (e.lifespanYears != null) o.lifespan = String(Number(e.lifespanYears));
+    return o;
+  });
+  const vehiclesOut = vehicles.map((v) => {
+    const o = {};
+    const put = (k, val) => { if (val !== undefined && val !== null && val !== '') o[k] = val; };
+    put('name', v.description);
+    put('installment', brMoneyTh(v.installment)); put('maintenance_monthly', brMoneyTh(v.maintenanceMonthly));
+    put('insurance_annual', brMoneyTh(v.insuranceAnnual)); put('ipva_annual', brMoneyTh(v.ipvaAnnual));
+    return o;
+  });
+  const fees_cards = cards.map((c) => {
+    const o = {};
+    const put = (k, v) => { if (v !== undefined && v !== null && v !== '') o[k] = v; };
+    put('provider', c.provider); put('custom_provider', c.customProvider);
+    put('debit_rate', brNum(c.debitRate)); put('credit_rate', brNum(c.creditRate));
+    return o;
+  });
+  const fees_marketplaces = mkts.map((m) => {
+    const o = {};
+    const put = (k, v) => { if (v !== undefined && v !== null && v !== '') o[k] = v; };
+    put('provider', m.provider); put('custom_provider', m.customProvider);
+    put('commission', brNum(m.commission)); put('sales_percentage', brNum(m.salesPercentage));
+    put('monthly_fee', brMoneyTh(m.monthlyFee));
+    return o;
+  });
+  return { employees, partners: partnersOut, equipment, vehicles: vehiclesOut, fees_cards, fees_marketplaces };
+}
+
+module.exports = { reconstructInsumos, reconstructFichas, reconstructMenu, reconstructFaturamento, reconstructCustos };
