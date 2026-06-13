@@ -26,7 +26,7 @@ Passo a passo pra subir o HML num EasyPanel separado, com 3 serviços no mesmo
       │   └──────────────────────────┘  upload server-side
       │
    ┌──▼──────────┐
-   │  db         │  postgres:16  :5432
+   │  db         │  postgres:17  :5432
    │ (template)  │
    └─────────────┘
 ```
@@ -39,7 +39,7 @@ Project sugerido: **`breakerhml`** (o hostname interno vira `breakerhml_db` / `b
 
 - **Add Service → Database → Postgres**.
 - Service name: `db`
-- Image / versão: `postgres:16`
+- Image / versão: `postgres:17`
 - Database: `breaker_hml`  ·  User: `breaker`  ·  Password: gere uma forte (anote).
 - Após criar, abra o serviço → aba **Credentials**: copie o **Internal host** (algo como `breakerhml_db`) e a porta `5432`. É o que vai no `DATABASE_URL` do app.
 
@@ -161,7 +161,7 @@ npm run db:backfill               # reconstrói as 20 tabelas do núcleo a parti
 
 ## 6. Checklist
 
-- [ ] `db` (Postgres 16) no ar, senha anotada
+- [ ] `db` (Postgres 17) no ar, senha anotada
 - [ ] `minio` no ar, 2 domínios (storage + console), volume `/data`
 - [ ] `app` build OK (Dockerfile), domínio + `:3001`, env completo
 - [ ] `MINIO_ENDPOINT` = host **interno**; `MINIO_PUBLIC_BASE_URL` = domínio **público** (com `/breaker-images`)

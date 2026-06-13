@@ -13,7 +13,7 @@ EasyPanel separado, a partir do repositório de HML.
 | Serviço | Imagem | Função |
 |---|---|---|
 | `app` | build via `Dockerfile` | API Express + frontend Vite (servido pelo mesmo container) |
-| `db` | `postgres:16` | Banco do HML (cópia do PRD) |
+| `db` | `postgres:17` | Banco do HML (cópia do PRD) |
 | `minio` | `minio/minio` | Object storage S3-compatível p/ as imagens |
 
 As migrações **Drizzle** rodam sozinhas no boot do app: `npm start` executa
@@ -25,7 +25,7 @@ subir a API. Não há `prisma migrate`.
 ## 2. Subir no EasyPanel
 
 1. Crie um **projeto HML** novo no EasyPanel.
-2. **Postgres**: adicione um serviço Postgres 16. Anote host/porta/usuário/senha/db.
+2. **Postgres**: adicione um serviço Postgres 17. Anote host/porta/usuário/senha/db.
 3. **MinIO**: adicione um serviço MinIO. Defina `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`.
    Exponha a porta 9000 (API) atrás de um domínio/HTTPS — essa URL vira o
    `MINIO_PUBLIC_BASE_URL` (com o bucket no final). O bucket `breaker-images` é
