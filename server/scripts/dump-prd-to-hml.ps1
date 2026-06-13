@@ -36,7 +36,9 @@ $dumpFile = Join-Path $outDir "prd_dump_$ts.sql"
 
 Write-Host "==> DUMP do PRD (READ-ONLY): $(Mask $prd)"
 Write-Host "    arquivo: $dumpFile"
-& pg_dump $prd --no-owner --no-acl --clean --if-exists --file=$dumpFile
+# Dump plain (sem --clean): o HML é resetado abaixo antes de restaurar, evitando
+# conflito com as FKs cross-ORM (nucleo Drizzle -> Client) que o app ja criou.
+& pg_dump $prd --no-owner --no-acl --file=$dumpFile
 if ($LASTEXITCODE -ne 0) { Write-Error 'pg_dump falhou'; exit 1 }
 Write-Host "    OK"
 
@@ -49,18 +51,23 @@ if (-not $hml) { Write-Error 'Defina $env:HML_DATABASE_URL para -Restore'; exit 
 if ($hml -eq $prd) { Write-Error 'HML == PRD. ABORTADO (nunca restaurar no PRD).'; exit 2 }
 
 Write-Host ''
-Write-Host '!!! RESTORE DESTRUTIVO no HML (--clean dropa e recria objetos) !!!'
+Write-Host '!!! RESET + RESTORE no HML — isto APAGA TUDO no HML e carrega o PRD !!!'
 Write-Host "    alvo HML: $(Mask $hml)"
 if (-not $Yes) {
-  $ans = Read-Host "Digite 'HML' para confirmar o restore"
+  $ans = Read-Host "Digite 'HML' para confirmar (apaga o schema do HML e restaura o PRD)"
   if ($ans -ne 'HML') { Write-Host 'abortado.'; exit 1 }
 }
 
-Write-Host '==> RESTORE no HML'
+Write-Host '==> Resetando o schema do HML (public + drizzle)'
+& psql $hml -v ON_ERROR_STOP=1 -c 'DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;'
+if ($LASTEXITCODE -ne 0) { Write-Error 'reset do schema falhou'; exit 1 }
+
+Write-Host '==> RESTORE do PRD no HML'
 & psql $hml -v ON_ERROR_STOP=1 -f $dumpFile
 if ($LASTEXITCODE -ne 0) { Write-Error 'restore falhou'; exit 1 }
 Write-Host '    OK'
 Write-Host ''
-Write-Host '==> Proximos passos no HML (a partir de server/):'
-Write-Host "    `$env:DATABASE_URL = '$hml'; npm run db:migrate"
-Write-Host "    `$env:DATABASE_URL = '$hml'; npm run db:backfill"
+Write-Host '==> Proximos passos:'
+Write-Host '    1) Reinicie o servico app no EasyPanel (o migrate recria as tabelas do nucleo).'
+Write-Host '       Os clientes ja aparecem no painel apos isso (vem da tabela Client do PRD).'
+Write-Host '    2) (opcional, p/ F3/F4) no terminal do container:  cd server && npm run db:backfill'

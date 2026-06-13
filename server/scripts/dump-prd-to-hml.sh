@@ -44,7 +44,9 @@ DUMP_FILE="$OUT_DIR/prd_dump_${TS}.sql"
 
 echo "==> DUMP do PRD (READ-ONLY): $(mask "$PRD_DATABASE_URL")"
 echo "    arquivo: $DUMP_FILE"
-pg_dump "$PRD_DATABASE_URL" --no-owner --no-acl --clean --if-exists --file="$DUMP_FILE"
+# Dump plain (sem --clean): o HML é resetado abaixo antes de restaurar, evitando
+# conflito com as FKs cross-ORM (núcleo Drizzle -> Client) que o app já criou.
+pg_dump "$PRD_DATABASE_URL" --no-owner --no-acl --file="$DUMP_FILE"
 echo "    OK ($(du -h "$DUMP_FILE" | cut -f1))"
 
 if [[ "$DO_RESTORE" != true ]]; then
@@ -58,17 +60,21 @@ if [[ "$HML_DATABASE_URL" == "$PRD_DATABASE_URL" ]]; then
 fi
 
 echo ""
-echo "!!! RESTORE DESTRUTIVO no HML (--clean dropa e recria objetos) !!!"
+echo "!!! RESET + RESTORE no HML — isto APAGA TUDO no HML e carrega o PRD !!!"
 echo "    alvo HML: $(mask "$HML_DATABASE_URL")"
 if [[ "$ASSUME_YES" != true ]]; then
-  read -r -p "Digite 'HML' para confirmar o restore: " ans
+  read -r -p "Digite 'HML' para confirmar (apaga o schema do HML e restaura o PRD): " ans
   [[ "$ans" == "HML" ]] || { echo "abortado."; exit 1; }
 fi
 
-echo "==> RESTORE no HML"
+echo "==> Resetando o schema do HML (public + drizzle)"
+psql "$HML_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;'
+
+echo "==> RESTORE do PRD no HML"
 psql "$HML_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$DUMP_FILE"
 echo "    OK"
 echo ""
-echo "==> Próximos passos no HML (a partir de server/):"
-echo "    DATABASE_URL=\"\$HML_DATABASE_URL\" npm run db:migrate    # tabelas do núcleo + 0009/0010"
-echo "    DATABASE_URL=\"\$HML_DATABASE_URL\" npm run db:backfill   # popula o núcleo a partir do blob"
+echo "==> Próximos passos:"
+echo "    1) Reinicie o serviço app no EasyPanel (o migrate recria as tabelas do núcleo)."
+echo "       Os clientes já aparecem no painel (vêm da tabela Client do PRD)."
+echo "    2) (opcional, p/ F3/F4) no terminal do container:  cd server && npm run db:backfill"
