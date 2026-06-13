@@ -1,18 +1,22 @@
 /**
  * Aplica as migrações Drizzle pendentes (server/drizzle/*.sql) usando o migrator
- * RUNTIME do drizzle-orm — NÃO depende do drizzle-kit (que é devDependency e some
- * num `npm install --production`). Idempotente: o estado é rastreado em
- * drizzle.__drizzle_migrations, então só aplica o que falta.
+ * RUNTIME do drizzle-orm — NÃO depende do drizzle-kit (devDependency). Idempotente:
+ * o estado é rastreado em drizzle.__drizzle_migrations, só aplica o que falta.
  *
- * Rodado no `npm start` ANTES de subir o app, logo após `prisma migrate deploy`.
- * Assim o deploy cria/atualiza tanto as tabelas geridas pelo Prisma quanto as
- * tabelas normalizadas do Drizzle (Category, Ingredient, fichas, etc.).
+ * Rodado no `npm start` ANTES de subir o app (sem Prisma — 100% Drizzle).
  *
- * Tracking: schema 'drizzle', tabela '__drizzle_migrations' — mesmo default do
- * drizzle-kit que gerou o estado local (confirmado: 9 migrações aplicadas).
- * Carrega o .env antes de criar o Pool (mesma razão de db/client.js).
+ * BOOTSTRAP (banco VAZIO): as migrações do núcleo (0000…) criam tabelas com FK
+ * para a tabela legada `Client`, que só é criada na migração `adopt_legacy`
+ * (0009). Em banco já populado (local / HML vindo de dump do PRD) isso funciona
+ * porque `Client` já existe; mas num banco VAZIO a 0000 falharia (FK -> tabela
+ * inexistente). Então, ANTES do migrate normal, rodamos o SQL de adoção das
+ * tabelas legadas (CREATE TABLE IF NOT EXISTS — idempotente): garante `Client` e
+ * as demais legadas existirem, sem efeito em bancos que já as têm.
+ *
+ * Tracking: schema 'drizzle', tabela '__drizzle_migrations'.
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 const { drizzle } = require('drizzle-orm/node-postgres');
@@ -27,6 +31,18 @@ const { migrate } = require('drizzle-orm/node-postgres/migrator');
   const db = drizzle(pool);
   const migrationsFolder = path.resolve(__dirname, '../../drizzle');
   try {
+    // BOOTSTRAP idempotente das tabelas legadas (adopt_legacy*.sql) — garante que
+    // `Client` & cia. existam antes das migrações do núcleo que têm FK -> Client.
+    const legacy = fs.readdirSync(migrationsFolder)
+      .filter((f) => /adopt_legacy.*\.sql$/i.test(f))
+      .sort();
+    for (const f of legacy) {
+      const sql = fs.readFileSync(path.join(migrationsFolder, f), 'utf8')
+        .split('--> statement-breakpoint').join('\n');
+      console.log(`[drizzle migrate] bootstrap das tabelas legadas (${f})`);
+      await pool.query(sql);
+    }
+
     console.log('[drizzle migrate] aplicando migrações pendentes de', migrationsFolder);
     await migrate(db, { migrationsFolder, migrationsSchema: 'drizzle' });
     console.log('[drizzle migrate] OK — schema Drizzle em dia');

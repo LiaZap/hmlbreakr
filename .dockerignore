@@ -1,0 +1,25 @@
+# Não copiar pro contexto/imagem do Docker (build mais rápido + evita node_modules
+# nativos de Windows sobrescreverem os do container Linux).
+node_modules
+**/node_modules
+.git
+.gitignore
+dist
+dist-ssr
+
+# Env / segredos — NUNCA vão pra imagem
+.env
+.env.*
+server/.env
+server/.env.*
+
+# Backups e artefatos locais
+server/backups
+server/backup-*.json
+*.log
+server/prisma/dev.db
+
+# Docs e arquivos de dev que não afetam o build
+docs
+*.md
+docker-compose*.yml
