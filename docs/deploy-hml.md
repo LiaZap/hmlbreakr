@@ -46,6 +46,17 @@ subir a API. Não há `prisma migrate`.
 
 O HML deve ser réplica do PRD. Faça um dump **somente leitura** do PRD e restaure no HML.
 
+> **Atalho parametrizado:** use [`server/scripts/dump-prd-to-hml.sh`](../server/scripts/dump-prd-to-hml.sh)
+> (ou `.ps1` no Windows). Por padrão SÓ dumpa (seguro); `--restore`/`-Restore`
+> restaura no HML com confirmação. Nunca escreve no PRD.
+> ```bash
+> export PRD_DATABASE_URL="postgres://user:senha@host_prd:5432/banco"
+> export HML_DATABASE_URL="postgres://user:senha@host_hml:5432/breaker_hml"
+> ./server/scripts/dump-prd-to-hml.sh --restore
+> ```
+
+Ou manualmente:
+
 ```bash
 # 1) DUMP do PRD (READ-ONLY — só lê). Use credenciais de PRD.
 pg_dump "postgres://USUARIO:SENHA@HOST_PRD:PORTA/BANCO" \
