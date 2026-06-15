@@ -153,9 +153,16 @@ psql "postgres://breaker:SUA_SENHA@HOST_EXTERNO_HML:PORTA/breaker_hml" < prd_dum
 
 Depois, no serviço `app` (aba **Console/Terminal** do EasyPanel, dentro do container):
 ```bash
-cd server && npm run db:migrate   # garante 0000–0010 (no-op se já aplicou no boot)
-npm run db:backfill               # reconstrói as 20 tabelas do núcleo a partir do blob
+cd server
+node src/db/migrate.js                              # garante 0000–0010 (no-op se já aplicou no boot)
+node scripts/backfill-core.js --allow-remote --wipe # reconstrói as 20 tabelas do núcleo a partir do blob
 ```
+> `--allow-remote` (o banco não é localhost) e `--wipe` (idempotente — limpa o núcleo
+> do cliente antes de reinserir; sem ele, re-rodar dá UNIQUE em categorias já criadas).
+
+> **Trazer só ALGUNS clientes do PRD** (em vez do dump completo): use
+> `node scripts/pull-clients-prd-to-hml.mjs --list` e depois `--hashes=...`/`--recent=N`
+> (aditivo, idempotente, PRD read-only). Depois rode o backfill acima.
 
 ---
 
@@ -167,7 +174,7 @@ npm run db:backfill               # reconstrói as 20 tabelas do núcleo a parti
 - [ ] `MINIO_ENDPOINT` = host **interno**; `MINIO_PUBLIC_BASE_URL` = domínio **público** (com `/breaker-images`)
 - [ ] `/health` = connected
 - [ ] PRD dumpado (read-only) e restaurado no HML
-- [ ] `db:migrate` + `db:backfill` rodados
+- [ ] migrate (boot do app) + `backfill-core.js --allow-remote --wipe` rodados
 - [ ] Segredos do HML são de **teste** e os de produção foram **rotacionados**
 
 ---

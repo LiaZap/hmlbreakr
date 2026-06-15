@@ -86,10 +86,13 @@ O migrador é **idempotente**:
 - `0009` adota as 26 tabelas legadas com `CREATE TABLE IF NOT EXISTS` → **pula** (já vieram do dump).
 - `0010` adiciona `Partner.photoUrl`.
 
-Depois, **reconstrua** as tabelas do núcleo a partir do blob de cada cliente (F2):
+Depois, **reconstrua** as tabelas do núcleo a partir do blob de cada cliente (F2).
+O backfill tem uma trava anti-acidente: contra um banco **não-local** (caso do HML)
+use `--allow-remote`, e `--wipe` pra ser **idempotente** (limpa o núcleo do cliente
+antes de reinserir — sem ele, re-rodar dá erro de UNIQUE em categorias já existentes):
 
 ```bash
-DATABASE_URL=postgres://...HML... npm run db:backfill
+DATABASE_URL=postgres://...HML... node scripts/backfill-core.js --allow-remote --wipe
 ```
 
 ---
@@ -117,8 +120,8 @@ comportamento do blob. Rollback = desligar a flag (volta a ler do blob).
 ## 7. Checklist final
 
 - [ ] PRD dumpado (read-only) e restaurado no HML
-- [ ] `npm run db:migrate` aplicado no HML (10 migrações)
-- [ ] `npm run db:backfill` rodado (tabelas do núcleo populadas)
+- [ ] migrações Drizzle aplicadas no HML (rodam no boot do app)
+- [ ] `node scripts/backfill-core.js --allow-remote --wipe` rodado (tabelas do núcleo populadas)
 - [ ] MinIO acessível e `MINIO_PUBLIC_BASE_URL` correto
 - [ ] `/health` retorna `database: connected`
 - [ ] Segredos do HML são de **teste** (Stripe/Clerk) e foram **rotacionados** se vieram de algum `.env` versionado
