@@ -49,7 +49,9 @@ if (HML === PRD) { console.error('HML == PRD. ABORTADO (nunca escrever no PRD).'
 
 // ── Resolve os clientes selecionados ────────────────────────────────────────
 let rows;
-if (arg('hashes')) {
+if (has('all')) {
+  rows = (await prd.query(`SELECT id, name, hash FROM "Client" ORDER BY name`)).rows;
+} else if (arg('hashes')) {
   const hashes = arg('hashes').split(',').map((s) => s.trim()).filter(Boolean);
   rows = (await prd.query(`SELECT id, name, hash FROM "Client" WHERE hash = ANY($1::text[])`, [hashes])).rows;
 } else if (arg('names')) {
@@ -59,7 +61,7 @@ if (arg('hashes')) {
   const n = Math.max(1, parseInt(arg('recent'), 10) || 5);
   rows = (await prd.query(`SELECT id, name, hash FROM "Client" ORDER BY "createdAt" DESC LIMIT $1`, [n])).rows;
 } else {
-  console.error('Selecione: --list | --recent=N | --hashes=a,b | --names="x,y"');
+  console.error('Selecione: --list | --all | --recent=N | --hashes=a,b | --names="x,y"');
   await prd.end(); process.exit(2);
 }
 
@@ -75,7 +77,8 @@ const PLAN = [
   ['Agency',             `id IN (SELECT "agencyId" FROM "Client" WHERE id = ANY($1::text[]) AND "agencyId" IS NOT NULL)`],
   ['Client',             `id = ANY($1::text[])`],
   ['TeamMember',         `"clientId" = ANY($1::text[])`],
-  ['ClientDataSnapshot', `"clientId" = ANY($1::text[])`],
+  // ClientDataSnapshot é PULADA de propósito: é histórico de backup do blob
+  // (centenas de MB) e não é necessária no HML — o app usa o Client.data atual.
   ['Supplier',           `"clientId" = ANY($1::text[])`],
   ['FinancialCategory',  `"clientId" = ANY($1::text[])`],
   ['PaymentMethod',      `"clientId" = ANY($1::text[])`],
@@ -113,11 +116,15 @@ try {
     if (!src.rowCount) { console.log(`  ${table}: 0`); continue; }
     const cols = src.fields.map((f) => f.name);
     const colList = cols.map(q).join(', ');
-    const ph = cols.map((_, i) => `$${i + 1}`).join(', ');
-    const sql = `INSERT INTO ${q(table)} (${colList}) VALUES (${ph}) ON CONFLICT DO NOTHING`;
+    // Insert em LOTE (multi-row) pra cortar round-trips. Chunk sob o limite de
+    // ~65535 parâmetros do Postgres.
     let ins = 0;
-    for (const row of src.rows) {
-      const r = await client.query(sql, cols.map((c) => row[c]));
+    const CHUNK = Math.max(1, Math.floor(60000 / cols.length));
+    for (let i = 0; i < src.rows.length; i += CHUNK) {
+      const batch = src.rows.slice(i, i + CHUNK);
+      const vals = [];
+      const tuples = batch.map((row) => '(' + cols.map((c) => { vals.push(row[c]); return `$${vals.length}`; }).join(',') + ')');
+      const r = await client.query(`INSERT INTO ${q(table)} (${colList}) VALUES ${tuples.join(',')} ON CONFLICT DO NOTHING`, vals);
       ins += r.rowCount;
     }
     totalIns += ins;
